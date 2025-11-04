@@ -8,12 +8,13 @@ from pymongo.errors import ConnectionFailure, OperationFailure
 from bson.objectid import ObjectId
 from bson.decimal128 import Decimal128
 from datetime import datetime
-from urllib.parse import quote_plus 
+from urllib.parse import quote_plus
 import os
 import re # Para a busca de clientes
 import bcrypt
 from functools import wraps # Para o decorator login_required
 from datetime import timedelta
+import certifi  # Para certificados SSL
 #from passlib.hash import bcrypt # Para hashing de senhas de colaboradores
 
 # --- Configuração ---
@@ -27,10 +28,16 @@ MONGO_PASSWORD = 'TecBin24'
 ENCODED_PASSWORD = quote_plus(MONGO_PASSWORD)
 MONGODB_URI = os.environ.get('MONGODB_URI', f'mongodb+srv://tecbin_db_vendas:{ENCODED_PASSWORD}@cluster0.blwq4du.mongodb.net/?appName=Cluster0')
 
-client_global = None 
+client_global = None
 try:
-    # Definimos um timeout de seleção de servidor de apenas 1 segundo (rápida falha)
-    client_global = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=1000)
+    # Definimos um timeout de seleção de servidor e configuração SSL explícita
+    client_global = MongoClient(
+        MONGODB_URI,
+        serverSelectionTimeoutMS=5000,  # Aumentado para 5 segundos
+        tlsCAFile=certifi.where(),  # Usa certificados do certifi
+        retryWrites=True,
+        w='majority'
+    )
     print("✅ CLIENTE GLOBAL MONGODB CRIADO COM SUCESSO.")
 
 except Exception as e:
@@ -1583,4 +1590,8 @@ def excluir_evento(id_evento):
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    # Para desenvolvimento local
+    app.run(debug=True, host='0.0.0.0', port=5001)
+
+    # Para produção, use gunicorn ao invés de app.run()
+    # Comando: gunicorn -w 4 -b 0.0.0.0:5001 app:app
