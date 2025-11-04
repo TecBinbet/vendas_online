@@ -1590,8 +1590,12 @@ def excluir_evento(id_evento):
 
 
 if __name__ == '__main__':
-    # Para desenvolvimento local
-    app.run(debug=True, host='0.0.0.0', port=5001)
+    # Para desenvolvimento local apenas
+    # Em produção, use Gunicorn via Dockerfile
+    # Comando: gunicorn -w 4 -b 0.0.0.0:8080 app:app
 
-    # Para produção, use gunicorn ao invés de app.run()
-    # Comando: gunicorn -w 4 -b 0.0.0.0:5001 app:app
+    # Verifica se NÃO está em produção
+    if os.environ.get('FLASK_ENV') != 'production':
+        app.run(debug=True, host='0.0.0.0', port=5001)
+    else:
+        print("⚠️  AVISO: Em produção, use Gunicorn. Não execute app.py diretamente!")
