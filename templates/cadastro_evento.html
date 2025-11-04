@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro de Eventos</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#059669',
+                        'secondary': '#10B981',
+                        'accent': '#F59E0B', // Amber
+                        'danger': '#EF4444',
+                        'info': '#3B82F6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F7F7F7; }
+        .container { max-width: 1000px; margin: 20px auto; padding: 30px; background-color: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+        .nav-link { padding: 10px 20px; border-radius: 6px; font-weight: bold; transition: background-color 0.3s; text-decoration: none; display: inline-block; text-align: center; }
+        .form-group label { font-weight: 600; display: block; margin-bottom: 5px; color: #374151; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px; }
+        .required-label::after { content: ' *'; color: #EF4444; }
+
+        .btn-submit { padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; color: white; border: none; }
+        .btn-save { background-color: #059669; } 
+        .btn-save:hover { background-color: #047857; }
+
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #FCA5A5; }
+        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; }
+
+        .list-header { background-color: #E5E7EB; color: #374151; font-weight: bold; }
+        .list-row:nth-child(even) { background-color: #F9FAFB; }
+        .action-link { text-decoration: none; font-weight: 600; margin-right: 10px; }
+        .delete-link { color: #EF4444; }
+        
+        /* Visibilidade controlada por Jinja */
+        .view-content { display: none; }
+        .view-content.active-view-show { display: block !important; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2 class="text-2xl mb-4 text-blue-800 text-center">Gestão de Eventos</h2>
+
+        <!-- Mensagens do Flask (erros/sucesso) -->
+        {% if error %}
+            <div class="alert-danger">{{ error }}</div>
+        {% endif %}
+        {% if success %}
+            <div class="alert-success">{{ success | safe }}</div>
+        {% endif %}
+
+        <!-- Navegação -->
+        <div class="flex space-x-4 mb-4 border-b pb-4">
+            <a href="{{ url_for('cadastro_evento', view='novo') }}" 
+               class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
+                ➕ Novo
+            </a>
+            <a href="{{ url_for('cadastro_evento', view='consulta') }}" 
+               class="nav-link {% if active_view == 'consulta' %}bg-accent text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:opacity-90">
+                🔎 Consulta
+            </a>
+            <a href="{{ url_for('cadastro_evento', view='listar') }}" 
+               class="nav-link {% if active_view == 'listar' %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
+                📋 Listar
+            </a>
+        </div>
+
+        <div class="mb-2 p-2 bg-info text-white border border-blue-600 rounded-lg">
+            Total de Eventos Cadastrados: <strong id="total-eventos">{{ total_eventos | default(0) }}</strong>.
+        </div>
+        
+        <!-- VISUALIZAÇÃO NOVO/ALTERAR -->
+        {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
+        <div id="view-novo" class="view-content {% if is_novo_alterar %}active-view-show{% endif %}">
+            
+            {% set evento = evento_edicao if evento_edicao is not none else {} %} 
+            
+            <h3 class="text-xl font-semibold mb-2 {% if active_view == 'alterar' %}text-accent{% else %}text-primary{% endif %}">
+                {% if active_view == 'alterar' %}Alteração de Evento (ID: {{ evento.get('id_evento', 'N/A') }}){% else %}Cadastro de Novo Evento{% endif %}
+            </h3>
+
+            <form method="POST" action="{{ url_for('gravar_evento') }}" 
+                  id="form-cadastro" class="space-y-4" 
+                  onkeydown="return preventDefaultOnEnter(event)">
+                
+                {% if active_view == 'alterar' %}
+                    <input type="hidden" name="id_evento_edicao" value="{{ evento.get('id_evento', '') }}">
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    
+                    <!-- Linha 1: Dados Básicos e ID -->
+                    <div class="form-group">
+                        <label>ID Evento:</label>
+                        <input type="text" 
+                               value="{% if active_view == 'alterar' %}{{ evento.get('id_evento', 'N/A') }}{% else %}Gerado Automaticamente{% endif %}" 
+                               disabled class="form-control bg-gray-100">
+                    </div>
+                    <div class="form-group">
+                        <!-- CORREÇÃO: type="date" para abrir o calendário -->
+                        <label for="data_evento" class="required-label">Data do Evento:</label>
+                        <input type="date" id="data_evento" name="data_evento" required class="form-control" 
+                               value="{{ evento.get('data_evento', '') }}"
+                               {% if active_view == 'alterar' and evento.get('data_evento') %}
+                                   value="{{ evento.get('data_evento') }}"
+                               {% endif %}
+                               >
+                    </div>
+                    <div class="form-group">
+                        <label for="hora_evento" class="required-label">Hora do Evento (hh:mm):</label>
+                        <input type="time" id="hora_evento" name="hora_evento" required class="form-control"
+                               value="{{ evento.get('hora_evento', '20:00') }}">
+                    </div>
+
+                    <!-- Linha 2: Descrição e Venda -->
+                    <div class="form-group md:col-span-3">
+                        <label for="descricao" class="required-label">Descrição do Evento:</label>
+                        <input type="text" id="descricao" name="descricao" required class="form-control" 
+                               value="{{ evento.get('descricao', '') }}">
+                    </div>
+
+                    <!-- Linha 3: Controle de Venda -->
+                    <div class="form-group">
+                        <label for="unidade_de_venda" class="required-label">Unidade de Venda (1-6):</label>
+                        <input type="number" id="unidade_de_venda" name="unidade_de_venda" required min="1" max="6" class="form-control"
+                               value="{{ evento.get('unidade_de_venda', 1) }}" oninput="calculatePremioTotal()">
+                    </div>
+                    <div class="form-group">
+                        <label for="valor_de_venda" class="required-label">Valor da Unidade (R$):</label>
+                        <!-- CORREÇÃO: Valor monetário padronizado para 0.00 -->
+                        <input type="number" id="valor_de_venda" name="valor_de_venda" required step="0.01" min="0" class="form-control"
+                               value="{{ evento.get('valor_de_venda', ) }}" oninput="calculatePremioTotal()">
+                    </div>
+
+                    <!-- Linha 4: Controle de Cartelas -->
+                    <div class="form-group">
+                        <label for="numero_inicial" class="required-label">Número Inicial da Cartela:</label>
+                        <input type="number" id="numero_inicial" name="numero_inicial" required min="1" class="form-control"
+                               value="{{ evento.get('numero_inicial', 1) }}">
+                    </div>
+                    <div class="form-group">
+                        <label for="numero_maximo" class="required-label">Número Máximo da Cartela:</label>
+                        <input type="number" id="numero_maximo" name="numero_maximo" required min="1" class="form-control"
+                               value="{{ evento.get('numero_maximo', 72000) }}">
+                    </div>
+
+                    <!-- Linha 5: Prêmios (Linha 1) -->
+                    <div class="form-group">
+                        <label for="premio_quadra" class="required-label">Prêmio Quadra (R$):</label>
+                        <!-- CORREÇÃO: Se vazio, use 0.00 -->
+                        <input type="number" id="premio_quadra" name="premio_quadra" required step="0.01" min="0" class="form-control"
+                               value="{{ evento.get('premio_quadra', ) }}" oninput="calculatePremioTotal()">
+                    </div>
+                    <div class="form-group">
+                        <label for="quantidade_de_linhas" class="required-label">Qtde. de Linhas (1-3):</label>
+                        <input type="number" id="quantidade_de_linhas" name="quantidade_de_linhas" required min="1" max="3" class="form-control"
+                               value="{{ evento.get('quantidade_de_linhas', 1) }}" oninput="calculatePremioTotal()">
+                    </div>
+                    <div class="form-group">
+                        <label for="premio_linha" class="required-label">Prêmio por Linha (R$):</label>
+                        <!-- CORREÇÃO: Se vazio, use 0.00 -->
+                        <input type="number" id="premio_linha" name="premio_linha" required step="0.01" min="0" class="form-control"
+                               value="{{ evento.get('premio_linha', ) }}" oninput="calculatePremioTotal()">
+                    </div>
+
+                    <!-- Linha 6: Prêmios (Linha 2) e Acumulado -->
+                    <div class="form-group">
+                        <label for="premio_bingo" class="required-label">Prêmio Bingo (R$):</label>
+                        <!-- CORREÇÃO: Se vazio, use 0.00 -->
+                        <input type="number" id="premio_bingo" name="premio_bingo" required step="0.01" min="0" class="form-control"
+                               value="{{ evento.get('premio_bingo', ) }}" oninput="calculatePremioTotal()">
+                    </div>
+                    <div class="form-group">
+                        <label for="premio_segundobingo">Prêmio Segundo Bingo (R$):</label>
+                        <!-- CORREÇÃO: Se vazio, use 0.00 -->
+                        <input type="number" id="premio_segundobingo" name="premio_segundobingo" step="0.01" min="0" class="form-control"
+                               value="{{ evento.get('premio_segundobingo', ) }}" oninput="calculatePremioTotal()">
+                    </div>
+                    <div class="form-group">
+                        <label for="minimo_de_venda">Mínimo de Venda Necessário (Qtde):</label>
+                        <!-- Este campo será calculado automaticamente -->
+                        <input type="text" id="minimo_de_venda" name="minimo_de_venda" disabled class="form-control bg-gray-200"
+                               value="{{ evento.get('minimo_de_venda', 0) }}">
+                    </div>
+                    <!-- Linha 7: Total e Bola Tope -->
+                    <div class="form-group">
+                        <label for="premio_total">Prêmio TOTAL (R$):</label>
+                        <input type="text" id="premio_total" name="premio_total" disabled class="form-control bg-gray-200 font-bold"
+                               value="{{ evento.get('premio_total', 0.00) }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="premio_acumulado">Prêmio Acumulado (R$):</label>
+                        <!-- CORREÇÃO: Se vazio, use 0.00 -->
+                        <input type="number" id="premio_acumulado" name="premio_acumulado" step="0.01" min="0" class="form-control"
+                               value="{{ evento.get('premio_acumulado', ) }}" oninput="toggleBolaTope(); calculatePremioTotal()">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="bola_tope_acumulado" id="label_bola_tope" 
+                               class="{% if evento.get('premio_acumulado', 0) <= 0 %}text-gray-400{% endif %}">Bola Tope Acumulado (2 dígitos):</label>
+                        <input type="number" id="bola_tope_acumulado" name="bola_tope_acumulado" min="1" max="99" class="form-control"
+                               value="{{ evento.get('bola_tope_acumulado', '') }}" 
+                               {% if evento.get('premio_acumulado', 0) <= 0 %}disabled{% endif %}>
+                    </div>
+                    <div class="form-group">
+                         <label for="status">Status (Automático):</label>
+                        <input type="text" id="status" name="status" disabled class="form-control bg-gray-100 font-semibold text-red-500"
+                               value="{% if active_view == 'alterar' %}{{ evento.get('status', 'Paralizado') }}{% else %}Paralizado (Padrão){% endif %}">
+                    </div>
+
+                </div>
+                
+                <div class="mt-6 flex justify-end space-x-2">
+                    <button type="submit" class="btn-submit btn-save">
+                        {% if active_view == 'alterar' %}
+                            ✓ Salvar Alterações
+                        {% else %}
+                            💾 Salvar Evento
+                        {% endif %}
+                    </button>
+                    {% if active_view == 'alterar' %}
+                        <a href="{{ url_for('cadastro_evento', view='listar') }}" class="nav-link bg-gray-400 text-white hover:bg-gray-500">Cancelar</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <!-- VISUALIZAÇÃO CONSULTA -->
+        <div id="view-consulta" class="view-content {% if active_view == 'consulta' %}active-view-show{% endif %}">
+            <h3 class="text-xl font-semibold mb-4 text-accent">Consulta de Evento</h3>
+            <form method="GET" action="{{ url_for('cadastro_evento') }}" class="mb-4 space-y-2">
+                <input type="hidden" name="view" value="consulta">
+                <label for="consulta_termo" class="form-group">Buscar por ID, Data ou Descrição:</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="consulta_termo" name="query" value="{{ query | default('') }}" placeholder="Digite o termo de busca..." class="form-control mb-0">
+                    <button type="submit" class="nav-link bg-accent text-white hover:opacity-90 min-w-[100px]">Buscar</button>
+                </div>
+            </form>
+            
+            <div class="mt-6 p-4 border rounded-lg bg-gray-50">
+                {% if active_view == 'consulta' and query and eventos_lista|length > 0 %}
+                    <h4 class="font-bold mb-3">{{ eventos_lista | length }} Resultado(s) encontrado(s) para "{{ query }}"</h4>
+                    {% for evento in eventos_lista %}
+                        <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0">
+                            <p><strong>ID:</strong> {{ evento.id_evento }}</p>
+                            <p><strong>Descrição:</strong> <span class="font-semibold text-primary">{{ evento.descricao }}</span></p>
+                            <p><strong>Data/Hora:</strong> {{ evento.data_evento | default('N/A') }} às {{ evento.hora_evento | default('N/A') }}</p>
+                            <p><strong>Prêmio Total:</strong> R$ {{ evento.premio_total | default(0.00) | round(2) }} | <strong>Status:</strong> {{ evento.status }}</p>
+                            <div class="mt-2 flex space-x-3">
+                                <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+                                
+                                <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}" 
+                                      class="inline-block"
+                                      onsubmit="return confirm('ATENÇÃO: Confirma a exclusão do evento ID {{ evento.id_evento }}? Esta ação é IRREVERSÍVEL.')">
+                                    <button type="submit" class="action-link delete-link hover:text-red-600">Excluir</button>
+                                </form>
+
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% elif active_view == 'consulta' and query and eventos_lista|length == 0 %}
+                    <p class="text-center text-red-500 font-bold">❌ Nenhum evento encontrado para o termo "{{ query }}".</p>
+                {% else %}
+                    <p class="text-gray-500 text-center">Utilize o campo acima para buscar um evento.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- VISUALIZAÇÃO LISTAR -->
+        <div id="view-listar" class="view-content {% if active_view == 'listar' %}active-view-show{% endif %}">
+            <h3 class="text-xl font-semibold mb-4 text-gray-700">Lista de Eventos (Ordenada por Data)</h3>
+            
+            <div class="overflow-x-auto shadow-md rounded-lg">
+                <table class="min-w-full bg-white border border-gray-200">
+                    <thead>
+                        <tr class="list-header">
+                            <th class="py-2 px-4 border-b text-left">ID</th>
+                            <th class="py-2 px-4 border-b text-left">Descrição</th>
+                            <th class="py-2 px-4 border-b text-left">Data/Hora</th>
+                            <th class="py-2 px-4 border-b text-left">Prêmio Total</th>
+                            <th class="py-2 px-4 border-b text-left">Status</th>
+                            <th class="py-2 px-4 border-b text-left">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if active_view == 'listar' and eventos_lista %}
+                            {% for evento in eventos_lista %}
+                            <tr class="list-row hover:bg-gray-100 transition duration-150">
+                                <td class="py-3 px-4 border-b text-sm">{{ evento.id_evento }}</td>
+                                <td class="py-3 px-4 border-b text-sm">{{ evento.descricao }}</td>
+                                <td class="py-3 px-4 border-b text-sm">{{ evento.data_evento | default('N/A') }} às {{ evento.hora_evento | default('N/A') }}</td>
+                                <td class="py-3 px-4 border-b text-sm font-semibold">R$ {{ evento.premio_total | default(0.00) | round(2) }}</td>
+                                <td class="py-3 px-4 border-b text-sm">{{ evento.status }}</td>
+                                <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
+                                    <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+                                    
+                                    <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}" 
+                                          class="inline-block"
+                                          onsubmit="return confirm('ATENÇÃO: Confirma a exclusão do evento ID {{ evento.id_evento }}? Esta ação é IRREVERSÍVEL.')">
+                                        <button type="submit" class="action-link delete-link hover:text-red-600">Excluir</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr><td colspan="6" class="py-8 text-center text-gray-500 font-bold">Nenhum evento cadastrado.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="flex justify-center mt-8">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+        </div>
+        
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', (event) => {
+            calculatePremioTotal();
+            toggleBolaTope();
+        });
+        
+        // CORREÇÃO: Função para evitar submissão do formulário ao pressionar Enter.
+        function preventDefaultOnEnter(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                // Opcional: mover o foco para o próximo campo ou para o botão de salvar.
+                return false; 
+            }
+        }
+
+        // Função que calcula o prêmio total e o mínimo de venda
+        function calculatePremioTotal() {
+            // Usa o operador nullish-coalescing (??) para pegar o valor ou 0
+            const quadra = parseFloat(document.getElementById('premio_quadra')?.value) || 0;
+            const linhas_qtde = parseInt(document.getElementById('quantidade_de_linhas')?.value) || 0;
+            const linha_valor = parseFloat(document.getElementById('premio_linha')?.value) || 0;
+            const bingo = parseFloat(document.getElementById('premio_bingo')?.value) || 0;
+            const segundobingo = parseFloat(document.getElementById('premio_segundobingo')?.value) || 0;
+            const acumulado = parseFloat(document.getElementById('premio_acumulado')?.value) || 0; // Incluído Acumulado no cálculo
+
+            const valor_unidade = parseFloat(document.getElementById('valor_de_venda')?.value) || 0;
+            const unidade_venda = parseInt(document.getElementById('unidade_de_venda')?.value) || 1;
+
+            // 1. Cálculo do Prêmio Total
+            const totalLinha = linhas_qtde * linha_valor;
+            const premioTotal = quadra + totalLinha + bingo + segundobingo + acumulado; // Adicionado acumulado
+            
+            // 2. Cálculo do Mínimo de Venda Necessário
+            let minimoVenda = 0;
+            if (valor_unidade > 0 && unidade_venda > 0) {
+                 minimoVenda = premioTotal / (valor_unidade * unidade_venda);
+            }
+            
+            // Atualiza os campos
+            document.getElementById('premio_total').value = premioTotal.toFixed(2);
+            document.getElementById('minimo_de_venda').value = Math.ceil(minimoVenda); // Arredonda para cima para garantir cobertura
+            
+            // Chama o toggle para garantir que o campo bola tope se atualize
+            toggleBolaTope();
+        }
+        // NOVO: Função que dispara a confirmação e submete o formulário se confirmado
+        function confirmDelete(nick, id_cliente) {
+            const message = `ATENÇÃO: Confirma a exclusão de ${nick} (CLI${id_cliente})? Esta ação é IRREVERSÍVEL.`;
+            
+            // Usa o confirm padrão do navegador
+            if (window.confirm(message)) {
+                // Se confirmado, encontra o formulário (ID dinâmico) e o submete
+                // Checa primeiro o ID da consulta, depois o da lista
+                let form = document.getElementById(`form-excluir-${id_cliente}`);
+                if (!form) {
+                    form = document.getElementById(`form-excluir-list-${id_cliente}`);
+                }
+                
+                if (form) {
+                    form.submit();
+                }
+            }
+        }
+        // Função que ativa/desativa o campo Bola Tope
+        function toggleBolaTope() {
+            const acumulado = parseFloat(document.getElementById('premio_acumulado')?.value) || 0;
+            const bolaTopeInput = document.getElementById('bola_tope_acumulado');
+            const bolaTopeLabel = document.getElementById('label_bola_tope');
+
+            if (acumulado > 0) {
+                bolaTopeInput.disabled = false;
+                bolaTopeInput.setAttribute('required', 'required');
+                bolaTopeLabel.classList.remove('text-gray-400');
+                bolaTopeLabel.classList.add('required-label');
+            } else {
+                bolaTopeInput.disabled = true;
+                bolaTopeInput.removeAttribute('required');
+                bolaTopeInput.value = ''; // Limpa o valor
+                bolaTopeLabel.classList.add('text-gray-400');
+                bolaTopeLabel.classList.remove('required-label');
+            }
+        }
+        
+        // Função para simular o confirm para ambientes que bloqueiam window.confirm (se necessário)
+        function confirm(message) {
+            return window.confirm(message);
+        }
+        
+    </script>
+</body>
+</html>

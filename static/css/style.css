@@ -1,0 +1,167 @@
+/* static/css/style.css */
+
+/* --- Estilos Gerais --- */
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #e9ecef;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    margin: 0;
+    color: #333;
+}
+
+h2 {
+    text-align: center;
+    color: #004085; /* Cor para títulos */
+    margin-bottom: 25px;
+    border-bottom: 2px solid #007bff;
+    padding-bottom: 10px;
+}
+
+/* --- Container de Formulários/Menú --- */
+.container {
+    background: white;
+    padding: 30px 40px;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    width: 100%;
+    max-width: 400px;
+    box-sizing: border-box;
+}
+
+/* --- Estilos de Input e Formulário --- */
+label {
+    display: block;
+    margin-bottom: 5px;
+    font-weight: 600;
+    color: #495057;
+}
+
+input[type="text"], 
+input[type="password"] {
+    width: 100%;
+    padding: 10px;
+    margin-bottom: 15px;
+    border: 1px solid #ced4da;
+    border-radius: 5px;
+    box-sizing: border-box;
+    transition: border-color 0.3s;
+}
+
+input[type="text"]:focus, 
+input[type="password"]:focus {
+    border-color: #007bff;
+    outline: none;
+    box-shadow: 0 0 5px rgba(0, 123, 255, 0.25);
+}
+
+/* --- Estilos de Botão Comum --- */
+button, .menu-item {
+    width: 100%;
+    padding: 10px;
+    background-color: #007bff;
+    color: white;
+    border: none;
+    border-radius: 10px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: background-color 0.3s, transform 0.1s;
+    text-align: center;
+    display: block;
+    text-decoration: none;
+    box-sizing: border-box;
+    margin-bottom: 4px;
+}
+
+button:hover, .menu-item:hover {
+    background-color: #0056b3;
+    transform: translateY(-1px);
+}
+
+/* --- Estilos de Alerta/Erro --- */
+.error {
+    color: #dc3545;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    padding: 10px;
+    border-radius: 5px;
+    text-align: center;
+    margin-bottom: 15px;
+    font-weight: bold;
+}
+
+/* --- Grupos de Senha (Para o toggle) --- */
+.password-group {
+    position: relative;
+    margin-bottom: 15px;
+}
+
+#toggleSenha { 
+    position: absolute; 
+    right: 5px; 
+    top: 35px; /* Ajustado para alinhar corretamente */
+    transform: translateY(-50%); 
+    padding: 5px 10px; 
+    background: #e9ecef; 
+    border: 1px solid #ced4da;
+    border-radius: 3px;
+    cursor: pointer; 
+    font-size: 12px;
+    color: #007bff;
+    z-index: 10;
+    width: auto; /* Sobrescreve o width: 100% de button */
+}
+
+/* --- NOVO ESTILO: TAMAHO DA FONTE PARA CAMPOS DE ENTRADA --- */
+input[type="text"],
+input[type="number"], /* Incluindo campos numéricos se houver */
+select,
+textarea {
+    /* Define um tamanho de fonte um pouco maior para melhor legibilidade no celular */
+    font-size: 1.2rem; 
+    padding: 10px; /* Mantém ou aumenta o padding para um melhor target de toque */
+    width: 100%;
+    border-radius: 5px;
+    border: 1px solid #ccc;
+    box-sizing: border-box;
+    margin-bottom: 10px;
+}
+
+#toggleSenha:hover {
+    background-color: #d1d9e2;
+}
+
+/* --- Estilos do Menu (Tela 2) --- */
+
+.menu-item-venda { 
+    background-color: #28a745; 
+}
+.menu-item-venda:hover { 
+    background-color: #1e7e34; 
+}
+
+.menu-item-exit { 
+    background-color: #dc3545 !important; 
+    margin-top: 20px;
+}
+.menu-item-exit:hover { 
+    background-color: #c82333 !important; 
+}
+
+.gerencial-item { 
+    background-color: #ffc107; 
+    color: #333; 
+    font-weight: bold;
+}
+.gerencial-item:hover { 
+    background-color: #e0a800; 
+}
+
+hr {
+    border: 0;
+    height: 1px;
+    background-color: #ced4da;
+    margin: 20px 0;
+}

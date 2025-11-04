@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Venda</title>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script> 
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#059669', // Emerald Green
+                        'secondary': '#10B981', // Green
+                        'danger': '#EF4444',
+                        'modal-bg': '#F0FFF4', // Fundo leve para modal
+                        'active-border': '#10B981', // Borda ativa do card
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F7F7F7; }
+        .container { max-width: 90%; margin: 20px auto; padding: 20px; background-color: white; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #FCA5A5; }
+        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; }
+        .alert-info { background-color: #DBEAFE; color: #1E40AF; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #93C5FD; }
+        .form-group label { font-weight: 600; display: block; margin-bottom: 5px; color: #374151; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px; }
+        .btn { padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; }
+        
+        .btn-primary { background-color: #059669; color: white; border: none; }
+        .btn-primary:hover { background-color: #047857; }
+        .btn-warning { background-color: #25D366; color: white; border: none; }
+        .btn-warning:hover { background-color: #1DA851; }
+        .btn-small { padding: 6px 12px; font-size: 0.9rem; }
+
+        .client-search-group { display: flex; gap: 8px; margin-bottom: 15px; }
+        .client-search-group input { flex-grow: 1; margin-bottom: 0; }
+        .client-search-group .btn-small { width: auto; flex-shrink: 0; padding: 10px 15px; margin-bottom: 0; font-size: 0.9rem; }
+        
+        .btn-novo { background-color: #FFC107; color: #333; }
+        .btn-novo:hover { background-color: #e0a800; }
+
+        #receipt-content { background-color: white !important; padding: 15px; border: 1px dashed #38B2AC; border-radius: 8px; margin-bottom: 15px; color: #065F46; white-space: pre-wrap; font-family: monospace; text-align: left; }
+        #total-custo { font-size: 1.25rem; font-weight: 700; color: #B91C1C; margin-top: 15px; padding: 10px; border: 2px solid #FCA5A5; border-radius: 8px; text-align: center; }
+
+        /* Estilos da Modal */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background-color: rgba(0, 0, 0, 0.6); z-index: 1000;
+            display: none; justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background-color: #F0FFF4; max-width: 95%; max-height: 90%; 
+            padding: 20px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            overflow-y: auto;
+        }
+        .event-card {
+            background-color: white; border: 2px solid transparent; 
+            border-radius: 8px; padding: 15px; cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .event-card:hover { border-color: #A7F3D0; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2 class="text-2xl font-bold mb-1 text-gray-900 text-center">⭐ Nova Venda</h2>
+
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        
+        {% if success %}
+            <div class="alert alert-success text-center">
+                <h3 class="text-xl font-bold mb-2">Venda Registrada com Sucesso!</h3>
+                
+                <div id="receipt-content">
+                    {{ success | safe }}
+                </div>
+            </div>
+            
+            <div class="flex justify-center mb-2 gap-3 flex-wrap">
+                <button onclick="shareReceiptImage()" class="btn btn-warning shadow-lg">
+                    🖼️ Gerar Imagem e Compartilhar
+                </button>
+
+                <button onclick="copyReceiptText()" class="btn btn-primary shadow-lg">
+                    📋 Copiar Texto (Área de Transferência)
+                </button>
+
+            </div>
+        {% endif %}
+
+        {% if not g.db_status %}
+             <div class="alert alert-danger">DB OFFLINE. Vendas não podem ser processadas.</div>
+        {% endif %}
+        
+        <form method="GET" action="{{ url_for('nova_venda') }}" class="form-venda" id="main-form">
+            
+            <!-- CAMPO OCULTO APENAS PARA ID DO EVENTO -->
+            <input type="hidden" name="id_evento" id="input_id_evento" 
+                   value="{% if selected_event %}{{ selected_event._id }}{% endif %}">
+            
+            <div class="form-group flex gap-1 items-center">
+                <div class="flex-grow">
+                    <label for="evento_display">1. Evento Selecionado:</label>
+                    <input type="text" id="evento_display" readonly class="text-[9px] font-bold form-control bg-gray-100"
+                        value="{% if selected_event %}{{ selected_event.descricao }} {% else %}-- Selecione um Evento Ativo --{% endif %}"
+                    >
+                </div>
+                <button type="button" onclick="openEventSelector()" 
+                        class="btn btn-primary btn-small self-end mb-3 min-w-[120px]">
+                    Selecionar
+                </button>
+            </div>
+
+            {% if selected_event %}
+                <div class="alert alert-info mt-0 mb-2" style="margin-top: 2px;">
+                    <h4 class="text-lg font-bold">{{ selected_event.descricao }}</h4>
+                  
+                    <p>Data: <strong>{{ selected_event.data_evento }}</strong> | Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
+                    <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
+                    <p>Numeração Início: <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
+                </div>
+            {% endif %}
+
+            {% if selected_event %}
+                <div class="form-group">
+                    <label for="id_cliente_busca">2. ID ou Nome do Cliente (Busca):</label>
+                    <div class="client-search-group font-bold">
+                        <!-- CAMPO DE BUSCA DE CLIENTE -->
+                        <input type="text" id="id_cliente_busca" name="id_cliente_busca" 
+                               value="{{ cliente_busca | default('') }}" 
+                               placeholder="Busque por ID, Nome ou Nick..." 
+                               class="form-control">
+                        
+                        <button type="submit" class="btn btn-primary btn-small">
+                            🔍 Buscar
+                        </button>
+                        
+                        <a href="{{ url_for('cadastro_cliente', view='novo', next='nova_venda') }}" class="btn btn-novo btn-small" style="text-decoration: none;">
+                            ➕ Novo
+                        </a>
+                    </div>
+                </div>
+
+                <div class="form-group mt-1">
+                    <label for="quantidade">3. Quantidade de Unidades:</label>
+                    <input type="number" id="quantidade" name="quantidade" 
+                           value="{{ quantidade | default(1) }}" min="1" required 
+                           class="form-control" 
+                           oninput="updateTotalCost(); updateCartelasDisplay();">
+                    <small class="form-text text-muted font-bold">Total de cartelas: 
+                        <span id="cartelas-display">
+                            {{ (quantidade * selected_event.unidade_de_venda) if quantidade > 0 and selected_event else 0 }}
+                        </span>.
+                    </small>
+                </div>
+
+                {% if cliente_encontrado %}
+                    <div class="alert alert-success mt-1">
+                        Nick: <strong>{{ cliente_encontrado.nick | default(cliente_encontrado.nome_cliente) }}</strong> (ID: <strong>CLI{{ id_cliente_final }}</strong>)
+                        <!-- Campo hidden necessário para o POST final -->
+                        <input type="hidden" name="id_cliente_final" value="{{ id_cliente_final }}">
+                    </div>
+                {% elif cliente_busca and not cliente_encontrado %}
+                    <div class="alert alert-warning mt-1 alert-info">Cliente '{{ cliente_busca }}' não encontrado.</div>
+                {% endif %}
+                
+                <div id="total-custo" class="mt-1">
+                    Custo Total: R$ {{ "%.2f" | format(custo) }} 
+                </div>
+
+            {% endif %}
+        </form>
+
+        {% if cliente_encontrado and quantidade > 0 and selected_event %}
+            <hr class="my-4 border-gray-300">
+            <form method="POST" action="{{ url_for('processar_venda') }}" class="flex justify-center" id="confirm-form">
+                <!-- Parâmetros de envio final da venda (serão preenchidos pelo JS) -->
+                <input type="hidden" name="id_cliente_final" id="post_id_cliente_final" value="{{ id_cliente_final }}">
+                <input type="hidden" name="id_evento" id="post_id_evento" value="{{ selected_event._id }}">
+                <input type="hidden" name="quantidade" id="post_quantidade" value="{{ quantidade }}">
+                
+                <button type="submit" class="btn btn-primary btn-lg shadow-xl hover:shadow-2xl transition duration-300" 
+                        onclick="return syncAndConfirm(event)">
+                    ✅ Confirmar e Gravar Venda (<span id="btn-custo-text">R$ {{ "%.2f" | format(custo) }}</span>)
+                </button>
+            </form>
+        {% endif %}
+
+        <div class="flex justify-center font-bold mt-4">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+        </div>
+        
+    </div>
+    
+    <!-- MODAL DE SELEÇÃO DE EVENTOS -->
+    <div id="event-selector-modal" class="modal">
+        <div class="modal-content w-full md:w-3/4 lg:w-1/2">
+            <h3 class="text-2xl font-bold mb-4 text-gray-800 border-b pb-2">Selecione o Evento Ativo</h3>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto pr-2">
+                {% for evento in eventos %}
+                    <div class="event-card shadow-md flex flex-col justify-between"
+                        data-id="{{ evento._id }}"
+                        data-descricao="{{ evento.descricao }}"
+                        data-valor="{{ '%.2f' | format(evento.valor_de_venda_float) }}"
+                        data-unidade="{{ evento.unidade_de_venda }}"
+                        data-data-hora="{{ evento.data_evento }} às {{ evento.hora_evento }}"
+                        data-num-atual="{{ evento.numeracao_atual_display }}"
+                        onclick="selectEvent(this)">
+
+                        <div>
+                            <p class="text-lg font-bold text-primary">{{ evento.descricao }} (EVE{{ evento.id_evento }})</p>
+                            <p class="text-sm text-gray-500">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
+                            
+                            <div class="mt-2 text-md font-semibold">
+                                <p>💰 R$ {{ '%.2f' | format(evento.valor_de_venda_float) }} / Unidade</p>
+                                <p>🎟️ Kits: {{ evento.unidade_de_venda }} cartelas</p>
+                            </div>
+                        </div>
+
+                        <div class="mt-3 pt-2 border-t border-dashed">
+                             <p class="text-sm text-gray-700">Próximo Bilhete: 
+                                <span class="font-bold text-lg text-red-600">{{ evento.numeracao_atual_display }}</span>
+                            </p>
+                            <button class="btn btn-primary btn-small w-full mt-2" 
+                                    onclick="selectEvent(this.parentElement.parentElement); return false;">
+                                Selecionar
+                            </button>
+                        </div>
+                    </div>
+                {% else %}
+                    <p class="text-center text-gray-500 md:col-span-2">Nenhum evento ativo disponível para venda.</p>
+                {% endfor %}
+            </div>
+
+            <button onclick="closeEventSelector()" class="btn bg-gray-400 text-white hover:bg-gray-500 mt-4 w-full">Fechar</button>
+        </div>
+    </div>
+    <!-- FIM DA MODAL -->
+    
+    <script>
+        // Variáveis globais/Jinja
+        let Venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}");
+        let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
+        
+        /**
+         * Limpa e converte a string de valor monetário (ex: "10,00" ou "1.000,00") para float.
+         * @param {string} valueString O valor como string.
+         * @returns {number} O valor como float.
+         */
+        function cleanAndParseFloat(valueString) {
+            if (!valueString) return 0;
+            
+            let cleaned = valueString.replace(/[^0-9,\.]/g, ''); 
+            
+            if (cleaned.includes(',')) {
+                cleaned = cleaned.replace(/\./g, ''); // Remove separadores de milhar
+                cleaned = cleaned.replace(',', '.');  // Troca a vírgula decimal por ponto
+            }
+            return parseFloat(cleaned);
+        }
+
+        /**
+         * Calcula e exibe o custo total da venda.
+         */
+        function updateTotalCost() {
+            const campoQuantidade = document.getElementById('quantidade');
+            const elementoCustoTotal = document.getElementById('total-custo');
+
+            if (campoQuantidade && elementoCustoTotal) {
+                const quantidade = parseInt(campoQuantidade.value) || 0;
+                const total = quantidade * Venda_ValorUnitario;
+                
+                const totalFormatado = total.toLocaleString('pt-BR', { 
+                    style: 'currency', 
+                    currency: 'BRL' 
+                });
+                
+                elementoCustoTotal.textContent = `Custo Total: ${totalFormatado}`;
+            }
+        }
+        
+        /**
+         * Atualiza o display de "Total de Cartelas"
+         */
+        function updateCartelasDisplay() {
+            const campoQuantidade = document.getElementById('quantidade');
+            const displayCartelas = document.getElementById('cartelas-display');
+            
+            if (campoQuantidade && displayCartelas) {
+                const quantidade = parseInt(campoQuantidade.value) || 0;
+                displayCartelas.textContent = (quantidade * Venda_UnidadeCartelas);
+            }
+        }
+
+        /**
+         * Sincroniza a quantidade do input com o campo hidden do POST e dispara a confirmação.
+         * @param {Event} event O evento de clique (útil para prevenir o submit imediato se o confirm falhar).
+         * @returns {boolean} Resultado da função confirm.
+         */
+        function syncAndConfirm(event) {
+            const campoQuantidade = document.getElementById('quantidade');
+            const postQuantidade = document.getElementById('post_quantidade');
+            const elementoCustoTotal = document.getElementById('total-custo');
+            const btnCustoText = document.getElementById('btn-custo-text');
+
+            // 1. Sincroniza o campo hidden 'quantidade' com o valor atual do input
+            if (campoQuantidade && postQuantidade) {
+                postQuantidade.value = campoQuantidade.value;
+            }
+
+            // 2. Atualiza o texto do botão de confirmação para o valor ATUAL (visível na div)
+            if (elementoCustoTotal && btnCustoText) {
+                // Remove 'Custo Total: ' para obter apenas o valor formatado
+                const custoText = elementoCustoTotal.textContent.replace('Custo Total: ', '');
+                btnCustoText.textContent = custoText;
+            }
+            
+            // 3. Dispara a confirmação de segurança
+            const quantidadeAtual = campoQuantidade ? (parseInt(campoQuantidade.value) || 0) : 0;
+            const custoConfirm = elementoCustoTotal ? elementoCustoTotal.textContent.replace('Custo Total: ', '') : 'R$ 0,00';
+            
+            if (quantidadeAtual === 0) {
+                 alert("A quantidade de unidades deve ser maior que zero.");
+                 return false;
+            }
+
+            // A função confirm() padrão é usada
+            const isConfirmed = confirm(`ATENÇÃO: Confirma a venda de ${custoConfirm} (${quantidadeAtual} unidades)? Esta é uma transação CRÍTICA.`);
+
+            if (!isConfirmed) {
+                event.preventDefault(); // Evita o submit se não for confirmado
+            }
+            return isConfirmed; 
+        }
+
+        // --- Modal Functions ---
+        
+        function openEventSelector() {
+            document.getElementById('event-selector-modal').style.display = 'flex';
+        }
+
+        function closeEventSelector() {
+            document.getElementById('event-selector-modal').style.display = 'none';
+        }
+        
+        /**
+         * Seleciona um evento da modal e preenche os dados no formulário principal.
+         * @param {HTMLElement} cardElement O elemento HTML do cartão de evento.
+         */
+        function selectEvent(cardElement) {
+            const eventId = cardElement.dataset.id;
+            const descricao = cardElement.dataset.descricao;
+            
+            // CORREÇÃO: Limpa o valor do data-valor antes de usar
+            const valor = cleanAndParseFloat(cardElement.dataset.valor);
+            const unidade = parseInt(cardElement.dataset.unidade) || 0;
+            
+            const valorFormatado = valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            
+            // 1. Atualiza os campos ocultos de envio
+            document.getElementById('input_id_evento').value = eventId;
+            
+            // 2. Atualiza o campo de exibição
+            document.getElementById('evento_display').value = `${descricao} (${valorFormatado})`;
+
+            // 3. Configura variáveis globais para o novo evento
+            Venda_ValorUnitario = valor;
+            Venda_UnidadeCartelas = unidade;
+            
+            // 4. Fechar a modal
+            closeEventSelector();
+            
+            // 5. Submete o formulário principal para recarregar com o evento selecionado
+            document.getElementById('main-form').submit();
+        }
+        
+        // --- Outras Funções (Comprovante, etc. mantidas) ---
+
+        function copyReceiptText() {
+            const receiptDiv = document.getElementById('receipt-content');
+            if (!receiptDiv) return;
+
+            const textToCopy = receiptDiv.innerText.trim(); 
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = textToCopy;
+            tempTextArea.style.position = 'fixed'; 
+            tempTextArea.style.opacity = '0';
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    alert('Comprovante copiado para a área de transferência! Cole no WhatsApp do cliente.'); 
+                } else {
+                    alert('Falha ao copiar. Tente selecionar o texto manualmente.');
+                }
+            } catch (err) {
+                alert('Erro ao tentar copiar: ' + err);
+            }
+            document.body.removeChild(tempTextArea);
+        }
+
+        function shareReceiptImage() {
+            const receiptDiv = document.getElementById('receipt-content');
+            if (!receiptDiv) return;
+
+            html2canvas(receiptDiv, { 
+                scale: 2, 
+                useCORS: true,
+                backgroundColor: '#FFFFFF', 
+            }).then(canvas => {
+                const imgData = canvas.toDataURL('image/png');
+                const newWindow = window.open('about:blank', '_blank');
+                if (newWindow) {
+                    newWindow.document.write(`<img src="${imgData}" style="max-width:100%; display:block;" alt="Comprovante de Venda"/>`);
+                    newWindow.document.title = 'Comprovante Venda';
+                    newWindow.document.close();
+                    alert("Imagem gerada e aberta em uma nova janela. Use a função de 'Compartilhar' do seu navegador ou pressione e segure a imagem para enviar pelo WhatsApp.");
+                } else {
+                    alert("Pop-up bloqueado! Salve a imagem manualmente.");
+                }
+            }).catch(err => {
+                console.error("Erro ao gerar imagem:", err);
+                alert("Erro ao gerar imagem do comprovante. Tente novamente.");
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // Inicializa as variáveis globais com valores do Jinja na carga da página
+            const campoQuantidade = document.getElementById('quantidade');
+            
+            // O Jinja já inicializa Venda_ValorUnitario e Venda_UnidadeCartelas no topo do script.
+
+            if (campoQuantidade) {
+                 campoQuantidade.addEventListener('input', updateTotalCost);
+                 campoQuantidade.addEventListener('input', updateCartelasDisplay);
+            }
+
+            // Garante que os displays (custo e cartelas) estejam corretos no carregamento inicial
+            updateTotalCost();
+            updateCartelasDisplay();
+        });
+
+        function confirm(message) {
+            if (window.confirm) {
+                return window.confirm(message);
+            } else {
+                return true; 
+            }
+        }
+        
+    </script>
+</body>
+</html>

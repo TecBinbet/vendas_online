@@ -1,0 +1,4 @@
+# requirements.txt
+Flask
+pymongo
+python-dotenv  # Opcional, para gerenciar variáveis de ambiente como a URI do MongoDB

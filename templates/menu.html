@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menu de Operações</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <div class="container">
+        <h2>🎯 Menu de Operações</h2>
+        
+        <a href="{{ url_for('nova_venda') }}" class="menu-item menu-item-venda">⭐ Nova Venda</a>
+        <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" class="menu-item">🗓️ Consulta de Eventos</a>
+        <a href="#" class="menu-item">📋 Consulta de Vendas</a>
+        <a href="#" class="menu-item">🏆 Consulta de Resultados</a>
+        <a href="{{ url_for('cadastro_cliente', view='novo', next='menu_operacoes') }}" class="menu-item">👥 Cadastro de Clientes</a>
+        
+        {% if nivel >= 3 %} 
+            <hr>
+            <a href="{{ url_for('cadastro_evento', view='listar') }}" class="menu-item gerencial-item">🗓️ Cadastro de Eventos</a>
+            <a href="{{ url_for('consulta_status_eventos', mode='detailed') }}" class="menu-item gerencial-item">🗓️ Status de Vendas dos Eventos</a>
+            <a href="{{ url_for('cadastro_colaborador', view='listar') }}" class="menu-item gerencial-item">🛠️ Cadastro de Colaboradores</a>
+        {% endif %}
+        
+        <a href="{{ url_for('login_page') }}" class="menu-item menu-item-exit">🚪 Sair</a>
+    </div>
+</body>
+</html>

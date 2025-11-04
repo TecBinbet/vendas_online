@@ -1,0 +1,362 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro de Colaboradores</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#059669',
+                        'secondary': '#10B981',
+                        'accent': '#F59E0B', // Amber
+                        'danger': '#EF4444',
+                        'info': '#3B82F6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F7F7F7; }
+        .container { max-width: 900px; margin: 20px auto; padding: 30px; background-color: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+        .nav-link { padding: 10px 20px; border-radius: 6px; font-weight: bold; transition: background-color 0.3s; text-decoration: none; display: inline-block; text-align: center; }
+        .form-group label { font-weight: 600; display: block; margin-bottom: 5px; color: #374151; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px; }
+        .required-label::after { content: ' *'; color: #EF4444; }
+
+        .btn-submit { padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; color: white; border: none; }
+        .btn-save { background-color: #059669; } 
+        .btn-save:hover { background-color: #047857; }
+
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #FCA5A5; }
+        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; }
+
+        /* Estilos da Tabela */
+        .list-header { background-color: #E5E7EB; color: #374151; font-weight: bold; }
+        .list-row:nth-child(even) { background-color: #F9FAFB; }
+        .action-link { text-decoration: none; font-weight: 600; margin-right: 10px; }
+        .delete-link { color: #EF4444; }
+        
+        /* Grupo de Senha para o toggle */
+        .password-group {
+            position: relative;
+        }
+        .password-toggle {
+            position: absolute; 
+            right: 5px; 
+            top: 35px; /* Ajustado para alinhar com o input */
+            padding: 5px 10px; 
+            background: #e9ecef; 
+            border: 1px solid #ced4da;
+            border-radius: 3px;
+            cursor: pointer; 
+            font-size: 0.8rem;
+            color: #007bff;
+            z-index: 10;
+        }
+        .password-group input {
+            padding-right: 70px; /* Espaço para o botão */
+        }
+
+        /* CORREÇÃO CRÍTICA PARA O PISCA-PISCA: Oculta todas as views por padrão,
+           permitindo que o Jinja as exiba imediatamente se 'active_view' for correspondente */
+        .view-content {
+            display: none;
+        }
+        .view-content.active-view-show {
+            display: block !important; /* Força a exibição quando o Jinja define a classe */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2 class="text-2xl mb-2 text-blue-800 text-center">Gestão de Colaboradores</h2>
+
+        {% if error %}
+            <div class="alert-danger">{{ error }}</div>
+        {% endif %}
+        {% if success %}
+            <div class="alert-success">{{ success | safe }}</div>
+        {% endif %}
+
+        <div class="flex space-x-4 mb-2 border-b pb-4">
+            <a href="{{ url_for('cadastro_colaborador', view='novo') }}" 
+               class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
+                ➕ Novo
+            </a>
+            <a href="{{ url_for('cadastro_colaborador', view='consulta') }}" 
+               class="nav-link {% if active_view == 'consulta' %}bg-accent text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:opacity-90">
+                🔎 Consulta
+            </a>
+            <a href="{{ url_for('cadastro_colaborador', view='listar') }}" 
+               class="nav-link {% if active_view == 'listar' %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
+                📋 Listar
+            </a>
+        </div>
+
+        <div class="mb-2 p-2 bg-info text-white border border-blue-600 rounded-lg">
+            Total de Colaboradores Cadastrados: <strong id="total-colaboradores">{{ total_colaboradores }}</strong>.
+        </div>
+        
+        <!-- APLICA A CLASSE 'active-view-show' DIRETAMENTE NO RENDER DO JINJA -->
+        {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
+        <div id="view-novo" class="view-content {% if is_novo_alterar %}active-view-show{% endif %}">
+            
+            <!-- CORREÇÃO CRÍTICA: Sintaxe correta do Jinja "is not none" -->
+            {% set colab = colaborador_edicao if colaborador_edicao is not none else {} %} 
+            
+            <h3 class="text-xl font-semibold mb-2 {% if active_view == 'alterar' %}text-accent{% else %}text-primary{% endif %}">
+                {% if active_view == 'alterar' %}Alteração de Colaborador (ID: {{ colab.get('id_colaborador', 'N/A') }}){% else %}Cadastro de Novo Colaborador{% endif %}
+            </h3>
+
+            <!-- CORREÇÃO: Uso de 'colab' (variável segura) para prevenir 'None' has no attribute 'get' -->
+            <form method="POST" action="{{ url_for('gravar_colaborador') }}" id="form-cadastro" class="space-y-4">
+                
+                {% if active_view == 'alterar' %}
+                    <input type="hidden" name="id_colaborador_edicao" value="{{ colab.get('id_colaborador', '') }}">
+                {% endif %}
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    
+                    <div class="form-group">
+                        <label>ID Colaborador:</label>
+                        <input type="text" 
+                               value="{% if active_view == 'alterar' %}{{ colab.get('id_colaborador', 'N/A') }}{% else %}Gerado Automaticamente{% endif %}" 
+                               disabled class="form-control bg-gray-100">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="nome_colaborador" class="required-label">Nome Completo:</label>
+                        <input type="text" id="nome_colaborador" name="nome_colaborador" required class="form-control" 
+                               value="{{ colab.get('nome_colaborador', '') }}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="nick" class="required-label">Nick:</label>
+                        <input type="text" id="nick" name="nick" required class="form-control"
+                               value="{{ colab.get('nick', '') }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="telefone" class="required-label">Telefone:</label>
+                        <input type="tel" id="telefone" name="telefone" required class="form-control"
+                               value="{{ colab.get('telefone', '') }}">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="cpf" class="required-label">CPF:</label>
+                        <input type="text" id="cpf" name="cpf" required class="form-control" placeholder="Apenas números"
+                               value="{{ colab.get('cpf', '') }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cidade" class="required-label">Cidade:</label>
+                        <input type="text" id="cidade" name="cidade" required class="form-control"
+                               value="{{ colab.get('cidade', '') }}">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="chave_pix" class="required-label">Chave PIX:</label>
+                        <input type="text" id="chave_pix" name="chave_pix" required class="form-control"
+                               value="{{ colab.get('chave_pix', '') }}" autocomplete="off">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="confirma_chave_pix" class="required-label">Confirmar Chave PIX:</label>
+                       <input type="text" id="confirma_chave_pix" name="confirma_chave_pix" required class="form-control"
+                            value="{{ colab.get('chave_pix', '') }}" autocomplete="off">
+                    </div>
+
+                    <div class="form-group password-group">
+                        <label for="senha" class="{% if active_view != 'alterar' %}required-label{% endif %}">Senha:</label>
+                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('senha')">👁️</button>
+                        <input type="password" id="senha" name="senha" 
+                               {% if active_view != 'alterar' %}required{% endif %} 
+                               class="form-control" placeholder="{% if active_view == 'alterar' %}Deixe vazio para manter a senha atual{% endif %}" autocomplete="new-password">
+                    </div>
+
+                    <div class="form-group password-group">
+                        <label for="confirma_senha" class="{% if active_view != 'alterar' %}required-label{% endif %}">Confirmar Senha:</label>
+                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirma_senha')">👁️</button>
+                        <input type="password" id="confirma_senha" name="confirma_senha" 
+                               {% if active_view != 'alterar' %}required{% endif %} 
+                               class="form-control" placeholder="Repita a senha">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="nivel" class="required-label">Nível (1 a 3):</label>
+                        <input type="number" id="nivel" name="nivel" required min="1" max="3" class="form-control"
+                               value="{{ colab.get('nivel', 1) }}">
+                        <small class="text-sm font-bold text-red-500">1 (Vendas), 2 (Gerentes) e 3 (Admin).</small>
+                    </div>
+                    
+                </div>
+                
+                <div class="mt-6 flex justify-end space-x-2">
+                    <button type="submit" class="btn-submit btn-save">
+                        {% if active_view == 'alterar' %}
+                            ✓ Salvar Alterações
+                        {% else %}
+                            💾 Salvar Colaborador
+                        {% endif %}
+                    </button>
+                    {% if active_view == 'alterar' %}
+                        <a href="{{ url_for('cadastro_colaborador', view='listar') }}" class="nav-link bg-gray-400 text-white hover:bg-gray-500">Cancelar</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <div id="view-consulta" class="view-content {% if active_view == 'consulta' %}active-view-show{% endif %}">
+            <h3 class="text-xl font-semibold mb-4 text-accent">Consulta de Colaborador</h3>
+            <form method="GET" action="{{ url_for('cadastro_colaborador') }}" class="mb-4 space-y-2">
+                <input type="hidden" name="view" value="consulta">
+                <label for="consulta_termo" class="form-group">Buscar por Nick, Chave PIX ou CPF:</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="consulta_termo" name="query" value="{{ query | default('') }}" placeholder="Digite o termo de busca..." class="form-control mb-0">
+                    <button type="submit" class="nav-link bg-accent text-white hover:opacity-90 min-w-[100px]">Buscar</button>
+                </div>
+            </form>
+            
+            <div class="mt-6 p-4 border rounded-lg bg-gray-50">
+                {% if active_view == 'consulta' and query and colaboradores_lista|length > 0 %}
+                    <h4 class="font-bold mb-3">{{ colaboradores_lista | length }} Resultado(s) encontrado(s) para "{{ query }}"</h4>
+                    {% for colaborador in colaboradores_lista %}
+                        <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0">
+                            <p><strong>ID:</strong> {{ colaborador.id_colaborador }} (Nível: {{ colaborador.nivel }})</p>
+                            <p><strong>Nome:</strong> {{ colaborador.nome_colaborador }}</p>
+                            <p><strong>Nick:</strong> <span class="font-semibold text-primary">{{ colaborador.nick }}</span></p>
+                            <p><strong>CPF:</strong> {{ colaborador.cpf | default('N/A') }}</p>
+                            <div class="mt-2 flex space-x-3">
+                                <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+                                
+                                <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
+                                      class="inline-block"
+                                      onsubmit="return confirm('ATENÇÃO: Confirma a exclusão de {{ colaborador.nick }}? Esta ação é IRREVERSÍVEL.')">
+                                    <button type="submit" class="action-link delete-link hover:text-red-600">Excluir</button>
+                                </form>
+
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% elif active_view == 'consulta' and query and colaboradores_lista|length == 0 %}
+                    <p class="text-center text-red-500 font-bold">❌ Nenhum colaborador encontrado para o termo "{{ query }}".</p>
+                {% else %}
+                    <p class="text-gray-500 text-center">Utilize o campo acima para buscar um colaborador.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div id="view-listar" class="view-content {% if active_view == 'listar' %}active-view-show{% endif %}">
+            <h3 class="text-xl font-semibold mb-4 text-gray-700">Lista de Colaboradores (Ordenada por Nick)</h3>
+            
+            <div class="overflow-x-auto shadow-md rounded-lg">
+                <table class="min-w-full bg-white border border-gray-200">
+                    <thead>
+                        <tr class="list-header">
+                            <th class="py-2 px-4 border-b text-left">ID</th>
+                            <th class="py-2 px-4 border-b text-left">Nome (Nick)</th>
+                            <th class="py-2 px-4 border-b text-left">Nível</th>
+                            <th class="py-2 px-4 border-b text-left">Telefone</th>
+                            <th class="py-2 px-4 border-b text-left">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if active_view == 'listar' and colaboradores_lista %}
+                            {% for colaborador in colaboradores_lista %}
+                            <tr class="list-row hover:bg-gray-100 transition duration-150">
+                                <td class="py-3 px-4 border-b text-sm">{{ colaborador.id_colaborador }}</td>
+                                <td class="py-3 px-4 border-b text-sm">{{ colaborador.nome_colaborador }} ({{ colaborador.nick }})</td>
+                                <td class="py-3 px-4 border-b text-sm font-semibold">{{ colaborador.nivel }}</td>
+                                <td class="py-3 px-4 border-b text-sm">{{ colaborador.telefone }}</td>
+                                <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
+                                    <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+                                    
+                                    <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
+                                          class="inline-block"
+                                          onsubmit="return confirm('ATENÇÃO: Confirma a exclusão de {{ colaborador.nick }}? Esta ação é IRREVERSÍVEL.')">
+                                        <button type="submit" class="action-link delete-link hover:text-red-600">Excluir</button>
+                                    </form>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr><td colspan="5" class="py-8 text-center text-gray-500 font-bold">Nenhum colaborador cadastrado.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="flex justify-center mt-8">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+        </div>
+        
+    </div>
+    
+    <script>
+        // NOVO: Função para manipular a tecla Enter e mover o foco
+        function handleEnterKey(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Impede o submit padrão do formulário
+                
+                const form = event.target.form;
+                if (!form) return true;
+
+                const elements = Array.from(form.elements); // Converte para Array
+                const index = elements.indexOf(event.target);
+                
+                // Procura o próximo elemento que pode receber foco
+                for (let i = index + 1; i < elements.length; i++) {
+                    const element = elements[i];
+                    
+                    // Pula elementos desabilitados, botões de toggle de senha e campos ocultos
+                    if (element.type !== 'hidden' && !element.disabled && 
+                        !element.classList.contains('password-toggle') && element.name) {
+                        
+                        element.focus();
+                        return false; // Sucesso ao mover o foco
+                    }
+                }
+                
+                // Se chegou ao fim, tenta focar no botão de submit
+                const submitButton = form.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.focus();
+                }
+                
+                return false; // Sempre retorna false para impedir o submit
+            }
+            return true; // Deixa outras teclas funcionarem normalmente
+        }
+        // Função para alternar a visibilidade da senha
+        function togglePasswordVisibility(fieldId) {
+            const passwordInput = document.getElementById(fieldId);
+            const toggleButton = passwordInput.previousElementSibling; 
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleButton.textContent = '🙈';
+            } else {
+                passwordInput.type = 'password';
+                toggleButton.textContent = '👁️';
+            }
+        }
+        
+        // A lógica JS para controle de view foi removida,
+        // pois o CSS/Jinja agora lida com a visibilidade,
+        // garantindo um carregamento mais suave.
+        
+        // Função para simular o confirm para ambientes que bloqueiam window.confirm (se necessário)
+        function ShowConfirm(message) {
+            return window.confirm(message);
+        }
+        
+    </script>
+</body>
+</html>
