@@ -294,16 +294,16 @@ def before_request():
 @login_required
 def menu_operacoes():
     nivel = session.get('nivel', 1) 
+    nome_logado = session.get('nick', 'Colaborador')
     db_status = g.db_status 
-    return render_template('menu.html', nivel=nivel, db_status=db_status)
+    return render_template('menu.html', nivel=nivel, logado=nome_logado, db_status=db_status)
 
 @app.route('/login', methods=['POST'])
 def login():
-    nome_usuario = request.form.get('nome')
-    senha = request.form.get('senha')
+    nome_usuario = format_title_case(request.form.get('nome'))
+    senha = format_title_case(request.form.get('senha'))
     if not g.db_status:
          return redirect(url_for('login_page', error="DB Offline. Tente novamente.")) 
-
     db = g.db
     try:
         # Tenta login como Colaborador
@@ -314,12 +314,11 @@ def login():
             ]
         })
         tipo_usuario = 'colaborador'
-        
         # Se não encontrar, tenta login como Cliente
         if not usuario:
             usuario = db.clientes.find_one({'nick': nome_usuario})
             tipo_usuario = 'cliente'
-
+        
     except Exception as e:
         print(f"🚨 ERRO NA BUSCA DO USUÁRIO (Colab/Cliente): {e}")
         return redirect(url_for('login_page', error="Erro interno ao acessar credenciais."))
@@ -330,11 +329,9 @@ def login():
         # Aplica a mesma regra de formatação (Capitalize) usada no cadastro
         # antes de comparar a senha.
         senha_formatada_login = senha.capitalize()
-        
         # Verifica a senha formatada com o hash do DB
         if bcrypt.checkpw(senha_formatada_login.encode('utf-8'), usuario['senha'].encode('utf-8')): 
             session['logged_in'] = True
-            
             if tipo_usuario == 'colaborador':
                 session['id_colaborador'] = usuario.get('id_colaborador') or str(usuario['_id'])
                 session['nivel'] = usuario.get('nivel', 1) 
@@ -348,7 +345,6 @@ def login():
                 
                 # AJUSTE: Redireciona o cliente para o dashboard dele
                 return redirect(url_for('dashboard_cliente'))
-
           
     return redirect(url_for('login_page', error="Usuário ou senha inválidos."))
 
@@ -587,6 +583,10 @@ def gravar_colaborador():
         if not (1 <= nivel <= 3):
             raise ValueError("Nível de acesso deve ser entre 1 e 3.")
 
+        # 3. NOVO: Regra de Negócio "TECBIN"
+        if nome_colaborador.upper() == 'TECBIN':
+            return redirect(url_for('cadastro_colaborador', error="Este colaborador (TECBIN) não pode ser alterado.", view='listar'))
+
         # 4. NOVAS VALIDAÇÕES (PIX e Senha)
         if chave_pix != confirma_chave_pix:
             raise ValueError("As chaves PIX não conferem.")
@@ -611,11 +611,10 @@ def gravar_colaborador():
             query_exist['id_colaborador'] = {'$ne': int(id_colaborador_edicao)} 
         
         if db.colaboradores.find_one({'$and': [query_exist, {'nick': nick}]}):
-             raise ValueError("Nick já está em uso.")
+             raise ValueError("Nick já está em uso, por outro colaborador.")
 
         if db.colaboradores.find_one({'$and': [query_exist, {'cpf': cpf_limpo}] }):
              raise ValueError("CPF já cadastrado para outro colaborador.")
-
 
         # 4. Montagem do Documento
         dados_colaborador = {
@@ -630,6 +629,7 @@ def gravar_colaborador():
         
         # Hash da Senha (Apenas se foi fornecida)
         if senha:
+            senha = format_title_case(request.form.get('senha'))
             hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt())
             dados_colaborador['senha'] = hashed_password.decode('utf-8')
         
@@ -1082,6 +1082,11 @@ def processar_venda():
 def cadastro_cliente():
     db = g.db
     db_status = g.db_status
+
+    # --- NOVO: Captura o nível da sessão ---
+    nivel_usuario = session.get('nivel', 1)
+    nome_logado = session.get('nick', 'Colaborador') 
+    id_logado = session.get('id_colaborador', 'N/A')
     
     # 1. Variáveis de Estado (Inicialização Garantida)
     active_view = request.args.get('view', 'novo')
@@ -1163,7 +1168,10 @@ def cadastro_cliente():
         'id_evento_retorno': id_evento_retorno,
         'error': error,
         'success': success,
-        'g': g
+        'g': g,
+        'nivel': nivel_usuario,
+        'id_logado': id_logado,  
+        'logado': nome_logado 
     }
     
     return render_template('cadastro_cliente.html', **context)
@@ -1197,8 +1205,8 @@ def gravar_cliente():
         cidade = format_title_case(request.form.get('cidade'))
         chave_pix = request.form.get('chave_pix', '').strip()
         confirma_chave_pix = request.form.get('confirma_chave_pix', '').strip()
-        senha = request.form.get('senha')
-        confirma_senha = request.form.get('confirma_senha')
+        senha = format_title_case(request.form.get('senha'))
+        confirma_senha = format_title_case(request.form.get('confirma_senha'))
 
         # 2. Validação Mínima
         if not nome_cliente or not nick or not cidade or not chave_pix:

@@ -233,6 +233,9 @@
                             <p><strong>Nick:</strong> <span class="font-semibold text-primary">{{ colaborador.nick }}</span></p>
                             <p><strong>CPF:</strong> {{ colaborador.cpf | default('N/A') }}</p>
                             <div class="mt-2 flex space-x-3">
+
+                             {% if colaborador.nome_colaborador != 'TecBin' %}
+
                                 <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                 
                                 <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
@@ -240,6 +243,8 @@
                                       onsubmit="return confirm('ATENÇÃO: Confirma a exclusão de {{ colaborador.nick }}? Esta ação é IRREVERSÍVEL.')">
                                     <button type="submit" class="action-link delete-link hover:text-red-600">Excluir</button>
                                 </form>
+
+                              {% endif %}
 
                             </div>
                         </div>
@@ -275,6 +280,9 @@
                                 <td class="py-3 px-4 border-b text-sm font-semibold">{{ colaborador.nivel }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ colaborador.telefone }}</td>
                                 <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
+
+                                  {% if colaborador.nome_colaborador != 'TecBin' %}
+
                                     <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                     
                                     <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
@@ -282,6 +290,9 @@
                                           onsubmit="return confirm('ATENÇÃO: Confirma a exclusão de {{ colaborador.nick }}? Esta ação é IRREVERSÍVEL.')">
                                         <button type="submit" class="action-link delete-link hover:text-red-600">Excluir</button>
                                     </form>
+
+                                  {% endif %}
+
                                 </td>
                             </tr>
                             {% endfor %}

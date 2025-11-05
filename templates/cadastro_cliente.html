@@ -175,7 +175,6 @@
             <input type="password" id="confirma_senha" name="confirma_senha" 
                    required class="form-control" placeholder="Repita a senha" autocomplete="new-password">
         </div>
-
                     
                 </div>
                 
@@ -213,9 +212,12 @@
                     <h4 class="font-bold mb-3">{{ clientes_lista | length }} Resultado(s) encontrado(s) para "{{ query }}"</h4>
                     {% for cliente in clientes_lista %}
                         <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0">
-                            <p><strong>ID:</strong> CLI{{ cliente.id_cliente }}</p>
-                            <p><strong>Nome:</strong> {{ cliente.nome_cliente }} ({{ cliente.nick }})</p>
-                            <p><strong>Telefone:</strong> {{ cliente.telefone | default('N/A') }}</p>
+                            <p>ID: <strong>CLI{{ cliente.id_cliente }}</strong></p>
+                            <p>Nome: <strong>{{ cliente.nome_cliente }} ({{ cliente.nick }})</strong> </p>
+                            {% if nivel >= 3 or id_logado == cliente.id_colaborador %} 
+                                <p>Telefone:<strong> {{ cliente.telefone | default('N/A') }}</strong></p>
+                            {% endif %}
+                            <p>Cidade: <strong> {{ cliente.cidade | default('N/A') }}</strong></p>
                             <div class="mt-2 flex space-x-3">
                                 <!-- CORREÇÃO DE LINK -->
                                 <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
@@ -253,6 +255,7 @@
                             <th class="py-2 px-4 border-b text-left">ID</th>
                             <th class="py-2 px-4 border-b text-left">Nome (Nick)</th>
                             <th class="py-2 px-4 border-b text-left">Telefone</th>
+                            <th class="py-2 px-4 border-b text-left">Cidade</th>
                             <th class="py-2 px-4 border-b text-left">Última Compra</th>
                             <th class="py-2 px-4 border-b text-left">Ações</th>
                         </tr>
@@ -263,7 +266,12 @@
                             <tr class="list-row hover:bg-gray-100 transition duration-150">
                                 <td class="py-3 px-4 border-b text-sm">CLI{{ cliente.id_cliente }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.nome_cliente }} ({{ cliente.nick }})</td>
-                                <td class="py-3 px-4 border-b text-sm">{{ cliente.telefone }}</td>
+                                {% if nivel >= 3 or id_logado == cliente.id_colaborador %}
+                                    <td class="py-3 px-4 border-b text-sm">{{ cliente.telefone }}</td>
+                                {% else %}
+                                    <td class="py-3 px-4 border-b text-sm"> . . .</td>
+                                {% endif %} 
+                                <td class="py-3 px-4 border-b text-sm">{{ cliente.cidade }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.data_ultimo_compra_formatada | default('N/A') }}</td>
                                 <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
                                     <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
