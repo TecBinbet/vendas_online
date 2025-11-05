@@ -50,7 +50,7 @@
     <div class="container">
         <!-- O título pode ser ajustado para indicar o modo de visualização, se desejar -->
         <h2 class="text-2xl mb-2 -mt-4 text-blue-800 text-center">
-            Status de Eventos
+            Status dos Eventos
         </h2>
 
         {% if error %}
@@ -58,7 +58,7 @@
         {% endif %}
 
         {% if eventos_status|length > 0 %}
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                 
                 {% for evento in eventos_status %}
                     <!-- Determina a cor de fundo do cartão -->
@@ -67,8 +67,7 @@
                     <div class="card {{ bg_color }}">
                         
                         <div class="flex justify-between items-start mb-2">
-                            <h3 class="text-xl font-bold text-gray-800 leading-tight">{{ evento.descricao }}</h3>
-                            
+                            <h3 class="text-xl font-semibold text-gray-800 leading-tight">{{ evento.descricao }}</h3>                         
                             <!-- Badge de Status -->
                             {% if evento.status == 'ativo' %}
                                 <span class="status-badge bg-primary text-white">ATIVO</span>
@@ -80,15 +79,15 @@
                         </div>
                         
                         <!-- Bloco de Informações Principais -->
-                        <div class="text-sm text-gray-600 mb-1 border-b pb-3 space-y-1">
+                        <div class="font-semibold text-sm text-gray-600 mb-0 border-b pb-2 space-y-1">
                             <p>ID: EVE{{ evento.id_evento }}</p>
-                            <p>🗓️ Data: **{{ evento.data_hora }}**</p>
-                            <p>💰 Unidade: <span class="font-medium text-gray-800">{{ evento.valor_venda_unit }}</span></p>
-                            <p>⏳ Início Vendas: <span class="font-medium text-gray-800">{{ evento.data_ativacao }}</span></p>
+                            <p>🗓️ Data: <span class="text-md font-bold text-gray-800">**{{ evento.data_hora }}**</span></p>
+                            <p>💰 Unidade: <span class="font-bold text-gray-800">{{ evento.valor_venda_unit }}</span></p>
+                            <p>⏳ Início Vendas: <span class=" font-bold text-gray-800">{{ evento.data_ativacao }}</span></p>
                         </div>
                         
                         <!-- Bloco de Vendas e Numeração -->
-                        <div class="space-y-2">                        
+                        <div class="space-y-1">                        
                             <!-- ESCONDE QUANTIDADE E VALOR NO MODO SIMPLES -->
                             {% if mode != 'simple' %}
                                 <p class="text-md font-semibold text-gray-700">Detalhes das Vendas:</p>
@@ -104,9 +103,9 @@
                                 </div>
                             {% endif %}
                             
-                            <div class="flex justify-between border-t border-dashed pt-1 mt-1">
+                            <div class="flex justify-between border-t border-dashed pt-1 mt-0">
                                 <span class="text-gray-600">Numeração Atual:</span>
-                                <span class="text-xl text-gray-800">{{ evento.numeracao_atual }} / {{ evento.limite_maximo }}</span>
+                                <span class="text-xl text-red-800 font-bold">{{ evento.numeracao_atual }} / {{ evento.limite_maximo }}</span>
                             </div>
                             
                         </div>

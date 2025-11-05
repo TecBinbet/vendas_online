@@ -294,6 +294,56 @@
     </div>
     
     <script>
+        function syncAndConfirm(event) {
+            const campoQuantidade = document.getElementById('quantidade');
+            const postQuantidade = document.getElementById('post_quantidade');
+            const elementoCustoTotal = document.getElementById('total-custo');
+            const btnCustoText = document.getElementById('btn-custo-text');
+            
+            // Pega o botão de confirmação que foi clicado
+            const confirmButton = event.target.closest('button[type="submit"]');
+
+            // 1. Sincroniza o campo hidden 'quantidade' com o valor atual do input
+            if (campoQuantidade && postQuantidade) {
+                postQuantidade.value = campoQuantidade.value;
+            }
+
+            // 2. Atualiza o texto do botão de confirmação para o valor ATUAL (visível na div)
+            if (elementoCustoTotal && btnCustoText) {
+                // Remove 'Custo Total: ' para obter apenas o valor formatado
+                const custoText = elementoCustoTotal.textContent.replace('Custo Total: ', '');
+                btnCustoText.textContent = custoText;
+            }
+            
+            // 3. Dispara a confirmação de segurança
+            const quantidadeAtual = campoQuantidade ? (parseInt(campoQuantidade.value) || 0) : 0;
+            const custoConfirm = elementoCustoTotal ? elementoCustoTotal.textContent.replace('Custo Total: ', '') : 'R$ 0,00';
+            
+            if (quantidadeAtual === 0) {
+                 alert("A quantidade de unidades deve ser maior que zero.");
+                 return false;
+            }
+
+            // A função confirm() padrão é usada
+            const isConfirmed = confirm(`ATENÇÃO: Confirma a venda de ${custoConfirm} (${quantidadeAtual} unidades)? Esta é uma transação CRÍTICA.`);
+
+            if (!isConfirmed) {
+                event.preventDefault(); // Evita o submit se não for confirmado
+                return false; 
+            }
+            
+            // 4. NOVO: Se confirmado, oculta e desabilita o botão imediatamente
+            if (confirmButton) {
+                confirmButton.disabled = true;
+                confirmButton.textContent = 'Processando Venda...';
+                confirmButton.style.opacity = '0.7';
+                confirmButton.style.cursor = 'not-allowed';
+            }
+            
+            return true; // Permite o submit do formulário
+        }
+
+
         // NOVO: Função para manipular a tecla Enter e mover o foco
         function handleEnterKey(event) {
             if (event.key === 'Enter') {

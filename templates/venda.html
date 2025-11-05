@@ -108,25 +108,25 @@
                    value="{% if selected_event %}{{ selected_event._id }}{% endif %}">
             
             <div class="form-group flex gap-1 items-center">
-                <div class="flex-grow">
-                    <label for="evento_display">1. Evento Selecionado:</label>
-                    <input type="text" id="evento_display" readonly class="text-[9px] font-bold form-control bg-gray-100"
+                <div >
+                    <label for="evento_display">1. Evento >>></label>
+                    <input type=""hidden text" id="evento_display" readonly class="text-[9px] font-bold form-control bg-gray-100"
                         value="{% if selected_event %}{{ selected_event.descricao }} {% else %}-- Selecione um Evento Ativo --{% endif %}"
                     >
                 </div>
                 <button type="button" onclick="openEventSelector()" 
                         class="btn btn-primary btn-small self-end mb-3 min-w-[120px]">
-                    Selecionar
+                    Selecionar o Evento
                 </button>
             </div>
 
             {% if selected_event %}
-                <div class="alert alert-info mt-0 mb-2" style="margin-top: 2px;">
+                <div class="alert alert-info mt-0 mb-1" style="margin-top: 1px;">
                     <h4 class="text-lg font-bold">{{ selected_event.descricao }}</h4>
                   
                     <p>Data: <strong>{{ selected_event.data_evento }}</strong> | Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
                     <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
-                    <p>Numeração Início: <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
+                    <p>Núm. Inícial: <strong>{{ selected_event.numero_inicial }}</strong> | Núm. Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
                 </div>
             {% endif %}
 
@@ -150,6 +150,16 @@
                     </div>
                 </div>
 
+                {% if cliente_encontrado %}
+                    <div class="alert alert-success mt-1">
+                        Nick: <strong>{{ cliente_encontrado.nick | default(cliente_encontrado.nome_cliente) }}</strong> (ID: <strong>CLI{{ id_cliente_final }}</strong>)
+                        <!-- Campo hidden necessário para o POST final -->
+                        <input type="hidden" name="id_cliente_final" value="{{ id_cliente_final }}">
+                    </div>
+                {% elif cliente_busca and not cliente_encontrado %}
+                    <div class="alert alert-warning mt-1 alert-info">Cliente '{{ cliente_busca }}' não encontrado.</div>
+                {% endif %}
+
                 <div class="form-group mt-1">
                     <label for="quantidade">3. Quantidade de Unidades:</label>
                     <input type="number" id="quantidade" name="quantidade" 
@@ -162,17 +172,7 @@
                         </span>.
                     </small>
                 </div>
-
-                {% if cliente_encontrado %}
-                    <div class="alert alert-success mt-1">
-                        Nick: <strong>{{ cliente_encontrado.nick | default(cliente_encontrado.nome_cliente) }}</strong> (ID: <strong>CLI{{ id_cliente_final }}</strong>)
-                        <!-- Campo hidden necessário para o POST final -->
-                        <input type="hidden" name="id_cliente_final" value="{{ id_cliente_final }}">
-                    </div>
-                {% elif cliente_busca and not cliente_encontrado %}
-                    <div class="alert alert-warning mt-1 alert-info">Cliente '{{ cliente_busca }}' não encontrado.</div>
-                {% endif %}
-                
+               
                 <div id="total-custo" class="mt-1">
                     Custo Total: R$ {{ "%.2f" | format(custo) }} 
                 </div>
@@ -204,9 +204,9 @@
     <!-- MODAL DE SELEÇÃO DE EVENTOS -->
     <div id="event-selector-modal" class="modal">
         <div class="modal-content w-full md:w-3/4 lg:w-1/2">
-            <h3 class="text-2xl font-bold mb-4 text-gray-800 border-b pb-2">Selecione o Evento Ativo</h3>
+            <h3 class="text-xl font-bold mb-1 text-gray-700 border-b pb-1">Selecione o Evento Ativo</h3>
 
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 max-h-96 overflow-y-auto pr-2">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-130 overflow-y-auto pr-2">
                 {% for evento in eventos %}
                     <div class="event-card shadow-md flex flex-col justify-between"
                         data-id="{{ evento._id }}"
@@ -218,8 +218,8 @@
                         onclick="selectEvent(this)">
 
                         <div>
-                            <p class="text-lg font-bold text-primary">{{ evento.descricao }} (EVE{{ evento.id_evento }})</p>
-                            <p class="text-sm text-gray-500">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
+                            <p class="text-md font-bold text-primary">{{ evento.descricao }} (EVE{{ evento.id_evento }})</p>
+                            <p class="text-md text-gray-500">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
                             
                             <div class="mt-2 text-md font-semibold">
                                 <p>💰 R$ {{ '%.2f' | format(evento.valor_de_venda_float) }} / Unidade</p>
@@ -251,8 +251,8 @@
         // Variáveis globais/Jinja
         let Venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}");
         let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
-        
-        /**
+
+       /**
          * Limpa e converte a string de valor monetário (ex: "10,00" ou "1.000,00") para float.
          * @param {string} valueString O valor como string.
          * @returns {number} O valor como float.
@@ -302,46 +302,6 @@
             }
         }
 
-        /**
-         * Sincroniza a quantidade do input com o campo hidden do POST e dispara a confirmação.
-         * @param {Event} event O evento de clique (útil para prevenir o submit imediato se o confirm falhar).
-         * @returns {boolean} Resultado da função confirm.
-         */
-        function syncAndConfirm(event) {
-            const campoQuantidade = document.getElementById('quantidade');
-            const postQuantidade = document.getElementById('post_quantidade');
-            const elementoCustoTotal = document.getElementById('total-custo');
-            const btnCustoText = document.getElementById('btn-custo-text');
-
-            // 1. Sincroniza o campo hidden 'quantidade' com o valor atual do input
-            if (campoQuantidade && postQuantidade) {
-                postQuantidade.value = campoQuantidade.value;
-            }
-
-            // 2. Atualiza o texto do botão de confirmação para o valor ATUAL (visível na div)
-            if (elementoCustoTotal && btnCustoText) {
-                // Remove 'Custo Total: ' para obter apenas o valor formatado
-                const custoText = elementoCustoTotal.textContent.replace('Custo Total: ', '');
-                btnCustoText.textContent = custoText;
-            }
-            
-            // 3. Dispara a confirmação de segurança
-            const quantidadeAtual = campoQuantidade ? (parseInt(campoQuantidade.value) || 0) : 0;
-            const custoConfirm = elementoCustoTotal ? elementoCustoTotal.textContent.replace('Custo Total: ', '') : 'R$ 0,00';
-            
-            if (quantidadeAtual === 0) {
-                 alert("A quantidade de unidades deve ser maior que zero.");
-                 return false;
-            }
-
-            // A função confirm() padrão é usada
-            const isConfirmed = confirm(`ATENÇÃO: Confirma a venda de ${custoConfirm} (${quantidadeAtual} unidades)? Esta é uma transação CRÍTICA.`);
-
-            if (!isConfirmed) {
-                event.preventDefault(); // Evita o submit se não for confirmado
-            }
-            return isConfirmed; 
-        }
 
         // --- Modal Functions ---
         
@@ -452,7 +412,7 @@
             updateCartelasDisplay();
         });
 
-        function confirm(message) {
+        function ShowConfirm(message) {
             if (window.confirm) {
                 return window.confirm(message);
             } else {

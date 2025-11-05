@@ -796,8 +796,6 @@ def nova_venda():
         
     # 4. Busca de Cliente
     
-    print(f"DEBUG BUSCA: Termo recebido = '{id_cliente_busca}'")
-    
     if selected_event and id_cliente_busca and g.db_status:
         search_term_clean = id_cliente_busca # Já está limpo por .strip()
         
@@ -811,7 +809,6 @@ def nova_venda():
         if search_term_clean_id.isdigit():
             cliente_id_int = int(search_term_clean_id)
             cliente = db.clientes.find_one({'id_cliente': cliente_id_int})
-            print(f"DEBUG BUSCA: Tentativa por ID INT {cliente_id_int}. Encontrado: {'Sim' if cliente else 'Nao'}")
             
         # 4b. Se não encontrou por ID, tenta buscar por Nome/Nick (usando o termo original não processado)
         if not cliente and search_term_clean:
@@ -824,7 +821,6 @@ def nova_venda():
                 ]
             }
             cliente = db.clientes.find_one(query_filter)
-            print(f"DEBUG BUSCA: Tentativa por Nome/Nick '{search_term_clean}'. Encontrado: {'Sim' if cliente else 'Nao'}")
 
         if cliente:
             cliente_encontrado = cliente
@@ -850,7 +846,6 @@ def nova_venda():
                            cliente_encontrado=cliente_encontrado,
                            quantidade=quantidade,
                            custo=custo)
-
 
 
 @app.route('/processar_venda', methods=['POST'])
@@ -1079,6 +1074,7 @@ def processar_venda():
             
         finally:
             venda_lock.release()
+
 
 # --- ROTAS DE CADASTRO DE CLIENTE ---
 @app.route('/cadastro_cliente', methods=['GET'])

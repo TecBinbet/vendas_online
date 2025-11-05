@@ -5,12 +5,19 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Vendas de Cartelas - Login</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"> 
+
 </head>
 <body>
     <div class="container">
         <h2>🔒 Login</h2>
-        <div id="message-container"></div> 
-        
+        <div id="message-container" class="text-xl text-red-500"></div> 
+         <!-- NOVO: Lógica Jinja para exibir erros do Flask -->
+        {% if error %}
+            <div class="text-xl text-red-500">{{ error }}</div>
+        {% endif %}
+        {% if db_error %}
+            <div class="text-xl text-red-500">{{ db_error }}</div>
+        {% endif %}       
 <form method="POST" action="{{ url_for('login') }}" id="login-form"> 
     
     <label for="nome">Nome/Nick:</label>
