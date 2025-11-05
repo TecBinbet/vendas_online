@@ -4,11 +4,17 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dashboard do Cliente</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Pacifico&display=swap" rel="stylesheet">
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
         tailwind.config = {
             theme: {
                 extend: {
+                    fontFamily: {
+                        'slogan': ['Pacifico', 'cursive']
+                    },
                     colors: {
                         'primary': '#059669',
                         'secondary': '#10B981',
@@ -50,16 +56,18 @@
 </head>
 <body>
     <div class="container">
-        <h2 class="text-2xl mb-2 text-blue-800 text-center">Olá, {{ nick_cliente }}!</h2>
-        <p class="text-center text-gray-600 mb-4">Bem-vindo à sua área de cliente.</p>
-
+        <h2 class="text-2xl mb-1 text-blue-800 text-center">Olá, {{ nick_cliente }}!</h2>
+        <p class="text-center text-gray-600 mb-1">Bem-vindo à area de cliente VIP.</p>
+        <p class="text-xl text-center text-green-600 mb-3 font-slogan">
+               "Onde sua diversão vira nossa maior aposta!"
+        </p>
         <div class="menu-options">
             <!-- Links futuros para o cliente -->
             <a href="#" class="menu-item">🛒 Minhas Compras</a>
             <a href="#" class="menu-item">🏆 Meus Prêmios</a>
             <a href="#" class="menu-item">⚙️ Minha Conta</a>
             
-            <hr class="my-4">
+            <hr class="my-3">
             
             <a href="{{ url_for('login_page') }}" class="menu-item menu-item-exit">🚪 Sair</a>
         </div>

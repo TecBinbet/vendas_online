@@ -132,7 +132,7 @@
 
             {% if selected_event %}
                 <div class="form-group">
-                    <label for="id_cliente_busca">2. ID ou Nome do Cliente (Busca):</label>
+                    <label for="id_cliente_busca">2. Nome do Cliente ou ID ( Buscar ):</label>
                     <div class="client-search-group font-bold">
                         <!-- CAMPO DE BUSCA DE CLIENTE -->
                         <input type="text" id="id_cliente_busca" name="id_cliente_busca" 
@@ -188,10 +188,11 @@
                 <input type="hidden" name="id_evento" id="post_id_evento" value="{{ selected_event._id }}">
                 <input type="hidden" name="quantidade" id="post_quantidade" value="{{ quantidade }}">
                 
-                <button type="submit" class="btn btn-primary btn-lg shadow-xl hover:shadow-2xl transition duration-300" 
-                        onclick="return syncAndConfirm(event)">
+                <button type="submit" id="btn-confirmar-venda" class="btn btn-primary btn-lg shadow-xl hover:shadow-2xl transition duration-300" 
+                     onclick="return syncAndConfirm(event)">
                     ✅ Confirmar e Gravar Venda (<span id="btn-custo-text">R$ {{ "%.2f" | format(custo) }}</span>)
                 </button>
+
             </form>
         {% endif %}
 
@@ -272,9 +273,16 @@
         /**
          * Calcula e exibe o custo total da venda.
          */
-        function updateTotalCost() {
+         function updateTotalCost() {
             const campoQuantidade = document.getElementById('quantidade');
             const elementoCustoTotal = document.getElementById('total-custo');
+            
+            // --- NOVOS ELEMENTOS ---
+            // 1. O span de texto dentro do botão de confirmação
+            const spanBotaoCusto = document.getElementById('btn-custo-text');
+            // 2. O input oculto que envia a quantidade para o backend
+            const inputPostQuantidade = document.getElementById('post_quantidade');
+            // ---------------------
 
             if (campoQuantidade && elementoCustoTotal) {
                 const quantidade = parseInt(campoQuantidade.value) || 0;
@@ -285,7 +293,22 @@
                     currency: 'BRL' 
                 });
                 
+                // Atualiza o display principal
                 elementoCustoTotal.textContent = `Custo Total: ${totalFormatado}`;
+
+                // --- ATUALIZAÇÕES ADICIONAIS ---
+                
+                // 3. Atualiza o texto do botão de confirmação (se ele existir na tela)
+                if (spanBotaoCusto) {
+                    spanBotaoCusto.textContent = totalFormatado;
+                }
+                
+                // 4. Atualiza o valor do input oculto (se ele existir na tela)
+                // ESTA É A CORREÇÃO CRÍTICA
+                if (inputPostQuantidade) {
+                    inputPostQuantidade.value = quantidade;
+                }
+                // -----------------------------
             }
         }
         
@@ -395,6 +418,81 @@
                 alert("Erro ao gerar imagem do comprovante. Tente novamente.");
             });
         }
+
+        /**
+         * CORRIGIDO: Confirma a venda, desabilita o botão e SUBMETE O FORM MANUALMENTE
+         * para prevenir cliques duplos e garantir o envio.
+         */
+        function syncAndConfirm(event) {
+            
+            // 1. Impede o envio padrão do formulário IMEDIATAMENTE.
+            event.preventDefault(); 
+            
+            // 2. Pede a confirmação do usuário
+            const confirmou = window.confirm("Você tem certeza que deseja gravar esta venda?");
+            
+            if (!confirmou) {
+                // Se o usuário clicou "Cancelar", não fazemos NADA.
+                // O envio já foi prevenido.
+                return false;
+            }
+
+            // 3. Se o usuário clicou "OK", desabilita o botão
+            // Usamos o 'id' que adicionamos no HTML
+            const button = document.getElementById('btn-confirmar-venda');
+            
+            // Verifica se já não foi clicado (segurança extra)
+            if (button.disabled) {
+                return false; // Já está sendo processado
+            }
+
+            // 4. Desabilita e muda o visual imediatamente
+            button.disabled = true;
+            button.style.cursor = 'wait';
+            button.classList.add('opacity-50'); // Adiciona opacidade (Tailwind)
+            button.innerHTML = '⏳ Processando... Por favor, aguarde.';
+
+            // 5. Encontra o formulário e envia manualmente
+            // (O botão está dentro do form: <form ... id="confirm-form">)
+            const form = document.getElementById('confirm-form');
+            
+            if (form) {
+                form.submit(); // ESTA É A CORREÇÃO: Envia o formulário para o backend
+            } else {
+                // Fallback de erro (se o ID do form estiver errado)
+                alert("Erro crítico: Não foi possível encontrar o formulário 'confirm-form'. A venda não foi enviada.");
+                button.disabled = false; // Reabilita para tentar de novo
+                button.innerHTML = '❌ Erro! Tente Novamente';
+            }
+
+            // Como usamos preventDefault, o 'return' não importa mais.
+            return false;
+        }
+        /**
+         * NOVO: Listener para o "Page Show" (Cache de Voltar)
+         * Se o usuário enviar a venda e depois clicar em "Voltar" no navegador,
+         * o navegador pode mostrar a página antiga (do cache) com o botão
+         * ainda desabilitado. Este código re-habilita o botão.
+         */
+        window.addEventListener('pageshow', (event) => {
+            const button = document.getElementById('btn-confirmar-venda');
+            
+            // Se a página foi carregada do cache (persisted) e o botão existe
+            if (event.persisted && button && button.disabled) {
+                
+                // 1. Re-habilita o botão
+                button.disabled = false;
+                button.style.cursor = 'pointer';
+                button.classList.remove('opacity-50');
+                
+                // 2. Restaura o texto original
+                // (Precisamos ler o custo atual do span)
+                const spanCusto = document.getElementById('btn-custo-text');
+                const custoText = spanCusto ? spanCusto.textContent : 'R$ 0,00';
+                
+                button.innerHTML = `✅ Confirmar e Gravar Venda (<span id="btn-custo-text">${custoText}</span>)`;
+            }
+        });
 
         document.addEventListener('DOMContentLoaded', () => {
             // Inicializa as variáveis globais com valores do Jinja na carga da página

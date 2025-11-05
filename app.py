@@ -348,6 +348,26 @@ def login():
           
     return redirect(url_for('login_page', error="Usuário ou senha inválidos."))
 
+# app.py
+
+# ... (outras rotas, como @app.route('/menu')) ...
+
+@app.route('/dashboard_cliente')
+@login_required
+def dashboard_cliente():
+    """Exibe o dashboard (menu) para o cliente logado."""
+    
+    # Verificação de segurança: Garante que é um cliente (Nível 0)
+    if session.get('nivel', 1) != 0:
+        session.clear() # Limpa a sessão se um colaborador tentar acessar
+        return redirect(url_for('login_page', error="Tipo de acesso inválido."))
+
+    # Pega o nick da sessão (definido na função login)
+    nick_cliente = session.get('nick', 'Cliente')
+    
+    # Renderiza o template HTML que você já criou
+    return render_template('dashboard_cliente.html', nick_cliente=nick_cliente, g=g)
+
 
 @app.route('/')
 def login_page():
@@ -848,15 +868,27 @@ def nova_venda():
                            custo=custo)
 
 
+# app.py
+
+# ... (todas as outras rotas e imports) ...
+
 @app.route('/processar_venda', methods=['POST'])
 @login_required
 def processar_venda():
     """Processo Crítico de Venda - Aplica atomicidade e grava no MongoDB."""
 
+    # --- 1. LEITURA E VALIDAÇÃO INICIAL ---
+    
+    # CRÍTICO PARA LOGS: Coleta os dados crus PRIMEIRO para o prefixo
+    id_evento_string = request.form.get('id_evento') 
+    id_cliente_final_str = request.form.get('id_cliente_final') 
+    quantidade_str = request.form.get('quantidade', '0')
+
+    # --- NOVO: Prefixo de Log para esta requisição ---
+    # Isso nos permite rastrear UMA venda específica no meio de muitas.
+    log_prefix = f"[VENDA REQ_COLAB:{session.get('nick', 'N/A')}_CLI:{id_cliente_final_str}_QTD:{quantidade_str}]"
+    
     if not g.db_status:
-        # Tenta pegar os IDs para devolver no redirecionamento de erro
-        id_evento_string = request.form.get('id_evento')
-        id_cliente_final_str = request.form.get('id_cliente_final')
         error_redirect_kwargs = {
             'id_evento': id_evento_string,
             'id_cliente_busca': f"CLI{id_cliente_final_str}" if id_cliente_final_str else '',
@@ -866,61 +898,43 @@ def processar_venda():
 
     db = g.db
     
-    # 1. Leitura de Variáveis do Formulário
-    id_evento_string = request.form.get('id_evento') 
-    id_cliente_final_str = request.form.get('id_cliente_final') 
-    
     try:
-        # CRÍTICO CLIENTE: Converte ID do cliente (que é INT)
         id_cliente_final = int(id_cliente_final_str)
-    except (TypeError, ValueError):
+        quantidade = int(quantidade_str)
+        if quantidade <= 0: raise ValueError("Quantidade deve ser positiva")
+    except (TypeError, ValueError) as e:
+        print(f"{log_prefix} LOG X (FALHA): Erro de tipo nos dados. Cliente='{id_cliente_final_str}', Qtd='{quantidade_str}'. Erro: {e}")
         error_redirect_kwargs = {
             'id_evento': id_evento_string, 
-            'error': "ID de Cliente inválido ou ausente."
+            'error': f"Dados inválidos: {e}",
+            'id_cliente_busca': f"CLI{id_cliente_final_str}" if id_cliente_final_str else ''
         }
         return redirect(url_for('nova_venda', **error_redirect_kwargs))
 
-    # Tentativa de conversão do ID do evento para uso no Mongo (para buscar o Evento pelo _id)
     id_evento_mongo = try_object_id(id_evento_string)
-
-    try:
-        quantidade = int(request.form.get('quantidade'))
-        if quantidade <= 0: raise ValueError
-    except:
-        error_redirect_kwargs = {
-            'id_evento': id_evento_string,
-            'id_cliente_busca': f"CLI{id_cliente_final_str}",
-            'error': "Quantidade inválida."
-        }
-        return redirect(url_for('nova_venda', **error_redirect_kwargs))
-    
-    # Validação de IDs
     if not id_evento_mongo:
-        return redirect(url_for('nova_venda', error="Dados inválidos: Evento não selecionado/enviado no formulário."))
+        print(f"{log_prefix} LOG X (FALHA): ID de Evento Mongo inválido.")
+        return redirect(url_for('nova_venda', error="Dados inválidos: Evento não selecionado."))
     
-    # 2. Busca Evento e Cliente (para dados e validação)
+    # 2. Busca Evento e Cliente
     selected_event = db.eventos.find_one({'_id': id_evento_mongo})
     cliente_doc = db.clientes.find_one({"id_cliente": id_cliente_final})
     
-    if not selected_event:
-        return redirect(url_for('nova_venda', error="Evento inválido ou não encontrado no DB."))
-    if not cliente_doc:
-         error_redirect_kwargs = {
+    if not selected_event or not cliente_doc:
+        print(f"{log_prefix} LOG X (FALHA): Evento ou Cliente não encontrado.")
+        error_redirect_kwargs = {
             'id_evento': id_evento_string,
-            'error': "Cliente não encontrado no sistema.",
+            'error': "Evento ou Cliente não encontrado no sistema.",
             'id_cliente_busca': f"CLI{id_cliente_final_str}"
         }
-         return redirect(url_for('nova_venda', **error_redirect_kwargs))
+        return redirect(url_for('nova_venda', **error_redirect_kwargs))
         
     # Extração de Dados Críticos
     id_evento_int_para_controle = selected_event.get('id_evento') 
     limite_maximo_cartelas = int(selected_event.get('numero_maximo', 72000))
     if not isinstance(id_evento_int_para_controle, int):
-        error_redirect_kwargs = {
-            'id_evento': id_evento_string,
-            'id_cliente_busca': f"CLI{id_cliente_final_str}",
-            'error': "Erro: ID sequencial do evento (int) não encontrado no documento do evento."
-        }
+        print(f"{log_prefix} LOG X (FALHA): ID sequencial (int) do evento não encontrado.")
+        error_redirect_kwargs = { 'error': "Erro: ID sequencial do evento (int) não encontrado." }
         return redirect(url_for('nova_venda', **error_redirect_kwargs))
 
     valor_unitario = safe_float(selected_event.get('valor_de_venda', 0.00))
@@ -929,49 +943,40 @@ def processar_venda():
     # Cálculo da Venda
     valor_total = valor_unitario * quantidade
     quantidade_cartelas = quantidade * unidade_de_venda
-
-    # Colaborador (e nick para o comprovante)
     colaborador_id = session.get('id_colaborador', 'N/A')
     nick_colaborador = session.get('nick', 'Colaborador') 
 
-    # --- 3. ETAPA CRÍTICA: Geração de IDs e Números de Bilhetes (Atomicidade) ---
+    # --- 3. ETAPA CRÍTICA: LOCK E TRANSAÇÃO ---
     id_evento_para_controle = id_evento_int_para_controle 
-    
-    if venda_lock.acquire(timeout=5): 
+        
+    if venda_lock.acquire(timeout=8): 
         try:
-            # 3a. Geração Atômica do ID da Venda (Contador global: 'id_vendas_global')
             novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
             if novo_id_venda_int is None:
                 raise Exception("Falha ao gerar o ID sequencial da venda.")
-                
             id_venda_formatado = f"V{novo_id_venda_int:05d}"
 
-            # 3b. Geração Atômica dos Números de Bilhetes/Cartelas
             numero_inicial_evento = int(selected_event.get('numero_inicial', 1))
-
             numero_inicial = get_next_bilhete_sequence(db, 
                                                        id_evento_para_controle, 
                                                        'inicial_proxima_venda', 
                                                        quantidade_cartelas,
                                                        limite_maximo_cartelas)
-            
             if numero_inicial is None:
                 raise Exception("Falha ao obter o número inicial do bilhete/cartela.")
 
-            # Se a sequência de controle for igual ao valor inicial padrão, ajusta para o numero_inicial do evento.
             if numero_inicial == 1: 
                 numero_inicial = numero_inicial_evento
-                
-                # Corrigir o contador para o próximo valor, se a primeira venda usar o numero_inicial do evento
                 db.controle_venda.update_one(
                     {'id_evento': id_evento_para_controle},
                     {'$set': {'inicial_proxima_venda': numero_inicial + quantidade_cartelas}}
                 )
 
             numero_final = numero_inicial + quantidade_cartelas - 1
+            # ... (cálculo de rollover, numero_inicial2, numero_final2, etc.) ...
             numero_final2 = 0
             numero_inicial2 = 0  
-            
+            periodo_adicional = "<br>"
             if numero_final > limite_maximo_cartelas:
                 numero_inicial2 = 1
                 numero_final2 = numero_final - limite_maximo_cartelas
@@ -979,17 +984,16 @@ def processar_venda():
                 periodo_adicional = (
                         f"    <span style='font-size: 1.4rem; color: #0047AB;'><strong>{numero_inicial2} a {numero_final2}</strong></span><br>"
                     )
-            else:
-                periodo_adicional = (
-                        f"<br>"
-                    )                              
+            print(f"{log_prefix} ... IDs Bilhete gerados: {numero_inicial} a {numero_final} (e {numero_inicial2} a {numero_final2})")
+
             # 4. Gravação Final do Registro de Venda
             registro_venda = {
+                # ... (seus campos de registro) ...
                 "id_venda": id_venda_formatado,
                 "id_evento_ObjectId": id_evento_mongo, 
                 "id_evento": id_evento_para_controle, 
                 "descricao_evento": selected_event.get('descricao'),
-                "id_cliente": id_cliente_final, # ID Sequencial do Cliente (INT)
+                "id_cliente": id_cliente_final, 
                 "nome_cliente": cliente_doc.get('nome_cliente'),
                 "id_colaborador": colaborador_id,
                 "nick_colaborador": nick_colaborador,
@@ -1004,31 +1008,23 @@ def processar_venda():
                 "valor_total": Decimal128(str(valor_total))
             }
             
-            # 5. Atualiza data da última compra do cliente (opcional, pode ser async)
+            # 5. Atualiza data da última compra do cliente
             db.clientes.update_one(
                 {"id_cliente": id_cliente_final}, 
                 {"$set": {"data_ultimo_compra": datetime.utcnow()}}
             )
-
-            # 6. Inserção no Banco de Dados (Coleção 'vendas' = id_evento)
+            # 6. Inserção no Banco de Dados
             nome_colecao_venda = f"vendas{str(id_evento_para_controle).strip()}"
             db[nome_colecao_venda].insert_one(registro_venda)
             
             # 7. Pós-Venda (Comprovante)
+            # ... (código para montar o success_msg) ...
             data_evento_str = selected_event.get('data_evento', 'N/A')
             hora_evento_str = selected_event.get('hora_evento', 'N/A')
             http_apk = g.parametros_globais.get('http_apk', '')
-            
-            data_evento_formatada = data_evento_str
-            if data_evento_str:
-                 try:
-                      # Se estiver DD/MM/YYYY, apenas garante o separador '-'
-                      data_evento_formatada = data_evento_str.replace('/', '-')
-                 except Exception:
-                      pass
-            
+            data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
             nome_sala  = g.parametros_globais.get('nome_sala', '')
-             
+            
             success_msg = (
                 f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
                 f"  <span style='font-size: 1.2rem; color: #B91C1C;'>{nome_sala}</span><br>"
@@ -1049,21 +1045,18 @@ def processar_venda():
                 f"<strong> {http_apk} <strong>"
             )
             
-            # NOVO: Salva a mensagem de sucesso na sessão
+            print(f"{log_prefix} LOG 4: Gravação concluída. Preparando redirect de SUCESSO.")
+            
             session['success_message'] = success_msg 
-
-            # Argumentos para redirecionamento: mantém o evento e RESETA o cliente/quantidade
             redirect_kwargs = {
                 'id_evento': id_evento_string,
-                'quantidade': 1 # Reseta a quantidade para 1
-                # id_cliente_busca É INTENCIONALMENTE REMOVIDO para limpar o campo de busca
+                'quantidade': 1 
             }
-
-            # Retorna para a página de venda
             return redirect(url_for('nova_venda', **redirect_kwargs))
 
         except Exception as e:
-            print(f"Erro Crítico durante a venda no DB: {e}")
+            # --- LOG DE ERRO ---
+            print(f"{log_prefix} LOG 5 (ERRO INTERNO): Erro crítico durante a transação: {e}")
             error_redirect_kwargs = {
                 'id_evento': id_evento_string,
                 'error': f"Erro interno no DB: Falha ao gravar a transação.",
@@ -1074,6 +1067,18 @@ def processar_venda():
             
         finally:
             venda_lock.release()
+            
+    else:
+        # --- LOG DE TIMEOUT ---
+        print(f"{log_prefix} LOG 6 (TIMEOUT): 'venda_lock' não adquirido após 8s. (Sistema ocupado)")
+        
+        error_redirect_kwargs = {
+            'id_evento': id_evento_string,
+            'error': "Sistema muito ocupado. Por favor, tente novamente em alguns segundos.",
+            'id_cliente_busca': f"CLI{id_cliente_final_str}",
+            'quantidade': quantidade
+        }
+        return redirect(url_for('nova_venda', **error_redirect_kwargs))
 
 
 # --- ROTAS DE CADASTRO DE CLIENTE ---
