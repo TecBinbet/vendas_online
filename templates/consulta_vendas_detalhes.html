@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Detalhes da Venda</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #F7F7F7; }
+        .table-wrapper { overflow-x: auto; background-color: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #E5E7EB; }
+        th { background-color: #F9FAFB; font-weight: 600; color: #374151; }
+        tr:last-child td { border-bottom: none; }
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        <h2 class="text-2xl font-bold mb-2 text-gray-900">Vendas Detalhadas</h2>
+        <p class="text-lg text-gray-700 mb-4">
+            <strong>Evento:</strong> {{ info_evento | default('N/A') }} | 
+            <strong>Colaborador:</strong> {{ info_colaborador | default('N/A') }}
+        </p>
+
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+
+        <div class="table-wrapper">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID Venda</th>
+                        <th>Data</th>
+                        <th>Cliente</th>
+                        <th>Kits</th>
+                        <th>Cartelas</th>
+                        <th>Números</th>
+                        <th>Valor (R$)</th>
+                        {% if info_colaborador == 'TODOS' %}
+                            <th>Colaborador</th>
+                        {% endif %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for venda in vendas %}
+                        <tr class="hover:bg-gray-50">
+                            <td class="font-mono font-bold">{{ venda.id_venda }}</td>
+                            <td class="text-sm">{{ venda.data_venda.strftime('%d/%m/%y %H:%M') }}</td>
+                            <td class="font-medium">{{ venda.nome_cliente }} ({{venda.id_cliente}})</td>
+                            <td class="font-bold">{{ venda.quantidade_unidades }}</td>
+                            <td>{{ venda.quantidade_cartelas }}</td>
+                            <td class="text-sm font-mono">
+                                {{ venda.numero_inicial }} a {{ venda.numero_final }}
+                                {% if venda.numero_inicial2 > 0 %}
+                                    <br> {{ venda.numero_inicial2 }} a {{ venda.numero_final2 }}
+                                {% endif %}
+                            </td>
+                            <td class="font-bold text-green-600">{{ "%.2f" | format(venda.valor_total_float) }}</td>
+                            {% if info_colaborador == 'TODOS' %}
+                                <td class="text-sm">{{ venda.nick_colaborador }}</td>
+                            {% endif %}
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        
+        <div class="mt-8">
+            <a href="javascript:history.back()" class="text-primary hover:text-secondary font-medium">← Voltar para o Resumo</a>
+        </div>
+    </div>
+
+</body>
+</html>

@@ -2,7 +2,7 @@
 
 import threading
 import pymongo
-from flask import Flask, render_template, request, redirect, url_for, session, g
+from flask import Flask, Response, render_template, request, redirect, url_for, session, g
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 from bson.objectid import ObjectId
@@ -12,6 +12,7 @@ from urllib.parse import quote_plus
 import os
 import re # Para a busca de clientes
 import bcrypt
+import io
 from functools import wraps # Para o decorator login_required
 from datetime import timedelta
 import certifi  # Para certificados SSL
@@ -269,7 +270,18 @@ def get_db():
 def before_request():
     """Garante que g.db e g.db_status sejam definidos no início de cada rota e carrega parâmetros."""
     get_db()
-    
+
+# Define o layout padrão (completo, substitui a ideia do "all")
+    default_config_cadastro = {
+        "nome_cliente": True,
+        "nick": True,
+        "telefone": True,
+        "cpf": False,
+        "cidade": True,
+        "chave_pix": True,
+        "senha": True
+    }    
+
     # Carregamento de Parâmetros Globais (se o DB estiver ativo)
     if g.db_status and not g.parametros_globais:
         try:
@@ -282,6 +294,7 @@ def before_request():
                     'nome_sala': params_doc.get('nome_sala', 'LIVE THE BET').strip(),
                     'http_apk': params_doc.get('http_apk', 'http://localhost:5000'),
                     'id_sala': params_doc.get('id_sala', 'SALA001'),
+                    'tipo_cadastro_cliente': params_doc.get('tipo_cadastro_cliente', default_config_cadastro),
                 }
         except Exception as e:
             print(f"🚨 ERRO ao carregar Parâmetros Globais: {e}")
@@ -483,8 +496,9 @@ def consulta_status_eventos():
     return render_template('consulta_status_eventos.html', eventos_status=eventos_status, g=g, mode=view_mode)
 
 
-# --- Rotas de Colaborador ---
+# app.py
 
+# --- Rotas de Colaborador ---
 @app.route('/cadastro_colaborador', methods=['GET'])
 @login_required
 def cadastro_colaborador():
@@ -495,10 +509,14 @@ def cadastro_colaborador():
         
     db_status = g.db_status
     
+    # --- INÍCIO DA CORREÇÃO (Lógica de Erro) ---
+    # 1. Tenta pegar dados de um erro anterior.
+    form_data_erro = session.pop('form_data', None)
+    # --- FIM DA CORREÇÃO ---
+    
     active_view = request.args.get('view', 'novo')
     search_term = request.args.get('query', '').strip()
     
-    # NOVO: Captura o ID do colaborador para edição
     id_colaborador_edicao = request.args.get('id_colaborador', None) 
     
     colaborador_edicao = None 
@@ -508,26 +526,45 @@ def cadastro_colaborador():
     error = request.args.get('error')
     success = request.args.get('success')
 
+    # --- INÍCIO DA CORREÇÃO (Lógica de Preenchimento) ---
+    if form_data_erro:
+        # 2. Se 'form_data_erro' existe, um erro acabou de ocorrer.
+        #    Usamos esses dados para preencher o formulário.
+        colaborador_edicao = form_data_erro
+        
+        # Garante que a view ('novo' or 'alterar') esteja correta
+        if 'id_colaborador_edicao' in form_data_erro and form_data_erro['id_colaborador_edicao']:
+             active_view = 'alterar'
+             # Passa o ID de volta para o 'context'
+             id_colaborador_edicao = form_data_erro['id_colaborador_edicao']
+        else:
+             active_view = 'novo'
+
+    elif active_view == 'alterar' and id_colaborador_edicao and db_status:
+         # 3. Se NÃO há 'form_data_erro', é um carregamento normal.
+         #    Buscamos no DB como na sua lógica original.
+        try:
+            id_colaborador_int = int(id_colaborador_edicao)
+            colaborador_edicao = db.colaboradores.find_one({'id_colaborador': id_colaborador_int})
+            
+            if colaborador_edicao:
+                if '_id' in colaborador_edicao: colaborador_edicao['_id'] = str(colaborador_edicao['_id'])
+                if 'senha' in colaborador_edicao: del colaborador_edicao['senha'] # Remove a hash
+            else:
+                 error = f"Colaborador ID {id_colaborador_int} não encontrado para edição."
+                 active_view = 'listar' # Volta para a lista se não encontrar
+                 
+        except (ValueError, TypeError):
+            error = "ID de Colaborador inválido para edição."
+            active_view = 'listar'
+            
+    # --- FIM DA CORREÇÃO ---
+
     if db_status:
         try:
             total_colaboradores = db.colaboradores.count_documents({})
             
-            # LÓGICA DE BUSCA DO COLABORADOR PARA EDIÇÃO
-            if active_view == 'alterar' and id_colaborador_edicao:
-                 try:
-                     id_colaborador_int = int(id_colaborador_edicao)
-                     colaborador_edicao = db.colaboradores.find_one({'id_colaborador': id_colaborador_int})
-                     
-                     if colaborador_edicao:
-                         if '_id' in colaborador_edicao: colaborador_edicao['_id'] = str(colaborador_edicao['_id'])
-                         if 'senha' in colaborador_edicao: del colaborador_edicao['senha'] # Remove a hash
-                     else:
-                          error = f"Colaborador ID {id_colaborador_int} não encontrado para edição."
-                          active_view = 'listar' # Volta para a lista se não encontrar
-                          
-                 except (ValueError, TypeError):
-                     error = "ID de Colaborador inválido para edição."
-                     active_view = 'listar'
+            # A lógica de 'alterar' já foi movida para cima
 
             # 2. Lógica de Consulta/Listagem
             if active_view == 'listar':
@@ -566,7 +603,7 @@ def cadastro_colaborador():
         'colaboradores_lista': colaboradores_lista,
         'active_view': active_view,
         'query': search_term, 
-        'colaborador_edicao': colaborador_edicao, 
+        'colaborador_edicao': colaborador_edicao, # <-- Esta variável agora contém os dados do erro ou do DB
         'error': error,
         'success': success,
         'g': g
@@ -583,10 +620,11 @@ def gravar_colaborador():
     if session.get('nivel', 0) < 3:
         return redirect(url_for('menu_operacoes', error="Acesso Negado. Nível 3 Requerido para Gravação."))
 
-    # Verifica se é uma inserção (Novo) ou uma atualização (Alterar)
     id_colaborador_edicao = request.form.get('id_colaborador_edicao') 
 
     try:
+        # (O seu código 'try' original de coleta e validação permanece idêntico)
+        
         # 1. Coleta e Limpeza de Dados
         nome_colaborador = format_title_case(request.form.get('nome_colaborador'))
         nick = format_title_case(request.form.get('nick'))
@@ -613,11 +651,9 @@ def gravar_colaborador():
         
         # VALIDAÇÃO CRÍTICA DE SENHA
         if not id_colaborador_edicao:
-            # Se for novo cadastro, ambas são obrigatórias e devem ser iguais
             if not senha or senha != confirma_senha:
                 raise ValueError("Senha e Confirmação de Senha não conferem ou estão vazias.")
         elif senha and senha != confirma_senha:
-            # Se for alteração e a senha foi digitada, ela deve conferir
             raise ValueError("Senha e Confirmação de Senha não conferem.")
             
         # VALIDAÇÃO CRÍTICA DO CPF (AGORA OBRIGATÓRIO)
@@ -644,7 +680,7 @@ def gravar_colaborador():
             "cidade": cidade,
             "chave_pix": chave_pix,
             "nivel": nivel,
-            "cpf": cpf_limpo # Garante que o CPF limpo seja salvo
+            "cpf": cpf_limpo 
         }
         
         # Hash da Senha (Apenas se foi fornecida)
@@ -655,14 +691,11 @@ def gravar_colaborador():
         
         # 5. Lógica de Inserção/Atualização
         if id_colaborador_edicao:
-            # --- Modo ATUALIZAÇÃO (UPDATE) ---
             id_colaborador_int = int(id_colaborador_edicao)
             
-            # Não permite que um admin altere seu próprio nível se for o único admin (regra de segurança)
             if id_colaborador_int == session.get('id_colaborador') and nivel < 3 and session.get('nivel') == 3 and db.colaboradores.count_documents({'nivel': 3}) == 1:
                 raise ValueError("Você é o único administrador. Não pode rebaixar seu próprio nível.")
                  
-            # Remove a senha do set se ela não foi alterada, para não apagar a hash existente
             if not senha and 'senha' in dados_colaborador:
                  del dados_colaborador['senha']
                  
@@ -670,7 +703,6 @@ def gravar_colaborador():
             success_msg = f"Colaborador {nick} atualizado com sucesso!"
             
         else:
-            # --- Modo INSERÇÃO (INSERT) ---
             novo_id_colaborador_int = get_next_colaborador_sequence(db)
             if novo_id_colaborador_int is None:
                 raise Exception("Falha ao gerar ID sequencial do colaborador.")
@@ -683,17 +715,45 @@ def gravar_colaborador():
         # 6. Redirecionamento de Sucesso
         return redirect(url_for('cadastro_colaborador', success=success_msg, view='listar'))
 
-
+    # --- INÍCIO DAS CORREÇÕES ---
     except ValueError as e:
         # Erros de validação
+        
+        # 1. Salva os dados que o usuário digitou na sessão
+        session['form_data'] = dict(request.form)
+        
+        # 2. Prepara os argumentos para o redirect
         view_redirect = 'alterar' if id_colaborador_edicao else 'novo'
-        return redirect(url_for('cadastro_colaborador', error=f"Erro de Validação: {e}", view=view_redirect))
+        redirect_args = {
+            'error': f"Erro de Validação: {e}",
+            'view': view_redirect
+        }
+        
+        # 3. CRÍTICO: Se estávamos editando, passa o ID do colaborador de volta
+        if id_colaborador_edicao:
+            redirect_args['id_colaborador'] = id_colaborador_edicao
+            
+        return redirect(url_for('cadastro_colaborador', **redirect_args))
         
     except Exception as e:
         # Erros gerais (DB, Geração de ID)
         print(f"ERRO CRÍTICO na gravação/atualização de colaborador: {e}")
+        
+        # 1. Salva os dados que o usuário digitou na sessão
+        session['form_data'] = dict(request.form)
+        
+        # 2. Prepara os argumentos para o redirect
         view_redirect = 'alterar' if id_colaborador_edicao else 'novo'
-        return redirect(url_for('cadastro_colaborador', error="Erro interno ao gravar/atualizar colaborador.", view=view_redirect))
+        redirect_args = {
+            'error': "Erro interno ao gravar/atualizar colaborador.",
+            'view': view_redirect
+        }
+        
+        # 3. CRÍTICO: Se estávamos editando, passa o ID do colaborador de volta
+        if id_colaborador_edicao:
+            redirect_args['id_colaborador'] = id_colaborador_edicao
+
+        return redirect(url_for('cadastro_colaborador', **redirect_args))
 
 
 @app.route('/colaborador/excluir/<int:id_colaborador>', methods=['POST'])
@@ -867,10 +927,6 @@ def nova_venda():
                            quantidade=quantidade,
                            custo=custo)
 
-
-# app.py
-
-# ... (todas as outras rotas e imports) ...
 
 @app.route('/processar_venda', methods=['POST'])
 @login_required
@@ -1093,6 +1149,12 @@ def cadastro_cliente():
     nome_logado = session.get('nick', 'Colaborador') 
     id_logado = session.get('id_colaborador', 'N/A')
     
+    # --- INÍCIO DA CORREÇÃO (Lógica de Erro) ---
+    # 1. Tenta pegar dados de um erro anterior. 
+    #    .pop() lê e remove os dados, para não ficarem "presos" na sessão.
+    form_data_erro = session.pop('form_data', None)
+    # --- FIM DA CORREÇÃO ---
+    
     # 1. Variáveis de Estado (Inicialização Garantida)
     active_view = request.args.get('view', 'novo')
     search_term = request.args.get('query', '').strip()
@@ -1102,10 +1164,45 @@ def cadastro_cliente():
     
     clientes_lista = []
     total_clientes = 0
-    cliente_edicao = None 
+    cliente_edicao = None # Importante começar como None
     
     error = request.args.get('error')
     success = request.args.get('success')
+
+    # --- INÍCIO DA CORREÇÃO (Lógica de Preenchimento) ---
+    
+    if form_data_erro:
+        # 2. Se 'form_data_erro' existe, um erro acabou de ocorrer.
+        #    Usamos esses dados para preencher o formulário.
+        #    O HTML (Jinja) já usa a variável 'cliente_edicao' para preencher os campos.
+        cliente_edicao = form_data_erro
+        
+        # Garante que a view ('novo' or 'alterar') esteja correta
+        if 'id_cliente_edicao' in form_data_erro and form_data_erro['id_cliente_edicao']:
+             active_view = 'alterar'
+             # Passa o ID de volta para o 'context'
+             id_cliente_edicao = form_data_erro['id_cliente_edicao']
+        else:
+             active_view = 'novo'
+            
+    elif active_view == 'alterar' and id_cliente_edicao and db_status:
+        # 3. Se NÃO há 'form_data_erro', é um carregamento normal.
+        #    Buscamos no DB como na sua lógica original.
+        try:
+            id_cliente_int = int(id_cliente_edicao)
+            cliente_edicao = db.clientes.find_one({'id_cliente': id_cliente_int})
+            
+            if cliente_edicao:
+                if '_id' in cliente_edicao: cliente_edicao['_id'] = str(cliente_edicao['_id'])
+            else:
+                 error = f"Cliente ID {id_cliente_int} não encontrado para edição."
+                 active_view = 'listar' 
+                 
+        except (ValueError, TypeError):
+            error = "ID de Cliente inválido para edição."
+            active_view = 'listar'
+            
+    # --- FIM DA CORREÇÃO ---
 
     if db_status:
         try:
@@ -1113,23 +1210,9 @@ def cadastro_cliente():
             total_clientes = db.clientes.count_documents({})
             
             # 3. Lógica de BUSCA DO CLIENTE PARA EDIÇÃO
-            if active_view == 'alterar' and id_cliente_edicao:
-                 try:
-                     id_cliente_int = int(id_cliente_edicao)
-                     cliente_edicao = db.clientes.find_one({'id_cliente': id_cliente_int})
-                     
-                     if cliente_edicao:
-                         if '_id' in cliente_edicao: cliente_edicao['_id'] = str(cliente_edicao['_id'])
-                     else:
-                          error = f"Cliente ID {id_cliente_int} não encontrado para edição."
-                          active_view = 'listar' 
-                          
-                 except (ValueError, TypeError):
-                     error = "ID de Cliente inválido para edição."
-                     active_view = 'listar'
+            # (A lógica principal já foi movida para cima, para tratar o 'form_data_erro')
             
             # 4. Lógica de Consulta/Listagem
-
             if active_view == 'listar':
                clientes_cursor = db.clientes.find({}).sort("nick", pymongo.ASCENDING)
                clientes_lista = list(clientes_cursor)
@@ -1168,7 +1251,7 @@ def cadastro_cliente():
         'clientes_lista': clientes_lista,
         'active_view': active_view,
         'query': search_term, 
-        'cliente_edicao': cliente_edicao, 
+        'cliente_edicao': cliente_edicao, # <-- Esta variável agora contém os dados do erro ou do DB
         'next_url': next_url, 
         'id_evento_retorno': id_evento_retorno,
         'error': error,
@@ -1180,7 +1263,6 @@ def cadastro_cliente():
     }
     
     return render_template('cadastro_cliente.html', **context)
-
 
 
 @app.route('/gravar_cliente', methods=['POST'])
@@ -1197,12 +1279,21 @@ def gravar_cliente():
     id_cliente_edicao = request.form.get('id_cliente_edicao') 
 
     if not db_status:
-        # CORREÇÃO DE FLUXO: Mantém o destino original e os dados em caso de erro.
         view_redirect = 'alterar' if id_cliente_edicao else 'novo'
         return redirect(url_for('cadastro_cliente', error="DB Offline. Gravação Crítica Falhou.", view=view_redirect, next=next_url, id_evento=id_evento_retorno))
     
     try:
-        # 1. Coleta e Limpeza de Dados
+        # --- 1. Carregar a configuração de campos ---
+        # (Usamos o 'default_config_cadastro' definido no before_request se 'tipo_cadastro_cliente' não estiver em 'g')
+        default_config = {} # Um padrão vazio caso 'g' falhe
+        if hasattr(g, 'parametros_globais'):
+             default_config = g.parametros_globais.get('tipo_cadastro_cliente', {})
+        
+        campos_config = g.parametros_globais.get('tipo_cadastro_cliente', default_config)
+
+
+        # --- 2. Coleta e Limpeza de Dados ---
+        # (Coletamos tudo o que *pode* vir do formulário)
         nome_cliente = format_title_case(request.form.get('nome_cliente'))
         nick = format_title_case(request.form.get('nick'))
         telefone = clean_numeric_string(request.form.get('telefone'))
@@ -1213,62 +1304,90 @@ def gravar_cliente():
         senha = format_title_case(request.form.get('senha'))
         confirma_senha = format_title_case(request.form.get('confirma_senha'))
 
-        # 2. Validação Mínima
-        if not nome_cliente or not nick or not cidade or not chave_pix:
-            raise ValueError("Preencha todos os campos obrigatórios (*).")
+        # --- 3. VALIDAÇÃO DINÂMICA (A CORREÇÃO) ---
+        # (Substitui o 'if not nome_cliente or not nick...')
         
-        # 3. Validação de CPF 
-        if cpf_raw and not validate_cpf(cpf_raw):
-             raise ValueError("O CPF inserido não é válido.")
+        if campos_config.get("nome_cliente") and not nome_cliente:
+            raise ValueError("O campo Nome Completo é obrigatório.")
+        
+        if campos_config.get("nick") and not nick:
+            raise ValueError("O campo Nick/Apelido é obrigatório.")
+        
+        if campos_config.get("cidade") and not cidade:
+            raise ValueError("O campo Cidade é obrigatório.")
+        
+        if campos_config.get("chave_pix") and not chave_pix:
+            raise ValueError("O campo Chave PIX é obrigatório.")
+            
+        # Validação de CPF (agora dinâmica)
+        cpf_limpo = clean_numeric_string(cpf_raw)
+        if campos_config.get("cpf") == True: # Se CPF é OBRIGATÓRIO
+            if not cpf_raw or not validate_cpf(cpf_limpo):
+                raise ValueError("CPF é obrigatório e deve ser válido.")
+        elif "cpf" in campos_config and cpf_raw and not validate_cpf(cpf_limpo):
+            # Se CPF é OPCIONAL (false) mas foi digitado E é inválido
+            raise ValueError("O CPF inserido não é válido.")
 
-        # 4. NOVAS VALIDAÇÕES (PIX e Senha)
-        if chave_pix != confirma_chave_pix:
+        # Validações de PIX e Senha (só se os campos existirem na config)
+        if "chave_pix" in campos_config and chave_pix != confirma_chave_pix:
             raise ValueError("As chaves PIX não conferem.")
         
-        if senha != confirma_senha:
-            raise ValueError("As senhas não conferem.")
-
-        # 5. LÓGICA DA SENHA (Padrão = Nick)
-        if senha:
-            senha_final_raw = senha
-        elif not id_cliente_edicao: 
-            # Se for NOVO cadastro e a senha estiver vazia, usa o Nick
-            senha_final_raw = nick 
-        else:
-            # Se for ALTERAÇÃO e a senha estiver vazIA, não faz nada (mantém a senha antiga)
-            senha_final_raw = None
-
-        # 6. Dados a serem inseridos/atualizados
+        if "senha" in campos_config:
+            # Se for NOVO cadastro E a senha for obrigatória E (senha vazia OU não confere)
+            if not id_cliente_edicao and campos_config.get("senha") and (not senha or senha != confirma_senha):
+                raise ValueError("Senha e Confirmação de Senha não conferem ou estão vazias.")
+            # Se for ALTERAÇÃO E a senha foi digitada E não confere
+            elif id_cliente_edicao and senha and (senha != confirma_senha):
+                raise ValueError("Senha e Confirmação de Senha não conferem.")
+        
+        # --- 4. LÓGICA DA SENHA (Padrão = Nick) ---
+        senha_final_raw = None
+        if "senha" in campos_config:
+            if senha:
+                senha_final_raw = senha
+            elif not id_cliente_edicao: 
+                # Se for NOVO cadastro e a senha estiver vazia, usa o Nick
+                # (A validação anterior já pegou se era 'required' e veio vazia)
+                if not campos_config.get("senha"): # Se a senha for opcional e vazia
+                    senha_final_raw = nick 
+                elif senha == "": # Se for required, já deu erro. Se for opcional e vazia...
+                     senha_final_raw = nick # fallback
+            # else: (Alteração com senha vazia) senha_final_raw continua None (correto)
+            
+        # --- 5. Montagem Dinâmica do Documento ---
         dados_cliente = {
-            "nome_cliente": nome_cliente,
-            "cpf": clean_numeric_string(cpf_raw),
-            "nick": nick,
-            "telefone": telefone,
-            "cidade": cidade,
-            "chave_pix": chave_pix,
             "id_colaborador": session.get('id_colaborador', 'N/A'),
         }
         
-        # 7. Adiciona a senha apenas se ela foi definida
-        if senha_final_raw:
-            # Formata a senha (Primeira maiúscula)
+        # Adiciona campos ao documento SOMENTE se eles estiverem na configuração
+        if "nome_cliente" in campos_config:
+            dados_cliente["nome_cliente"] = nome_cliente
+        if "nick" in campos_config:
+            dados_cliente["nick"] = nick
+        if "cpf" in campos_config:
+            dados_cliente["cpf"] = cpf_limpo
+        if "telefone" in campos_config:
+            dados_cliente["telefone"] = telefone
+        if "cidade" in campos_config:
+            dados_cliente["cidade"] = cidade
+        if "chave_pix" in campos_config:
+            dados_cliente["chave_pix"] = chave_pix
+        
+        # --- 6. Adiciona a senha apenas se ela foi definida ---
+        if senha_final_raw: # (Já passou pela lógica do "senha" in campos_config)
             senha_formatada = senha_final_raw.capitalize()
             hashed_password = bcrypt.hashpw(senha_formatada.encode('utf-8'), bcrypt.gensalt())
-            dados_cliente['senha'] = hashed_password.decode('utf-8') # Salva a senha com hash
+            dados_cliente['senha'] = hashed_password.decode('utf-8')
 
         
-        # 8. Lógica de Inserção/Atualização
+        # --- 7. Lógica de Inserção/Atualização ---
         novo_id_cliente_int = None
         
         if id_cliente_edicao:
             # --- Modo ATUALIZAÇÃO (UPDATE) ---
             id_cliente_int = int(id_cliente_edicao)
             
-            # Se a senha não foi alterada (senha_final_raw é None), não a incluímos no $set
-            if 'senha' not in dados_cliente:
-                 # Recupera a senha antiga do DB se necessário, mas o melhor é não tocar nela
-                 pass 
-                 
+            # (O 'dados_cliente' já contém apenas os campos permitidos)
             db.clientes.update_one({'id_cliente': id_cliente_int}, {'$set': dados_cliente})
             success_msg = f"Cliente ID: CLI{id_cliente_int} atualizado com sucesso!"
             
@@ -1287,29 +1406,59 @@ def gravar_cliente():
             db.clientes.insert_one(dados_cliente)
             success_msg = f"Cliente '{nick}' salvo com sucesso! ID: CLI{novo_id_cliente_int}."
         
-        # 9. Prepara os argumentos de redirecionamento
+        # --- 8. Prepara os argumentos de redirecionamento ---
         redirect_kwargs = {'success': success_msg}
 
         if next_url == 'nova_venda':
+            # Se o nick foi o campo usado, busca pelo nick
             cliente_id_para_retorno = id_cliente_edicao if id_cliente_edicao else str(novo_id_cliente_int)
-            redirect_kwargs['id_cliente_final'] = cliente_id_para_retorno
+            
+            # Se o ID não foi gerado (ex: só nick e telefone), passa o nick para a busca
+            if not cliente_id_para_retorno and "nick" in dados_cliente:
+                 redirect_kwargs['id_cliente_busca'] = dados_cliente['nick']
+            else:
+                 redirect_kwargs['id_cliente_busca'] = f"CLI{cliente_id_para_retorno}"
+
             if id_evento_retorno:
                 redirect_kwargs['id_evento'] = id_evento_retorno
         
+        # Correção: Se o destino não for 'nova_venda', redireciona para 'cadastro_cliente'
+        if next_url != 'nova_venda':
+             next_url = 'cadastro_cliente'
+             redirect_kwargs['view'] = 'listar' # Garante que volte para a lista
+
         return redirect(url_for(next_url, **redirect_kwargs))
 
 
     except ValueError as e:
-        # Erros de validação
+        # --- INÍCIO DA CORREÇÃO ---
+        
+        # 1. Salva os dados que o usuário digitou na sessão
+        session['form_data'] = dict(request.form)
+        
+        # 2. Prepara os argumentos para o redirect
         view_redirect = 'alterar' if id_cliente_edicao else 'novo'
-        return redirect(url_for('cadastro_cliente', error=f"Erro de Validação: {e}", view=view_redirect, next=next_url, id_evento=id_evento_retorno))
+        
+        redirect_args = {
+            'error': f"Erro de Validação: {e}",
+            'view': view_redirect,
+            'next': next_url,
+            'id_evento': id_evento_retorno
+        }
+        
+        # 3. CRÍTICO: Se estávamos editando, passa o ID do cliente de volta
+        #    para que a rota 'cadastro_cliente' saiba que ainda estamos no modo 'alterar'.
+        if id_cliente_edicao:
+            redirect_args['id_cliente'] = id_cliente_edicao
+        
+        return redirect(url_for('cadastro_cliente', **redirect_args))
+        # --- FIM DA CORREÇÃO ---
         
     except Exception as e:
         # Erros gerais (DB, Geração de ID)
         print(f"ERRO CRÍTICO na gravação/atualização de cliente: {e}")
         view_redirect = 'alterar' if id_cliente_edicao else 'novo'
-        return redirect(url_for('cadastro_cliente', error="Erro interno ao gravar/atualizar cliente.", view=view_redirect, next=next_url, id_evento=id_evento_retorno))
-
+        return redirect(url_for('cadastro_cliente', error=f"Erro interno ao gravar/atualizar cliente: {e}", view=view_redirect, next=next_url, id_evento=id_evento_retorno))
 
 
 @app.route('/cliente/excluir/<int:id_cliente>', methods=['POST'])
@@ -1337,12 +1486,18 @@ def excluir_cliente(id_cliente):
 
 
 # --- ROTAS DE CADASTRO DE EVENTO (NOVO CRUD) ---
+# app.py
 
+# app.py
+
+# --- ROTAS DE CADASTRO DE EVENTO (NOVO CRUD) ---
 @app.route('/cadastro_evento', methods=['GET'])
 @login_required
 def cadastro_evento():
     db = g.db
     db_status = g.db_status
+    
+    form_data_erro = session.pop('form_data', None)
     
     active_view = request.args.get('view', 'novo')
     search_term = request.args.get('query', '').strip()
@@ -1355,39 +1510,63 @@ def cadastro_evento():
     error = request.args.get('error')
     success = request.args.get('success')
 
+    if form_data_erro:
+        # Se houver erro, os dados já estão no formato do formulário (YYYY-MM-DD)
+        evento_edicao = form_data_erro
+        
+        if 'id_evento_edicao' in form_data_erro and form_data_erro['id_evento_edicao']:
+             active_view = 'alterar'
+             id_evento_edicao = form_data_erro['id_evento_edicao']
+        else:
+             active_view = 'novo'
+             
+    elif active_view == 'alterar' and id_evento_edicao and db_status:
+        # Se for carregamento normal de "alterar", busca no DB
+        try:
+            id_evento_int = int(id_evento_edicao)
+            evento_edicao = db.eventos.find_one({'id_evento': id_evento_int})
+            
+            if evento_edicao:
+                if '_id' in evento_edicao: evento_edicao['_id'] = str(evento_edicao['_id'])
+
+                # --- INÍCIO DA CORREÇÃO DA DATA ---
+                # O DB salva como DD/MM/YYYY. O input[type=date] precisa de YYYY-MM-DD.
+                data_evento_db = evento_edicao.get('data_evento') # Ex: "10/11/2025"
+                if data_evento_db and isinstance(data_evento_db, str):
+                    try:
+                        # Converte de DD/MM/YYYY para um objeto datetime
+                        dt_obj = datetime.strptime(data_evento_db, '%d/%m/%Y')
+                        # Formata de volta para YYYY-MM-DD para o input HTML
+                        evento_edicao['data_evento'] = dt_obj.strftime('%Y-%m-%d')
+                    except ValueError:
+                        # Se já estiver no formato YYYY-MM-DD ou outro, não quebra
+                        pass 
+                # --- FIM DA CORREÇÃO DA DATA ---
+
+                # Converte todos os Decimal128 para float para o Jinja
+                for key in evento_edicao:
+                    if isinstance(evento_edicao[key], Decimal128):
+                        evento_edicao[key] = safe_float(evento_edicao[key])
+            else:
+                 error = f"Evento ID {id_evento_int} não encontrado para edição."
+                 active_view = 'listar'
+                 
+        except (ValueError, TypeError):
+            error = "ID de Evento inválido para edição."
+            active_view = 'listar'
+            
+    # --- FIM DA LÓGICA DE PREENCHIMENTO ---
+
     if db_status:
         try:
             total_eventos = db.eventos.count_documents({})
             
-            # LÓGICA DE BUSCA DO EVENTO PARA EDIÇÃO
-            if active_view == 'alterar' and id_evento_edicao:
-                 try:
-                     id_evento_int = int(id_evento_edicao)
-                     evento_edicao = db.eventos.find_one({'id_evento': id_evento_int})
-                     
-                     if evento_edicao:
-                         if '_id' in evento_edicao: evento_edicao['_id'] = str(evento_edicao['_id'])
-                         # Converte todos os Decimal128 para float para o Jinja
-                         for key in evento_edicao:
-                             if isinstance(evento_edicao[key], Decimal128):
-                                 evento_edicao[key] = safe_float(evento_edicao[key])
-                     else:
-                          error = f"Evento ID {id_evento_int} não encontrado para edição."
-                          active_view = 'listar'
-                          
-                 except (ValueError, TypeError):
-                     error = "ID de Evento inválido para edição."
-                     active_view = 'listar'
-
-            # Lógica de Consulta/Listagem
             if active_view == 'listar':
-                # Ordena pela data do evento mais próxima (assumindo que a data está em formato yyyy-mm-dd)
                 eventos_cursor = db.eventos.find({}).sort([("data_evento", pymongo.ASCENDING), ("hora_evento", pymongo.ASCENDING)])
                 eventos_lista = list(eventos_cursor)
             
             elif active_view == 'consulta' and search_term:
                 query_filter = {}
-                
                 if search_term.isdigit(): 
                     query_filter = {'id_evento': int(search_term)}
                 
@@ -1399,7 +1578,6 @@ def cadastro_evento():
                             {'data_evento': {'$regex': regex_term}}
                         ]
                     }
-                    
                 eventos_cursor = db.eventos.find(query_filter).sort("data_evento", pymongo.ASCENDING)
                 eventos_lista = list(eventos_cursor) 
 
@@ -1407,7 +1585,7 @@ def cadastro_evento():
             print(f"Erro ao buscar dados no MongoDB em cadastro_evento: {e}")
             error = f"Erro crítico ao carregar dados do DB: {e}"
 
-    # Conversão de Decimal128 para float para todos os eventos na lista
+    # Conversão de Decimal128 para float (para a LISTA de eventos)
     for evento in eventos_lista:
         if '_id' in evento: evento['_id'] = str(evento['_id'])
         for key in evento:
@@ -1427,6 +1605,7 @@ def cadastro_evento():
     
     return render_template('cadastro_evento.html', **context)
 
+
 @app.route('/gravar_evento', methods=['POST'])
 @login_required
 def gravar_evento():
@@ -1435,41 +1614,35 @@ def gravar_evento():
     if session.get('nivel', 0) < 3:
         return redirect(url_for('menu_operacoes', error="Acesso Negado. Nível 3 Requerido para Gravação."))
 
-    # Verifica se é uma inserção (Novo) ou uma atualização (Alterar)
     id_evento_edicao = request.form.get('id_evento_edicao') 
     
     # --- FUNÇÃO AUXILIAR DE LIMPEZA DE FLOAT ---
     def clean_float_input(form_key, default_value='0'):
-        """Trata a entrada do formulário, convertendo '' para default_value e trocando ',' por '.'"""
         value_raw = request.form.get(form_key, default_value)
         if not value_raw or value_raw.strip() == '':
             value_raw = str(default_value)
-        
-        # Converte para float (trocando a vírgula decimal)
         return float(value_raw.replace(',', '.'))
     # -------------------------------------------
 
     try:
         # 1. Coleta e Limpeza de Dados
-        data_evento_str = request.form.get('data_evento') # Recebe YYYY-MM-DD do input[type=date]
+        data_evento_str = request.form.get('data_evento') # YYYY-MM-DD
         hora_evento = request.form.get('hora_evento')
         descricao = format_title_case(request.form.get('descricao'))
         unidade_de_venda = int(request.form.get('unidade_de_venda', 1))
         
-        # Usando a nova função de limpeza:
         valor_de_venda = clean_float_input('valor_de_venda')
         premio_quadra = clean_float_input('premio_quadra')
         premio_linha = clean_float_input('premio_linha')
         premio_bingo = clean_float_input('premio_bingo')
         premio_segundobingo = clean_float_input('premio_segundobingo', default_value='0')
         premio_acumulado = clean_float_input('premio_acumulado', default_value='0')
-        minimo_de_venda = clean_float_input('minimo_de_venda', default_value='0') # Captura o valor (desabilitado, mas bom ter o dado limpo)
+        minimo_de_venda = clean_float_input('minimo_de_venda', default_value='0') 
 
-        # Campos INT que podem vir vazios (usamos default_value na coleta)
         numero_inicial = int(request.form.get('numero_inicial', 1))
         numero_maximo = int(request.form.get('numero_maximo', 72000))
         quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
-        bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) # 0 se desativado/vazio
+        bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
         
         
         # 2. Validação Mínima e de Formato
@@ -1482,18 +1655,12 @@ def gravar_evento():
         if not (1 <= quantidade_de_linhas <= 3):
              raise ValueError("Quantidade de linhas deve ser entre 1 e 3.")
 
-        # Converte data: data_evento_str JÁ VEM EM YYYY-MM-DD. 
         try:
-             # Tenta converter para objeto datetime usando o formato HTML (YYYY-MM-DD)
              data_obj = datetime.strptime(data_evento_str, '%Y-%m-%d')
-             
-             # CRÍTICO: CRIA A NOVA STRING NO FORMATO DD/MM/YYYY PARA GRAVAÇÃO
              data_evento_str_gravar = data_obj.strftime('%d/%m/%Y')
-             
         except ValueError:
              raise ValueError("Formato de data inválido. Use AAAA-MM-DD.")
         
-        # CRÍTICO: CRIA O CAMPO DATA_HORA_EVENTO COMO OBJETO DATETIME NATIVO
         data_hora_evento_str = f"{data_evento_str} {hora_evento}" # Ex: '2025-11-06 20:00'
         data_hora_evento_dt = datetime.strptime(data_hora_evento_str, '%Y-%m-%d %H:%M')
         
@@ -1502,9 +1669,9 @@ def gravar_evento():
         
         # 4. Montagem do Documento
         dados_evento = {
-            "data_evento": data_evento_str_gravar, # AGORA: DD/MM/YYYY
-            "hora_evento": hora_evento, # Mantido para edição do usuário (HH:MM)
-            "data_hora_evento": data_hora_evento_dt, # NOVO CAMPO DATETIME PARA ORDENAÇÃO
+            "data_evento": data_evento_str_gravar, # DD/MM/YYYY
+            "hora_evento": hora_evento, # HH:MM
+            "data_hora_evento": data_hora_evento_dt, # Datetime Object
             "descricao": descricao,
             "unidade_de_venda": unidade_de_venda,
             "valor_de_venda": Decimal128(str(valor_de_venda)),
@@ -1515,7 +1682,7 @@ def gravar_evento():
             "premio_linha": Decimal128(str(premio_linha)),
             "premio_bingo": Decimal128(str(premio_bingo)),
             "premio_segundobingo": Decimal128(str(premio_segundobingo)),
-            "premio_total": Decimal128(str(premio_total)), # Valor calculado
+            "premio_total": Decimal128(str(premio_total)), 
             "premio_acumulado": Decimal128(str(premio_acumulado)),
             "bola_tope_acumulado": bola_tope_acumulado,
             "minimo_de_venda": Decimal128(str(minimo_de_venda)),
@@ -1529,7 +1696,6 @@ def gravar_evento():
             # --- Modo ATUALIZAÇÃO (UPDATE) ---
             id_evento_int = int(id_evento_edicao)
             
-            # Remove o status e data_ativado do set para não sobrescrever se não houver lógica de controle externa
             if 'status' in dados_evento:
                  del dados_evento['status']
             if 'data_ativado' in dados_evento:
@@ -1552,7 +1718,7 @@ def gravar_evento():
             dados_evento.update({
                 "id_evento": novo_id_evento_int, 
                 "status": "paralizado", # Status inicial
-                "data_ativado": None, # Data de ativação das vendas (definida ao mudar status para 'ativo')
+                "data_ativado": None,
                 "data_cadastro": datetime.utcnow()
             })
             
@@ -1564,17 +1730,47 @@ def gravar_evento():
 
 
     except ValueError as e:
+        # --- INÍCIO DA CORREÇÃO ---
         # Erros de validação (Conversão ou Range de Valores)
+        
+        # 1. Salva os dados que o usuário digitou na sessão
+        session['form_data'] = dict(request.form)
+        
+        # 2. Prepara os argumentos para o redirect
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
-        return redirect(url_for('cadastro_evento', error=f"Erro de Validação: {e}", view=view_redirect))
+        redirect_args = {
+            'error': f"Erro de Validação: {e}",
+            'view': view_redirect
+        }
+        
+        # 3. CRÍTICO: Se estávamos editando, passa o ID do evento de volta
+        if id_evento_edicao:
+            redirect_args['id_evento'] = id_evento_edicao
+            
+        return redirect(url_for('cadastro_evento', **redirect_args))
+        # --- FIM DA CORREÇÃO ---
         
     except Exception as e:
+        # --- INÍCIO DA CORREÇÃO (Opcional, mas recomendado) ---
         # Erros gerais (DB, Geração de ID)
         print(f"ERRO CRÍTICO na gravação/atualização de evento: {e}")
+        
+        # 1. Salva os dados que o usuário digitou na sessão
+        session['form_data'] = dict(request.form)
+        
+        # 2. Prepara os argumentos para o redirect
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
-        return redirect(url_for('cadastro_evento', error="Erro interno ao gravar/atualizar evento.", view=view_redirect))
+        redirect_args = {
+            'error': "Erro interno ao gravar/atualizar evento.",
+            'view': view_redirect
+        }
+        
+        # 3. CRÍTICO: Se estávamos editando, passa o ID do evento de volta
+        if id_evento_edicao:
+            redirect_args['id_evento'] = id_evento_edicao
 
-
+        return redirect(url_for('cadastro_evento', **redirect_args))
+        # --- FIM DA CORREÇÃO ---
 
 
 @app.route('/excluir_evento/<int:id_evento>', methods=['POST'])
@@ -1596,6 +1792,373 @@ def excluir_evento(id_evento):
     except Exception as e:
         print(f"ERRO CRÍTICO na exclusão de evento ID {id_evento}: {e}")
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento.", view='listar'))
+
+
+# Rotas de Consulta de Vendas
+@app.route('/consulta_vendas', methods=['GET'])
+@login_required
+def consulta_vendas():
+    """
+    Página principal de consulta de vendas.
+    Passo 1: Seleciona o Evento.
+    Passo 2: Filtra por Colaborador (se Nível 3) ou mostra logado (Nível < 3).
+    Passo 3: Mostra cartões de resumo.
+    """
+    db = g.db
+    if not g.db_status:
+        return render_template('consulta_vendas.html', error="DB Offline.", g=g)
+
+    # --- INÍCIO DA MODIFICAÇÃO ---
+    # Captura mensagens da sessão (de ações como 'Gerar Lista')
+    error_from_session = session.pop('error_message', None)
+    success = session.pop('success_message', None)
+    # --- FIM DA MODIFICAÇÃO ---
+
+    # --- 1. Obter Nível de Acesso ---
+    nivel_usuario = session.get('nivel', 1)
+    id_colaborador_logado = session.get('id_colaborador', 'N/A')
+    
+    # --- 2. Obter Parâmetros da URL ---
+    id_evento_param = request.args.get('id_evento')
+    id_colaborador_param = request.args.get('id_colaborador')
+
+    # --- 3. Variáveis de Contexto (Inicialização) ---
+    eventos_ativos = []
+    colaboradores_lista = []
+    selected_event = None
+    resultados_agregados = []
+    resumo_geral = None # <-- NOVO: Inicializa o resumo geral
+    error = error_from_session
+    selected_colab_id_str = None
+
+    try:
+        # --- 4. Lógica de Carregamento da Página ---
+        
+        # Etapa A: Se nenhum evento foi selecionado ainda...
+        if not id_evento_param:
+            eventos_ativos_cursor = db.eventos.find({'status': 'ativo'}).sort('data_evento', pymongo.ASCENDING)
+            eventos_ativos = list(eventos_ativos_cursor)
+        
+        # Etapa B: Se um evento FOI selecionado...
+        else:
+            evento_oid = try_object_id(id_evento_param)
+            selected_event = db.eventos.find_one({'_id': evento_oid})
+            
+            if not selected_event:
+                error = "Evento não encontrado."
+                return render_template('consulta_vendas.html', error=error, g=g)
+
+            # 4.2. (Se Nível 3) Busca a lista de colaboradores
+            if nivel_usuario == 3:
+                colaboradores_lista.append({'nick': 'TODOS', 'id_colaborador': 'ALL'})
+                colabs_cursor = db.colaboradores.find({}, {'nick': 1, 'id_colaborador': 1}).sort('nick', pymongo.ASCENDING)
+                colaboradores_lista.extend(list(colabs_cursor))
+            
+            # 4.3. Define o filtro do colaborador
+            filtro_colaborador_query = {} 
+            
+            if nivel_usuario < 3:
+                filtro_colaborador_query = {'id_colaborador': id_colaborador_logado}
+                selected_colab_id_str = str(id_colaborador_logado)
+            
+            elif nivel_usuario == 3:
+                if id_colaborador_param and id_colaborador_param != 'ALL':
+                    filtro_colaborador_query = {'id_colaborador': int(id_colaborador_param)}
+                    selected_colab_id_str = id_colaborador_param
+                elif id_colaborador_param == 'ALL':
+                    # "TODOS" foi selecionado
+                    selected_colab_id_str = 'ALL'
+                # (Se id_colaborador_param for None, o filtro fica vazio)
+
+            # --- 5. Execução da Consulta (Aggregation Pipeline) ---
+            id_evento_int = selected_event.get('id_evento')
+            nome_colecao_venda = f"vendas{id_evento_int}"
+
+            pipeline = []
+            match_stage = {'id_evento': id_evento_int}
+            match_stage.update(filtro_colaborador_query) 
+            pipeline.append({'$match': match_stage})
+
+            pipeline.append({
+                '$group': {
+                    '_id': '$id_colaborador', 
+                    'nick_colaborador': {'$first': '$nick_colaborador'},
+                    'total_kits': {'$sum': '$quantidade_unidades'},
+                    'total_cartelas': {'$sum': '$quantidade_cartelas'},
+                    'total_valor': {'$sum': '$valor_total'},
+                    'total_vendas': {'$sum': 1},
+                    'data_inicial': {'$min': '$data_venda'},
+                    'data_final': {'$max': '$data_venda'}
+                }
+            })
+            pipeline.append({'$sort': {'nick_colaborador': 1}})
+            
+            resultados_cursor = db[nome_colecao_venda].aggregate(pipeline)
+            
+            # 6. Formata os resultados
+            for res in resultados_cursor:
+                res['total_valor_float'] = safe_float(res['total_valor'])
+                resultados_agregados.append(res)
+                
+            # --- NOVO: CÁLCULO DO RESUMO GERAL ---
+            if selected_colab_id_str == 'ALL' and resultados_agregados:
+                # Se o filtro é "TODOS" e há resultados, calcula o total
+                total_kits_geral = sum(r['total_kits'] for r in resultados_agregados)
+                total_cartelas_geral = sum(r['total_cartelas'] for r in resultados_agregados)
+                total_valor_geral = sum(r['total_valor_float'] for r in resultados_agregados)
+                total_vendas_geral = sum(r['total_vendas'] for r in resultados_agregados)
+                data_inicial_geral = min(r['data_inicial'] for r in resultados_agregados)
+                data_final_geral = max(r['data_final'] for r in resultados_agregados)
+                
+                resumo_geral = {
+                    'nick_colaborador': '⭐ Resumo Geral (TODOS)',
+                    '_id': 'ALL', # Para o link de detalhes
+                    'total_kits': total_kits_geral,
+                    'total_cartelas': total_cartelas_geral,
+                    'total_valor_float': total_valor_geral,
+                    'total_vendas': total_vendas_geral,
+                    'data_inicial': data_inicial_geral,
+                    'data_final': data_final_geral
+                }
+            # --- FIM DO NOVO CÁLCULO ---
+                
+            if not resultados_agregados and id_colaborador_param:
+                error = "Nenhuma venda encontrada para este filtro."
+
+    except Exception as e:
+        print(f"Erro em consulta_vendas: {e}")
+        error = f"Erro interno ao processar consulta: {e}"
+
+    return render_template('consulta_vendas.html',
+                           g=g,
+                           error=error,
+                           success=success,
+                           nivel=nivel_usuario,
+                           eventos=eventos_ativos,
+                           selected_event=selected_event,
+                           colaboradores=colaboradores_lista,
+                           selected_colab_id=selected_colab_id_str, 
+                           resumo_geral=resumo_geral, # <-- NOVO: Passa o resumo
+                           resultados_agregados=resultados_agregados)
+
+
+# Rotas de Consulta de Vendas Detalhadas
+@app.route('/consulta_vendas/detalhes', methods=['GET'])
+@login_required
+def consulta_vendas_detalhes():
+    """Mostra a lista detalhada de vendas para um filtro específico."""
+    db = g.db
+    if not g.db_status:
+        return render_template('consulta_vendas_detalhes.html', error="DB Offline.", g=g)
+
+    # --- 1. Obter Nível de Acesso e Parâmetros ---
+    nivel_usuario = session.get('nivel', 1)
+    id_colaborador_logado = session.get('id_colaborador', 'N/A')
+    
+    id_evento_param = request.args.get('id_evento')
+    id_colaborador_param = request.args.get('id_colaborador') # Vem como string
+
+    vendas_detalhadas = []
+    error = None
+    info_evento = None
+    info_colaborador = "N/A"
+
+    try:
+        # --- 2. Validação e Busca de Infos ---
+        evento_oid = try_object_id(id_evento_param)
+        selected_event = db.eventos.find_one({'_id': evento_oid})
+        
+        if not selected_event:
+            error = "Evento não encontrado."
+            return render_template('consulta_vendas_detalhes.html', error=error, g=g, vendas=[])
+
+        id_evento_int = selected_event.get('id_evento')
+        info_evento = selected_event.get('descricao')
+        nome_colecao_venda = f"vendas{id_evento_int}"
+        
+        # --- 3. Construção do Filtro (Query) ---
+        query_filter = {'id_evento': id_evento_int}
+
+        # Segurança: Nível < 3 só pode ver seus próprios detalhes
+        if nivel_usuario < 3:
+            query_filter['id_colaborador'] = id_colaborador_logado
+            info_colaborador = session.get('nick', 'N/A')
+        
+        elif nivel_usuario == 3:
+            # Nível 3 pode ver "TODOS" ou um ID específico
+            if id_colaborador_param and id_colaborador_param != 'ALL':
+                id_colab_int = int(id_colaborador_param)
+                query_filter['id_colaborador'] = id_colab_int
+                
+                # Busca o nick para exibir no título
+                colab_doc = db.colaboradores.find_one({'id_colaborador': id_colab_int}, {'nick': 1})
+                info_colaborador = colab_doc.get('nick') if colab_doc else f"ID {id_colab_int}"
+                
+            elif id_colaborador_param == 'ALL':
+                # Filtro "TODOS", não adiciona filtro de colaborador
+                info_colaborador = "TODOS"
+            
+        # --- 4. Execução da Consulta (Find) ---
+        vendas_cursor = db[nome_colecao_venda].find(query_filter).sort('data_venda', pymongo.DESCENDING)
+        
+        for venda in vendas_cursor:
+            # Converte valores para float
+            venda['valor_total_float'] = safe_float(venda.get('valor_total'))
+            vendas_detalhadas.append(venda)
+            
+        if not vendas_detalhadas:
+            error = "Nenhuma venda detalhada encontrada."
+
+    except Exception as e:
+        print(f"Erro em consulta_vendas_detalhes: {e}")
+        error = f"Erro interno: {e}"
+
+    return render_template('consulta_vendas_detalhes.html',
+                           g=g,
+                           error=error,
+                           vendas=vendas_detalhadas,
+                           info_evento=info_evento,
+                           info_colaborador=info_colaborador)
+
+# app.py
+# (Lembre-se de manter os imports 'Response' e 'io' no topo do arquivo)
+
+@app.route('/gerar_lista_vendas')
+@login_required
+def gerar_lista_vendas():
+    """
+    Gera um arquivo TXT em memória (com cabeçalho e dados de cliente)
+    e o envia para download.
+    """
+    
+    # 1. Segurança (Só Nível 3 pode gerar)
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+
+    db = g.db
+    id_evento_param = request.args.get('id_evento')
+    
+    # URL de Redirecionamento Padrão (em caso de falha)
+    redirect_url = url_for('consulta_vendas', 
+                           id_evento=id_evento_param, 
+                           id_colaborador='ALL')
+    
+    if not id_evento_param:
+        session['error_message'] = "Erro: ID do Evento não fornecido."
+        return redirect(url_for('consulta_vendas'))
+
+    try:
+        # 2. Validar Evento e Buscar Dados do Cabeçalho
+        evento_oid = try_object_id(id_evento_param)
+        
+        # Busca todos os campos necessários para o cabeçalho
+        selected_event = db.eventos.find_one(
+            {'_id': evento_oid},
+            { # Projeção dos campos do evento
+                'id_evento': 1, 'unidade_de_venda': 1, 'numero_maximo': 1,
+                'valor_de_venda': 1, 'descricao': 1, 'premio_quadra': 1,
+                'quantidade_de_linhas': 1, 'premio_linha': 1, 'premio_bingo': 1,
+                'premio_segundobingo': 1, 'premio_acumulado': 1, 'bola_tope_acumulado': 1
+            }
+        )
+        
+        if not selected_event:
+            session['error_message'] = "Erro: Evento não encontrado."
+            return redirect(redirect_url)
+            
+        id_evento_int = selected_event.get('id_evento')
+        nome_colecao_venda = f"vendas{id_evento_int}"
+        
+        # 3. Definir Nome do Arquivo (Ex: periodo.101)
+        file_name = f"periodo.{id_evento_int}"
+
+        # --- 4. Geração do Arquivo em Memória ---
+        io_buffer = io.StringIO()
+        
+        # --- NOVO: Escreve a Linha 1 (Cabeçalho do Evento) ---
+        header_line = (
+            f"{selected_event.get('unidade_de_venda', 0)}!"
+            f"{selected_event.get('numero_maximo', 0)}!"
+            f"{safe_float(selected_event.get('valor_de_venda', 0))}!"
+            f"{selected_event.get('descricao', 'N/A')}!"
+            f"{safe_float(selected_event.get('premio_quadra', 0))}!"
+            f"{selected_event.get('quantidade_de_linhas', 0)}!"
+            f"{safe_float(selected_event.get('premio_linha', 0))}!"
+            f"{safe_float(selected_event.get('premio_bingo', 0))}!"
+            f"{safe_float(selected_event.get('premio_segundobingo', 0))}!"
+            f"{safe_float(selected_event.get('premio_acumulado', 0))}!"
+            f"{selected_event.get('bola_tope_acumulado', 0)}\n"
+        )
+        io_buffer.write(header_line)
+        # --- FIM DO CABEÇALHO ---
+
+        # 5. Query no DB (Pega todas as vendas do evento)
+        vendas_cursor = db[nome_colecao_venda].find(
+            {'id_evento': id_evento_int},
+            { # Projeção: pega só os campos necessários
+                'numero_inicial': 1, 'numero_final': 1, 'numero_inicial2': 1,
+                'numero_final2': 1, 'id_cliente': 1, 'nome_cliente': 1,
+                'id_colaborador': 1, 'nick_colaborador': 1
+            }
+        ).sort('numero_inicial', pymongo.ASCENDING)
+        
+        lista_vendas = list(vendas_cursor) # Converte o cursor para lista
+        
+        if not lista_vendas:
+            session['error_message'] = "Não há nenhuma venda neste evento para gerar o arquivo."
+            return redirect(redirect_url)
+
+        # --- 6. Otimização (Abordagem "Map") ---
+        # 6a. Pega todos os IDs de cliente únicos da lista de vendas
+        cliente_ids_set = {v.get('id_cliente') for v in lista_vendas if v.get('id_cliente')}
+        
+        # 6b. Faz UMA ÚNICA consulta ao DB para pegar todos esses clientes
+        clientes_cursor = db.clientes.find(
+            {'id_cliente': {'$in': list(cliente_ids_set)}},
+            {'id_cliente': 1, 'telefone': 1, 'cidade': 1} # Pega só os campos extras
+        )
+        
+        # 6c. Cria um "mapa" (dicionário) para busca rápida em memória
+        clientes_map = {c['id_cliente']: c for c in clientes_cursor}
+        # --- Fim da Otimização ---
+
+        # 7. Escreve as Linhas de Venda
+        contagem_linhas = 0
+        for venda in lista_vendas:
+            
+            # Pega os dados extras do cliente usando o "map"
+            id_cliente = venda.get('id_cliente')
+            cliente_info = clientes_map.get(id_cliente, {}) # Padrão é um dict vazio
+            
+            line_venda = (
+                f"{venda.get('numero_inicial', 0)}!"
+                f"{venda.get('numero_final', 0)}!"
+                f"{venda.get('numero_inicial2', 0)}!"
+                f"{venda.get('numero_final2', 0)}!"
+                f"{id_cliente or 'N/A'}!"
+                f"{venda.get('nome_cliente', 'N/A')}!"
+                f"{venda.get('id_colaborador', 'N/A')}!"
+                f"{venda.get('nick_colaborador', 'N/A')}!"
+                # --- NOVOS CAMPOS DO CLIENTE ---
+                f"{cliente_info.get('telefone', 'N/A')}!"
+                f"{cliente_info.get('cidade', 'N/A')}\n"
+            )
+            io_buffer.write(line_venda)
+            contagem_linhas += 1
+        
+        output_text = io_buffer.getvalue()
+        
+        # 8. Enviar a Resposta de Download
+        return Response(
+            output_text,
+            mimetype="text/plain",
+            headers={"Content-Disposition": f"attachment;filename={file_name}"}
+        )
+
+    except Exception as e:
+        print(f"ERRO GERAL ao gerar lista: {e}")
+        session['error_message'] = f"Erro inesperado ao gerar arquivo: {e}"
+        return redirect(redirect_url)
 
 
 if __name__ == '__main__':

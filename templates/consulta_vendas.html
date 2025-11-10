@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulta de Vendas</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #F7F7F7; }
+        .card { background-color: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1.5rem; }
+        .event-card { border: 2px solid #EEE; cursor: pointer; transition: all 0.2s; }
+        .event-card:hover { border-color: #059669; box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
+        .stat-item { padding: 8px; border-bottom: 1px solid #F0F0F0; }
+        .stat-item:last-child { border-bottom: none; }
+        .stat-label { font-weight: 600; color: #4A5568; }
+        .stat-value { font-weight: 700; color: #1A202C; font-size: 1.1rem; }
+        .btn { padding: 10px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn-primary { background-color: #059669; color: white; }
+        .btn-primary:hover { background-color: #047857; }
+        .btn-secondary { background-color: #4A5568; color: white; }
+        .btn-secondary:hover { background-color: #2D3748; }
+        .form-select { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; }
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
+        .alert-info { background-color: #DBEAFE; color: #1E40AF; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
+        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-4xl mx-auto">
+        <h2 class="text-2xl font-bold mb-4 text-gray-900">📊 Consulta de Vendas</h2>
+
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+
+        {% if success %}
+            <div class="alert alert-success">{{ success }}</div>
+        {% endif %}
+
+        {% if not selected_event %}
+            <h3 class="text-xl font-semibold mb-3 text-gray-700">1. Selecione um Evento Ativo</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for evento in eventos %}
+                    <a href="{{ url_for('consulta_vendas', id_evento=evento._id) }}" class="block event-card p-4">
+                        <p class="text-lg font-bold text-primary">{{ evento.descricao }} (EVE{{ evento.id_evento }})</p>
+                        <p class="text-md text-gray-600">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
+                    </a>
+                {% else %}
+                    <div class="alert-info col-span-2">Nenhum evento ativo encontrado para consulta.</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        {% if selected_event %}
+            <div class="card bg-green-50 border border-green-200">
+                <h3 class="text-xl font-bold text-primary">{{ selected_event.descricao }}</h3>
+                <p class="text-md text-gray-700">Evento selecionado. Mostrando resultados abaixo.</p>
+                <a href="{{ url_for('consulta_vendas') }}" class="text-sm text-blue-600 hover:underline mt-2 inline-block">← Trocar Evento</a>
+            </div>
+
+            {% if nivel == 3 %}
+                <div class="card">
+                    <h3 class="text-xl font-semibold mb-3 text-gray-700">2. Filtrar por Colaborador</h3>
+                    <form method="GET" action="{{ url_for('consulta_vendas') }}">
+                        <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
+                        <div class="flex gap-4">
+                            <select name="id_colaborador" class="form-select flex-grow">
+                                <option value="" disabled {% if not selected_colab_id %}selected{% endif %}>-- Selecione uma opção --</option>
+                                {% for colab in colaboradores %}
+                                    <option value="{{ colab.id_colaborador }}" 
+                                            {% if selected_colab_id == colab.id_colaborador|string %}selected{% endif %}>
+                                        {{ colab.nick }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <button type="submit" class="btn btn-primary">🔍 Buscar</button>
+                        </div>
+                    </form>
+                </div>
+            {% endif %}
+
+            <div class="mt-6">
+
+            {% if resumo_geral %}
+                    <div class="card bg-blue-50 border border-blue-200 mb-6">
+                        <h4 class="text-xl font-bold text-blue-800 mb-3">
+                            {{ resumo_geral.nick_colaborador }}
+                        </h4>
+                        
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div class="stat-item">
+                                <span class="stat-label">Qtde. Vendas (Recibos):</span>
+                                <span class="stat-value">{{ resumo_geral.total_vendas }}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Total de Kits Vendidos:</span>
+                                <span class="stat-value">{{ resumo_geral.total_kits }}</span>
+                            </div>
+                             <div class="stat-item">
+                                <span class="stat-label">Total de Cartelas:</span>
+                                <span class="stat-value">{{ resumo_geral.total_cartelas }}</span>
+                            </div>
+                            <div class="stat-item col-span-2 md:col-span-3">
+                                <span class="stat-label">Valor Total Vendido:</span>
+                                <span class="stat-value text-blue-700 text-2xl">R$ {{ "%.2f" | format(resumo_geral.total_valor_float) }}</span>
+                            </div>
+                            <div class="stat-item text-sm">
+                                <span class="stat-label">Primeira Venda:</span>
+                                <span class="stat-value">{{ resumo_geral.data_inicial.strftime('%d/%m/%Y %H:%M') }}</span>
+                            </div>
+                            <div class="stat-item text-sm">
+                                <span class="stat-label">Última Venda:</span>
+                                <span class="stat-value">{{ resumo_geral.data_final.strftime('%d/%m/%Y %H:%M') }}</span>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <a href="{{ url_for('consulta_vendas_detalhes', id_evento=selected_event._id, id_colaborador='ALL') }}" 
+                           class="btn btn-secondary w-full text-center bg-blue-700 hover:bg-blue-800">
+                           Ver Detalhes (TODAS AS {{ resumo_geral.total_vendas }} Vendas)
+                        </a>
+
+                        <a href="{{ url_for('gerar_lista_vendas', id_evento=selected_event._id) }}" 
+                               class="btn btn-primary w-full text-center"
+                               onclick="return confirm('Tem certeza que deseja gerar o arquivo de lista? Isso pode demorar alguns segundos.')">
+                               🖨️ Gerar Lista (.txt)
+                        </a>
+
+                    </div>
+                {% endif %}
+
+
+                {% for cartao in resultados_agregados %}
+                    <div class="card">
+                        <h4 class="text-xl font-bold text-gray-800 mb-3">
+                            Resumo de: {{ cartao.nick_colaborador }} (ID: {{ cartao._id }})
+                        </h4>
+                        
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                            <div class="stat-item">
+                                <span class="stat-label">Qtde. Vendas (Recibos):</span>
+                                <span class="stat-value">{{ cartao.total_vendas }}</span>
+                            </div>
+                            <div class="stat-item">
+                                <span class="stat-label">Total de Kits Vendidos:</span>
+                                <span class="stat-value">{{ cartao.total_kits }}</span>
+                            </div>
+                             <div class="stat-item">
+                                <span class="stat-label">Total de Cartelas:</span>
+                                <span class="stat-value">{{ cartao.total_cartelas }}</span>
+                            </div>
+                            <div class="stat-item col-span-2 md:col-span-3">
+                                <span class="stat-label">Valor Total Vendido:</span>
+                                <span class="stat-value text-green-600">R$ {{ "%.2f" | format(cartao.total_valor_float) }}</span>
+                            </div>
+                            <div class="stat-item text-sm">
+                                <span class="stat-label">Primeira Venda:</span>
+                                <span class="stat-value">{{ cartao.data_inicial.strftime('%d/%m/%Y %H:%M') }}</span>
+                            </div>
+                            <div class="stat-item text-sm">
+                                <span class="stat-label">Última Venda:</span>
+                                <span class="stat-value">{{ cartao.data_final.strftime('%d/%m/%Y %H:%M') }}</span>
+                            </div>
+                        </div>
+                        
+                        <hr class="my-4">
+                        
+                        <a href="{{ url_for('consulta_vendas_detalhes', id_evento=selected_event._id, id_colaborador=cartao._id) }}" 
+                           class="btn btn-secondary w-full text-center">
+                           Ver Detalhes ({{ cartao.total_vendas }} Vendas)
+                        </a>
+                    </div>
+                {% else %}
+                    {% if selected_colab_id %} <div class="alert-info">Nenhuma venda encontrada para o filtro selecionado.</div>
+                    {% elif nivel < 3 %}
+                        <div class="alert-info">Você ainda não realizou nenhuma venda para este evento.</div>
+                    {% elif nivel == 3 and not id_colaborador_param %}
+                        <div class="alert-info">Selecione um colaborador para ver os resultados.</div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+        {% endif %}
+        
+        <div class="mt-8 text-center">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+        </div>
+    </div>
+
+</body>
+</html>
