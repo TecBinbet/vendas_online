@@ -7,19 +7,19 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #F7F7F7; }
-        .card { background-color: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); padding: 1.5rem; margin-bottom: 1.5rem; }
-        .event-card { border: 2px solid #EEE; cursor: pointer; transition: all 0.2s; }
-        .event-card:hover { border-color: #059669; box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
-        .stat-item { padding: 8px; border-bottom: 1px solid #F0F0F0; }
+        .card { background-color: white; border-radius: 1px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); padding: 0.2rem; margin-bottom: 0.6rem; }
+        .event-card {background-color: #FFFFFF; border: 2px solid #A7F3D0; cursor: pointer; transition: all 0.2s; }
+        .event-card:hover {border-color: #059669; border-color: #059669; box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
+        .stat-item { padding: 1px 4px; border-bottom: 1px solid #F0F0F0; }
         .stat-item:last-child { border-bottom: none; }
         .stat-label { font-weight: 600; color: #4A5568; }
         .stat-value { font-weight: 700; color: #1A202C; font-size: 1.1rem; }
-        .btn { padding: 10px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; }
+        .btn { padding: 6px 15px; border-radius: 6px; font-weight: bold; cursor: pointer; text-decoration: none; display: inline-block; }
         .btn-primary { background-color: #059669; color: white; }
         .btn-primary:hover { background-color: #047857; }
         .btn-secondary { background-color: #4A5568; color: white; }
         .btn-secondary:hover { background-color: #2D3748; }
-        .form-select { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; }
+        .form-select { width: 100%; padding: 2px; border: 1px solid #D1D5DB; border-radius: 6px; }
         .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
         .alert-info { background-color: #DBEAFE; color: #1E40AF; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
         .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
@@ -28,7 +28,7 @@
 <body class="p-4 md:p-8">
 
     <div class="max-w-4xl mx-auto">
-        <h2 class="text-2xl font-bold mb-4 text-gray-900">📊 Consulta de Vendas</h2>
+        <h2 class="text-2xl font-bold mb-2 text-blue-800">📊 Consulta de Vendas</h2>
 
         {% if error %}
             <div class="alert alert-danger">{{ error }}</div>
@@ -39,12 +39,15 @@
         {% endif %}
 
         {% if not selected_event %}
-            <h3 class="text-xl font-semibold mb-3 text-gray-700">1. Selecione um Evento Ativo</h3>
+            <h3 class="text-xl font-semibold mb-2 text-gray-700">1. Selecione um Evento Ativo</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {% for evento in eventos %}
-                    <a href="{{ url_for('consulta_vendas', id_evento=evento._id) }}" class="block event-card p-4">
+                    <a href="{{ url_for('consulta_vendas', id_evento=evento._id) }}" class="block event-card bg-green-100 p-4 ">
                         <p class="text-lg font-bold text-primary">{{ evento.descricao }} (EVE{{ evento.id_evento }})</p>
-                        <p class="text-md text-gray-600">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
+                        <p class="text-lg text-gray-800">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
+                        <p class="text-lg font-bold text-green-900">
+                             Premiação: R$ {{ "%.2f" | format(evento.premio_total) }}
+                        </p>
                     </a>
                 {% else %}
                     <div class="alert-info col-span-2">Nenhum evento ativo encontrado para consulta.</div>
@@ -55,13 +58,18 @@
         {% if selected_event %}
             <div class="card bg-green-50 border border-green-200">
                 <h3 class="text-xl font-bold text-primary">{{ selected_event.descricao }}</h3>
-                <p class="text-md text-gray-700">Evento selecionado. Mostrando resultados abaixo.</p>
-                <a href="{{ url_for('consulta_vendas') }}" class="text-sm text-blue-600 hover:underline mt-2 inline-block">← Trocar Evento</a>
+                <p class="text-lg text-gray-800">
+                     {{ selected_event.data_evento }} às {{selected_event.hora_evento }}
+                </p>
+                <p class="font-semibold text-lg text-green-900">
+                     Premiação: R$ {{ "%.2f" | format(selected_event.premio_total) }}
+                </p>
+                <a href="{{ url_for('consulta_vendas') }}" class="text-fm font-bold text-blue-600 hover:underline mt-2 inline-block">← Trocar Evento</a>
             </div>
 
             {% if nivel == 3 %}
                 <div class="card">
-                    <h3 class="text-xl font-semibold mb-3 text-gray-700">2. Filtrar por Colaborador</h3>
+                    <h3 class="text-xl font-semibold mb-1 text-gray-700">2. Filtrar por Colaborador</h3>
                     <form method="GET" action="{{ url_for('consulta_vendas') }}">
                         <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
                         <div class="flex gap-4">
@@ -80,15 +88,15 @@
                 </div>
             {% endif %}
 
-            <div class="mt-6">
+            <div class="mt-3">
 
             {% if resumo_geral %}
-                    <div class="card bg-blue-50 border border-blue-200 mb-6">
-                        <h4 class="text-xl font-bold text-blue-800 mb-3">
+                    <div class="card bg-green-100 border border-blue-200 mb-2">
+                        <h4 class="text-xl font-bold text-blue-800 mb-0">
                             {{ resumo_geral.nick_colaborador }}
                         </h4>
                         
-                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-0">
                             <div class="stat-item">
                                 <span class="stat-label">Qtde. Vendas (Recibos):</span>
                                 <span class="stat-value">{{ resumo_geral.total_vendas }}</span>
@@ -101,10 +109,26 @@
                                 <span class="stat-label">Total de Cartelas:</span>
                                 <span class="stat-value">{{ resumo_geral.total_cartelas }}</span>
                             </div>
+                            <!-- === BLOCO DE VALOR E COMISSÃO (Resumo Geral) === -->
                             <div class="stat-item col-span-2 md:col-span-3">
-                                <span class="stat-label">Valor Total Vendido:</span>
-                                <span class="stat-value text-blue-700 text-2xl">R$ {{ "%.2f" | format(resumo_geral.total_valor_float) }}</span>
+                                <div class="flex flex-col md:flex-row justify-between md:items-center md:gap-4">
+                                    <!-- Valor Total -->
+                                    <div class="mb-2 md:mb-0">
+                                        <span class="stat-label">Valor Total Vendido:</span>
+                                        <span class="stat-value text-blue-700 text-2xl">
+                                            R$ {{ "%.2f" | format(resumo_geral.total_valor_float) }}
+                                        </span>
+                                    </div>
+                                    <!-- Valor Comissão -->
+                                    <div class="border-t md:border-t-0 md:border-l border-gray-300 pt-2 md:pt-0 md:pl-4">
+                                        <span class="stat-label">Valor Comissão:</span>
+                                        <span class="stat-value text-red-600 text-2xl">
+                                            R$ {{ "%.2f" | format(resumo_geral.valor_comissao_float) }}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
+                            <!-- === FIM DO BLOCO === -->
                             <div class="stat-item text-sm">
                                 <span class="stat-label">Primeira Venda:</span>
                                 <span class="stat-value">{{ resumo_geral.data_inicial.strftime('%d/%m/%Y %H:%M') }}</span>
@@ -115,10 +139,10 @@
                             </div>
                         </div>
                         
-                        <hr class="my-4">
+                        <hr class="my-2">
                         
                         <a href="{{ url_for('consulta_vendas_detalhes', id_evento=selected_event._id, id_colaborador='ALL') }}" 
-                           class="btn btn-secondary w-full text-center bg-blue-700 hover:bg-blue-800">
+                           class="btn btn-secondary w-full text-center bg-blue-700 hover:bg-blue-800 mb-2">
                            Ver Detalhes (TODAS AS {{ resumo_geral.total_vendas }} Vendas)
                         </a>
 
@@ -133,12 +157,12 @@
 
 
                 {% for cartao in resultados_agregados %}
-                    <div class="card">
-                        <h4 class="text-xl font-bold text-gray-800 mb-3">
+                    <div class="card bg-yellow-50">
+                        <h4 class="text-xl font-bold text-red-800 mb-0">
                             Resumo de: {{ cartao.nick_colaborador }} (ID: {{ cartao._id }})
                         </h4>
                         
-                        <div class="grid grid-cols-2 md:grid-cols-3 gap-4">
+                        <div class="grid grid-cols-2 md:grid-cols-3 gap-0">
                             <div class="stat-item">
                                 <span class="stat-label">Qtde. Vendas (Recibos):</span>
                                 <span class="stat-value">{{ cartao.total_vendas }}</span>
@@ -147,14 +171,26 @@
                                 <span class="stat-label">Total de Kits Vendidos:</span>
                                 <span class="stat-value">{{ cartao.total_kits }}</span>
                             </div>
-                             <div class="stat-item">
-                                <span class="stat-label">Total de Cartelas:</span>
-                                <span class="stat-value">{{ cartao.total_cartelas }}</span>
-                            </div>
+                            <!-- === BLOCO DE VALOR E COMISSÃO (Individual) === -->
                             <div class="stat-item col-span-2 md:col-span-3">
-                                <span class="stat-label">Valor Total Vendido:</span>
-                                <span class="stat-value text-green-600">R$ {{ "%.2f" | format(cartao.total_valor_float) }}</span>
+                                <div class="flex flex-col md:flex-row justify-between md:items-center md:gap-4">
+                                    <!-- Valor Total -->
+                                    <div class="mb-2 md:mb-0">
+                                        <span class="stat-label">Valor Total Vendido:</span>
+                                        <span class="stat-value text-green-600">
+                                            R$ {{ "%.2f" | format(cartao.total_valor_float) }}
+                                        </span>
+                                    </div>
+                                    <!-- Valor Comissão -->
+                                    <div class="border-t md:border-t-0 md:border-l border-gray-300 pt-2 md:pt-0 md:pl-4">
+                                        <span class="stat-label">Valor Comissão ({{cartao.taxa_comissao_aplicada}}%):</span>
+                                        <span class="stat-value text-blue-600">
+                                            R$ {{ "%.2f" | format(cartao.valor_comissao_float) }}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
+                            <!-- === FIM DO BLOCO === -->
                             <div class="stat-item text-sm">
                                 <span class="stat-label">Primeira Venda:</span>
                                 <span class="stat-value">{{ cartao.data_inicial.strftime('%d/%m/%Y %H:%M') }}</span>
@@ -165,10 +201,9 @@
                             </div>
                         </div>
                         
-                        <hr class="my-4">
-                        
-                        <a href="{{ url_for('consulta_vendas_detalhes', id_evento=selected_event._id, id_colaborador=cartao._id) }}" 
-                           class="btn btn-secondary w-full text-center">
+                        <hr class="my-2">
+                         <a href="{{ url_for('consulta_vendas_detalhes', id_evento=selected_event._id, id_colaborador=cartao._id) }}" 
+                           class="btn btn-secondary w-full text-center bg-yellow-500 hover:bg-yellow-600 mb-2">
                            Ver Detalhes ({{ cartao.total_vendas }} Vendas)
                         </a>
                     </div>
@@ -184,8 +219,8 @@
 
         {% endif %}
         
-        <div class="mt-8 text-center">
-            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+        <div class="mt-4 text-center">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary text-green-800 font-bold hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
         </div>
     </div>
 

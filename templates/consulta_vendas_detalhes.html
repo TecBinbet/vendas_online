@@ -9,19 +9,75 @@
         body { background-color: #F7F7F7; }
         .table-wrapper { overflow-x: auto; background-color: white; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
         table { width: 100%; border-collapse: collapse; }
-        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #E5E7EB; }
+        th, td { padding: 6px 4px; text-align: left; border-bottom: 1px solid #E5E7EB; }
         th { background-color: #F9FAFB; font-weight: 600; color: #374151; }
         tr:last-child td { border-bottom: none; }
         .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; }
+
+        /* --- CSS DA MODAL --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: none; /* Começa escondido */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #FFF;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .modal-btn {
+            display: block;
+            width: 100%;
+            padding: 0.75rem;
+            margin-bottom: 0.5rem;
+            border-radius: 6px;
+            font-weight: 600;
+            text-align: center;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-primary { background-color: #059669; color: white; }
+        .btn-primary:hover { background-color: #047857; }
+        .btn-secondary { background-color: #4A5568; color: white; }
+        .btn-secondary:hover { background-color: #2D3748; }
+        .btn-cancel { background-color: #D1D5DB; color: #374151; }
+        .btn-cancel:hover { background-color: #B2B8C2; }
+        
+        /* Mensagem de "Copiado!" */
+        #copy-toast {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #2D3748;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 20px;
+            z-index: 2000;
+            opacity: 0;
+            transition: opacity 0.5s;
+            display: none; /* Começa escondido */
+        }
     </style>
 </head>
-<body class="p-4 md:p-8">
+<body class="p-2 md:p-4">
 
     <div class="max-w-6xl mx-auto">
-        <h2 class="text-2xl font-bold mb-2 text-gray-900">Vendas Detalhadas</h2>
-        <p class="text-lg text-gray-700 mb-4">
-            <strong>Evento:</strong> {{ info_evento | default('N/A') }} | 
-            <strong>Colaborador:</strong> {{ info_colaborador | default('N/A') }}
+        <h2 class="text-xl font-bold mb-1 text-blue-800">📊 Vendas Detalhadas</h2>
+        <p class="text-lg text-gray-700 mb-1">
+            <!-- Usamos a nova variável 'info_evento' (nome) -->
+            Evento:<strong> {{ info_evento | default('N/A') }}</strong> | 
+            Colaborador:<strong> {{ info_colaborador | default('N/A') }}</strong>
         </p>
 
         {% if error %}
@@ -32,46 +88,217 @@
             <table>
                 <thead>
                     <tr>
-                        <th>ID Venda</th>
-                        <th>Data</th>
-                        <th>Cliente</th>
-                        <th>Kits</th>
-                        <th>Cartelas</th>
                         <th>Números</th>
+                        <th>Kits</th>                        
                         <th>Valor (R$)</th>
+                        <th>Cliente</th>                        
+                        <th>Comissão (R$)</th>
+                        <th>Cartelas</th>
                         {% if info_colaborador == 'TODOS' %}
                             <th>Colaborador</th>
                         {% endif %}
+                        <th>Data</th>
+                        <th>ID Venda</th>   
                     </tr>
                 </thead>
                 <tbody>
                     {% for venda in vendas %}
-                        <tr class="hover:bg-gray-50">
-                            <td class="font-mono font-bold">{{ venda.id_venda }}</td>
-                            <td class="text-sm">{{ venda.data_venda.strftime('%d/%m/%y %H:%M') }}</td>
-                            <td class="font-medium">{{ venda.nome_cliente }} ({{venda.id_cliente}})</td>
-                            <td class="font-bold">{{ venda.quantidade_unidades }}</td>
-                            <td>{{ venda.quantidade_cartelas }}</td>
-                            <td class="text-sm font-mono">
+                        <!-- ADICIONADO 'onclick' e 'cursor-pointer' -->
+                        <tr class="hover:bg-green-200 cursor-pointer" 
+                            onclick="openReprintModal(
+                                '{{ venda.id_venda }}', 
+                                '{{ venda.id_cliente }}', 
+                                '{{ info_evento_id }}',  /* <-- USA A NOVA VARIÁVEL DO app.py */
+                                '{{ venda.nome_cliente }}'
+                            )">
+                            <td class="font-bold">
                                 {{ venda.numero_inicial }} a {{ venda.numero_final }}
                                 {% if venda.numero_inicial2 > 0 %}
                                     <br> {{ venda.numero_inicial2 }} a {{ venda.numero_final2 }}
                                 {% endif %}
                             </td>
+                            <td class="font-bold">{{ venda.quantidade_unidades }}</td>                            
                             <td class="font-bold text-green-600">{{ "%.2f" | format(venda.valor_total_float) }}</td>
+                            <td class="font-medium">{{ venda.nome_cliente }} ({{venda.id_cliente}})</td>
+                            <td class="font-bold text-blue-600">{{ "%.2f" | format(venda.valor_comissao_float) }}</td>
+                            <td>{{ venda.quantidade_cartelas }}</td>
                             {% if info_colaborador == 'TODOS' %}
                                 <td class="text-sm">{{ venda.nick_colaborador }}</td>
                             {% endif %}
+                            <td class="text-sm font-bold">{{ venda.data_venda.strftime('%d/%m/%y %H:%M') }}</td>
+                            <td class="font-mono">{{ venda.id_venda }}</td>
                         </tr>
                     {% endfor %}
                 </tbody>
             </table>
         </div>
         
-        <div class="mt-8">
-            <a href="javascript:history.back()" class="text-primary hover:text-secondary font-medium">← Voltar para o Resumo</a>
+        <div class="mt-2">
+            <a href="javascript:history.back()" class=" text-green-800 font-bold text-primary hover:text-secondary font-medium">← Voltar para o Resumo</a>
         </div>
     </div>
+
+    <!-- --- HTML DA MODAL (COMEÇA ESCONDIDO) --- -->
+    <div id="reprint-modal" class="modal-overlay" onclick="closeReprintModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-2">Reimprimir Comprovante (TXT)</h3>
+            <p class="mb-4">Cliente: <strong id="modal-nome-cliente">...</strong></p>
+            
+            <!-- Botões de Ação -->
+            <button id="modal-btn-unica" class="modal-btn btn-primary">
+                Reimprimir Venda Única (ID: <span id="modal-id-venda">...</span>)
+            </button>
+            <button id="modal-btn-cliente" class="modal-btn btn-secondary">
+                Reimprimir TODAS as Vendas do Cliente
+            </button>
+            
+            <hr class="my-4">
+            
+            <button class="modal-btn btn-cancel" onclick="closeReprintModal()">
+                Cancelar
+            </button>
+        </div>
+    </div>
+    
+    <!-- Mensagem "Copiado!" -->
+    <div id="copy-toast" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: #2D3748; color: white; padding: 10px 20px; border-radius: 20px; z-index: 2000; opacity: 0; transition: opacity 0.5s;">Copiado!</div>
+
+
+    <!-- --- JAVASCRIPT DA MODAL --- -->
+    <script>
+        const modal = document.getElementById('reprint-modal');
+        const modalNomeCliente = document.getElementById('modal-nome-cliente');
+        const modalIdVenda = document.getElementById('modal-id-venda');
+        const btnVendaUnica = document.getElementById('modal-btn-unica');
+        const btnVendasCliente = document.getElementById('modal-btn-cliente');
+        const toast = document.getElementById('copy-toast');
+
+        // Variáveis temporárias para guardar os dados
+        let tempIdVenda = '';
+        let tempIdCliente = '';
+        let tempIdEvento = '';
+
+        /**
+         * Abre a modal e armazena os dados da linha clicada.
+         */
+        function openReprintModal(idVenda, idCliente, idEvento, nomeCliente) {
+            // Preenche os dados temporários
+            tempIdVenda = idVenda;
+            tempIdCliente = idCliente;
+            tempIdEvento = idEvento;
+
+            // Atualiza o texto da modal
+            modalNomeCliente.textContent = `${nomeCliente} (ID: ${idCliente})`;
+            modalIdVenda.textContent = idVenda;
+            
+            // Atribui as funções de clique aos botões
+            btnVendaUnica.onclick = () => handleReprint('unica');
+            btnVendasCliente.onclick = () => handleReprint('cliente');
+
+            // Mostra a modal
+            modal.style.display = 'flex';
+        }
+
+        /**
+         * Fecha a modal.
+         */
+        function closeReprintModal() {
+            modal.style.display = 'none';
+        }
+
+        /**
+         * Mostra a mensagem "Copiado!" por 2 segundos.
+         */
+        function showToast(message) {
+            toast.textContent = message;
+            toast.style.display = 'block';
+            setTimeout(() => { // Delay para a transição de opacidade funcionar
+                 toast.style.opacity = 1;
+            }, 10);
+            
+            setTimeout(() => {
+                toast.style.opacity = 0;
+                setTimeout(() => {
+                    toast.style.display = 'none';
+                }, 500); // Tempo da transição
+            }, 2000); // Tempo que o toast fica visível
+        }
+
+        /**
+         * Função de helper para copiar texto (TXT)
+         * (Usa document.execCommand para máxima compatibilidade)
+         */
+        function copyTextToClipboard(text) {
+            if (!text) return;
+            const tempTextArea = document.createElement('textarea');
+            tempTextArea.value = text;
+            tempTextArea.style.position = 'fixed'; 
+            tempTextArea.style.opacity = '0';
+            document.body.appendChild(tempTextArea);
+            tempTextArea.select();
+            
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    showToast('Comprovante copiado!');
+                } else {
+                    showToast('Falha ao copiar.');
+                }
+            } catch (err) {
+                showToast('Erro ao copiar.');
+            }
+            document.body.removeChild(tempTextArea);
+        }
+
+        /**
+         * Chamada AJAX (Fetch) para o back-end para gerar o comprovante.
+         */
+        async function handleReprint(tipo) {
+            const data = {
+                tipo_reimpressao: tipo,
+                id_venda: tempIdVenda,
+                id_cliente: tempIdCliente,
+                id_evento: tempIdEvento
+            };
+
+            // Mostra um feedback de carregamento
+            if (tipo === 'unica') {
+                btnVendaUnica.textContent = 'Gerando...';
+            } else {
+                btnVendasCliente.textContent = 'Gerando...';
+            }
+
+            try {
+                // --- ROTA ATUALIZADA ---
+                const response = await fetch("{{ url_for('reimprimir_comprovante_txt') }}", {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // Copia o texto limpo (TXT) para a área de transferência
+                    copyTextToClipboard(result.receipt_text);
+                } else {
+                    // Mostra a mensagem de erro do back-end
+                    alert(`Erro: ${result.message}`);
+                }
+
+            } catch (err) {
+                alert('Erro de conexão ao tentar gerar o comprovante.');
+                console.error(err);
+            } finally {
+                // Restaura os botões e fecha a modal
+                btnVendaUnica.textContent = `Reimprimir Venda Únicas (ID: ${tempIdVenda})`;
+                btnVendasCliente.textContent = 'Reimprimir TODAS as Vendas do Cliente';
+                closeReprintModal();
+            }
+        }
+    </script>
 
 </body>
 </html>

@@ -36,6 +36,8 @@
             transform: translateY(-3px);
             box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
         }
+        
+        /* CSS para o Badge (Modo Simples) */
         .status-badge {
             padding: 4px 10px;
             border-radius: 5px;
@@ -43,42 +45,156 @@
             font-weight: bold;
             text-transform: uppercase;
         }
+
+        /* --- CSS PARA O BOTÃO DROPDOWN (Modo Detalhado) --- */
+        .status-control-btn {
+            padding: 4px 10px;
+            border-radius: 5px;
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            cursor: pointer;
+            min-width: 100px; /* Largura mínima */
+            text-align: center;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        .status-control-btn:hover {
+            opacity: 0.8;
+        }
+        
+        /* Cores dos botões */
+        .btn-ativo { background-color: #059669; color: white; border-color: #047857; }
+        .btn-paralizado { background-color: #F59E0B; color: #333; border-color: #D97706; }
+        .btn-finalizado { background-color: #6B7280; color: white; border-color: #4B5563; }
+        
+        /* Menu Dropdown */
+        .dropdown-menu {
+            position: absolute;
+            top: 100%;
+            right: 0;
+            z-index: 10;
+            background-color: white;
+            border-radius: 6px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            overflow: hidden; /* Para cantos arredondados nos itens */
+            min-width: 120px;
+            /* A classe 'hidden' do Tailwind é usada pelo JS para mostrar/esconder */
+        }
+        .dropdown-item {
+            display: block;
+            width: 100%;
+            padding: 10px 15px;
+            font-weight: 500;
+            text-align: left;
+            background-color: white;
+            border: none;
+            cursor: pointer;
+        }
+        .dropdown-item:hover {
+            background-color: #F3F4F6;
+        }
+        .dropdown-item-danger:hover {
+            background-color: #FEE2E2;
+            color: #991B1B;
+        }
+
+        /* Classes de Alerta */
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #FCA5A5; }
+        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; }
+
     </style>
 </head>
 <body>
 
     <div class="container">
-        <!-- O título pode ser ajustado para indicar o modo de visualização, se desejar -->
         <h2 class="text-2xl mb-2 -mt-4 text-blue-800 text-center">
             Status dos Eventos
         </h2>
 
         {% if error %}
-            <div class="alert-danger bg-danger text-white p-4 rounded-lg mb-6">{{ error }}</div>
+            <div class="alert-danger" role="alert">
+                {{ error }}
+            </div>
         {% endif %}
-
+        {% if success %}
+            <div class="alert-success" role="alert">
+                {{ success }}
+            </div>
+        {% endif %}
         {% if eventos_status|length > 0 %}
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                 
                 {% for evento in eventos_status %}
-                    <!-- Determina a cor de fundo do cartão -->
                     {% set bg_color = 'bg-active-bg border-primary' if evento.is_ativo else 'bg-default-bg border-gray-300' %}
+                    {% if evento.status == 'paralizado' %}
+                        {% set bg_color = 'bg-paralized-bg border-accent' %}
+                    {% elif evento.status == 'finalizado' %}
+                        {% set bg_color = 'bg-gray-200 border-gray-400' %}
+                    {% endif %}
+
 
                     <div class="card {{ bg_color }}">
                         
                         <div class="flex justify-between items-start mb-2">
                             <h3 class="text-xl font-semibold text-gray-800 leading-tight">{{ evento.descricao }}</h3>                         
-                            <!-- Badge de Status -->
-                            {% if evento.status == 'ativo' %}
-                                <span class="status-badge bg-primary text-white">ATIVO</span>
-                            {% elif evento.status == 'paralizado' %}
-                                <span class="status-badge bg-accent text-gray-800">PARALISADO</span>
+                            
+                            {% if mode != 'simple' %}
+                                <div class="relative inline-block text-left">
+                                    
+                                    {% if evento.status == 'ativo' %}
+                                        <button onclick="toggleMenu('menu-{{ evento.id_evento }}')" type="button" class="status-control-btn btn-ativo">
+                                            ATIVO ▾
+                                        </button>
+                                    {% elif evento.status == 'paralizado' %}
+                                        <button onclick="toggleMenu('menu-{{ evento.id_evento }}')" type="button" class="status-control-btn btn-paralizado">
+                                            PARALISADO ▾
+                                        </button>
+                                    {% else %}
+                                        <button onclick="toggleMenu('menu-{{ evento.id_evento }}')" type="button" class="status-control-btn btn-finalizado">
+                                            FINALIZADO ▾
+                                        </button>
+                                    {% endif %}
+
+                                    <div id="menu-{{ evento.id_evento }}" class="dropdown-menu hidden">
+                                        
+                                        {% if evento.status != 'ativo' %}
+                                            <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'ativo', '{{ mode }}')" 
+                                                    class="dropdown-item">
+                                                Ativar
+                                            </button>
+                                        {% endif %}
+                                        
+                                        {% if evento.status != 'paralizado' %}
+                                            <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'paralizado', '{{ mode }}')" 
+                                                    class="dropdown-item">
+                                                Paralisar
+                                            </button>
+                                        {% endif %}
+                                        
+                                        {% if evento.status != 'finalizado' %}
+                                            <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'finalizado', '{{ mode }}')" 
+                                                    class="dropdown-item dropdown-item-danger">
+                                                Finalizar
+                                            </button>
+                                        {% endif %}
+                                        
+                                    </div>
+                                </div>
+
                             {% else %}
-                                <span class="status-badge bg-gray-500 text-white">{{ evento.status | upper }}</span>
+                                <div>
+                                    {% if evento.status == 'ativo' %}
+                                        <span class="status-badge bg-primary text-white">ATIVO</span>
+                                    {% elif evento.status == 'paralizado' %}
+                                        <span class="status-badge bg-accent text-gray-800">PARALISADO</span>
+                                    {% else %}
+                                        <span class="status-badge bg-gray-500 text-white">{{ evento.status | upper }}</span>
+                                    {% endif %}
+                                </div>
                             {% endif %}
-                        </div>
+                            </div>
                         
-                        <!-- Bloco de Informações Principais -->
                         <div class="font-semibold text-sm text-gray-600 mb-0 border-b pb-2 space-y-1">
                             <p>ID: EVE{{ evento.id_evento }}</p>
                             <p>🗓️ Data: <span class="text-md font-bold text-gray-800">**{{ evento.data_hora }}**</span></p>
@@ -86,9 +202,7 @@
                             <p>⏳ Início Vendas: <span class=" font-bold text-gray-800">{{ evento.data_ativacao }}</span></p>
                         </div>
                         
-                        <!-- Bloco de Vendas e Numeração -->
                         <div class="space-y-1">                        
-                            <!-- ESCONDE QUANTIDADE E VALOR NO MODO SIMPLES -->
                             {% if mode != 'simple' %}
                                 <p class="text-md font-semibold text-gray-700">Detalhes das Vendas:</p>
 
@@ -123,5 +237,59 @@
         </div>
     </div>
     
+    <form method="POST" action="{{ url_for('evento_mudar_status') }}" id="status-change-form" class="hidden">
+        <input type="hidden" name="id_evento_int" id="form_id_evento_int">
+        <input type="hidden" name="novo_status" id="form_novo_status">
+        <input type="hidden" name="current_mode" id="form_current_mode">
+    </form>
+
+    <script>
+        /**
+         * Mostra ou esconde o menu dropdown de um cartão (usando classes 'hidden' do Tailwind).
+         */
+        function toggleMenu(menuId) {
+            // Fecha todos os outros menus abertos
+            document.querySelectorAll('.dropdown-menu').forEach(function(menu) {
+                if (menu.id !== menuId) {
+                    menu.classList.add('hidden'); // Adiciona 'hidden'
+                }
+            });
+            
+            // Abre ou fecha o menu clicado
+            var menu = document.getElementById(menuId);
+            if (menu) {
+                menu.classList.toggle('hidden'); // Alterna 'hidden'
+            }
+        }
+
+        /**
+         * Pede confirmação e submete o formulário oculto para mudar o status.
+         */
+        function confirmChangeStatus(idEvento, novoStatus, currentMode) {
+            var msg = `Tem certeza que deseja alterar o status do evento EVE${idEvento} para '${novoStatus.toUpperCase()}'?`;
+            
+            if (window.confirm(msg)) {
+                // Preenche o formulário oculto
+                document.getElementById('form_id_evento_int').value = idEvento;
+                document.getElementById('form_novo_status').value = novoStatus;
+                document.getElementById('form_current_mode').value = currentMode;
+                
+                // Submete o formulário
+                document.getElementById('status-change-form').submit();
+            }
+        }
+
+        // Fecha os menus se o usuário clicar fora
+        document.addEventListener('click', function(event) {
+            // Verifica se o clique foi fora de um botão de status ou de um menu
+            if (!event.target.closest('.status-control-btn') && !event.target.closest('.dropdown-menu')) {
+                // Esconde todos os menus
+                document.querySelectorAll('.dropdown-menu').forEach(function(menu) {
+                    menu.classList.add('hidden');
+                });
+            }
+        }, true);
+    </script>
+
 </body>
 </html>

@@ -2,7 +2,7 @@
 
 import threading
 import pymongo
-from flask import Flask, Response, render_template, request, redirect, url_for, session, g
+from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 from bson.objectid import ObjectId
@@ -12,10 +12,10 @@ from urllib.parse import quote_plus
 import os
 import re # Para a busca de clientes
 import bcrypt
-import io
 from functools import wraps # Para o decorator login_required
 from datetime import timedelta
 import certifi  # Para certificados SSL
+import html # <-- Importado para a nova rota
 #from passlib.hash import bcrypt # Para hashing de senhas de colaboradores
 
 # --- Configuração ---
@@ -270,18 +270,13 @@ def get_db():
 def before_request():
     """Garante que g.db e g.db_status sejam definidos no início de cada rota e carrega parâmetros."""
     get_db()
-
-# Define o layout padrão (completo, substitui a ideia do "all")
+    
+    # Configuração Padrão (fallback)
     default_config_cadastro = {
-        "nome_cliente": True,
-        "nick": True,
-        "telefone": True,
-        "cpf": False,
-        "cidade": True,
-        "chave_pix": True,
-        "senha": True
-    }    
-
+        "nome_cliente": True, "nick": True, "telefone": True,
+        "cpf": False, "cidade": True, "chave_pix": True, "senha": True
+    }
+    
     # Carregamento de Parâmetros Globais (se o DB estiver ativo)
     if g.db_status and not g.parametros_globais:
         try:
@@ -295,10 +290,25 @@ def before_request():
                     'http_apk': params_doc.get('http_apk', 'http://localhost:5000'),
                     'id_sala': params_doc.get('id_sala', 'SALA001'),
                     'tipo_cadastro_cliente': params_doc.get('tipo_cadastro_cliente', default_config_cadastro),
+                    'comissao_padrao': params_doc.get('comissao_padrao', 20), # 20% como fallback
                 }
+            else:
+                 g.parametros_globais = {
+                     'tipo_cadastro_cliente': default_config_cadastro,
+                     'comissao_padrao': 20
+                 }
         except Exception as e:
             print(f"🚨 ERRO ao carregar Parâmetros Globais: {e}")
-            g.parametros_globais = {}
+            g.parametros_globais = {
+                'tipo_cadastro_cliente': default_config_cadastro,
+                'comissao_padrao': 20
+            }
+    elif not g.parametros_globais:
+        # Fallback se o DB estiver offline
+        g.parametros_globais = {
+            'tipo_cadastro_cliente': default_config_cadastro,
+            'comissao_padrao': 20
+        }
 
 
 # --- ROTAS DE NAVEGAÇÃO E AUTENTICAÇÃO ---
@@ -361,9 +371,6 @@ def login():
           
     return redirect(url_for('login_page', error="Usuário ou senha inválidos."))
 
-# app.py
-
-# ... (outras rotas, como @app.route('/menu')) ...
 
 @app.route('/dashboard_cliente')
 @login_required
@@ -378,7 +385,7 @@ def dashboard_cliente():
     # Pega o nick da sessão (definido na função login)
     nick_cliente = session.get('nick', 'Cliente')
     
-    # Renderiza o template HTML que você já criou
+    # Renderiza o template HTML
     return render_template('dashboard_cliente.html', nick_cliente=nick_cliente, g=g)
 
 
@@ -401,84 +408,74 @@ def consulta_eventos_old():
 def consulta_status_eventos():
     from flask import request 
     db = g.db
+    
+    # --- NOVO: Captura mensagens de sucesso/erro da sessão ---
+    error = session.pop('error_message', None)
+    success = session.pop('success_message', None)
+    
     if not g.db_status:
-        return render_template('consulta_status_eventos.html', error="DB Offline. Status indisponível.", eventos_status=[], g=g)
+        # Passa o 'error' do DB para o template
+        return render_template('consulta_status_eventos.html', error="DB Offline. Status indisponível.", eventos_status=[], g=g, success=success)
 
     eventos_status = []
     
     # Captura o modo de visualização. 'detailed' é o padrão.
     view_mode = request.args.get('mode', 'detailed') 
     
-    # Funções auxiliares para formatação de moeda
+    # Funções auxiliares (pode manter as suas)
     def format_currency(value):
         if value is None: return "R$ 0,00"
         return f"R$ {safe_float(value):.2f}".replace('.', ',')
 
     try:
-        # 1. Define o filtro com base no modo de visualização
+        # ... (Toda a sua lógica de busca e formatação de 'eventos_status' continua igual) ...
+        
         if view_mode == 'simple':
-            # MODO SIMPLES (Operacional): MOSTRAR APENAS EVENTOS ATIVOS
             status_list = [re.compile('^ativo$', re.IGNORECASE)]
         else:
-            # MODO DETALHADO (Gerencial): MOSTRAR ATIVOS, PARALISADOS E FINALIZADOS
             status_list = [
                 re.compile('^ativo$', re.IGNORECASE),
                 re.compile('^paralizado$', re.IGNORECASE),
                 re.compile('^finalizado$', re.IGNORECASE)
             ]
-
-        eventos_cursor = db.eventos.find({
-            'status': {'$in': status_list}
-        }).sort("id_evento", pymongo.ASCENDING)
+        
+        eventos_cursor = db.eventos.find({'status': {'$in': status_list}}).sort("id_evento", pymongo.ASCENDING)
         
         for evento in eventos_cursor:
-            
             id_evento_int = evento.get('id_evento')
-            evento['id_evento_str'] = str(evento.get('_id'))
+            # ... (Toda a sua lógica de agregação de vendas e numeração) ...
             
-            # --- 2. Busca Dados de Venda (Tabela vendas<ID>) ---
+            # --- Bloco de agregação (mantido como estava) ---
             colecao_vendas = f"vendas{id_evento_int}"
-            
             if db[colecao_vendas].count_documents({}) > 0:
-                vendas_data = db[colecao_vendas].aggregate([
-                    {
-                        '$group': {
-                            '_id': None,
-                            'total_unidades': {'$sum': '$quantidade_unidades'},
-                            'total_valor': {'$sum': '$valor_total'} 
-                        }
-                    }
-                ]).next()
+                # Use .next() com segurança, verificando se há resultados
+                vendas_data_list = list(db[colecao_vendas].aggregate([
+                    {'$group': {'_id': None, 'total_unidades': {'$sum': '$quantidade_unidades'}, 'total_valor': {'$sum': '$valor_total'}}}
+                ]))
+                vendas_data = vendas_data_list[0] if vendas_data_list else None
             else:
                 vendas_data = None
-            
             total_unidades = vendas_data.get('total_unidades', 0) if vendas_data else 0
             total_valor = vendas_data.get('total_valor', 0) if vendas_data else 0
-            
-            # --- 3. Busca Numeração Atual (Tabela controle_venda) ---
             controle = db.controle_venda.find_one({'id_evento': id_evento_int})
-            
             num_atual = controle.get('inicial_proxima_venda', evento.get('numero_inicial', 1)) if controle else evento.get('numero_inicial', 1)
             
-            # --- 4. Formatação e Montagem do Cartão ---
+            # --- Bloco de formatação (mantido como estava) ---
             data_ativado = evento.get('data_ativado')
-            
             if isinstance(data_ativado, str):
                 try:
                     data_ativado_dt = datetime.strptime(data_ativado.strip(), '%Y-%m-%d')
                     data_ativado_formatada = data_ativado_dt.strftime("%d/%m/%Y") 
-                except ValueError:
-                    data_ativado_formatada = data_ativado 
+                except ValueError: data_ativado_formatada = data_ativado 
             elif isinstance(data_ativado, datetime):
                 data_ativado_formatada = data_ativado.strftime("%d/%m/%Y %H:%M:%S")
-            else:
-                data_ativado_formatada = 'N/A'
+            else: data_ativado_formatada = 'N/A'
             
             evento_info = {
                 'id_evento': evento.get('id_evento'),
                 'descricao': evento.get('descricao'),
                 'data_hora': f"{evento.get('data_evento', 'N/A')} às {evento.get('hora_evento', 'N/A')}",
-                'status': evento.get('status'),
+                'status': evento.get('status').lower(), # <-- Garante minúsculas
                 'valor_venda_unit': format_currency(evento.get('valor_de_venda')),
                 'data_ativacao': data_ativado_formatada,
                 'total_vendido': total_unidades,
@@ -491,14 +488,69 @@ def consulta_status_eventos():
 
     except Exception as e:
         print(f"ERRO CRÍTICO ao buscar status de eventos: {e}")
-        return render_template('consulta_status_eventos.html', error=f"Erro interno ao carregar status: {e}", eventos_status=[], g=g)
+        # Passa o 'error' para o template
+        return render_template('consulta_status_eventos.html', error=f"Erro interno ao carregar status: {e}", eventos_status=[], g=g, success=success, mode=view_mode)
 
-    return render_template('consulta_status_eventos.html', eventos_status=eventos_status, g=g, mode=view_mode)
+    # Passa 'success' e 'error' para o template
+    return render_template('consulta_status_eventos.html', eventos_status=eventos_status, g=g, mode=view_mode, error=error, success=success)
 
 
-# app.py
+@app.route('/evento/mudar_status', methods=['POST'])
+@login_required
+def evento_mudar_status():
+    """Altera o status de um evento (Ativo, Paralizado, Finalizado)."""
+    
+    # 1. Segurança: Somente Nível 3 pode mudar status
+    if session.get('nivel', 0) < 3:
+        session['error_message'] = "Acesso Negado. Nível 3 Requerido."
+        return redirect(url_for('consulta_status_eventos'))
+        
+    db = g.db
+    
+    # 2. Coleta de dados do formulário
+    try:
+        id_evento_int = int(request.form.get('id_evento_int'))
+        novo_status = request.form.get('novo_status').lower() # Garante minúsculas
+        current_mode = request.form.get('current_mode', 'detailed')
+    except Exception as e:
+        session['error_message'] = f"Dados inválidos: {e}"
+        return redirect(url_for('consulta_status_eventos'))
+        
+    # 3. Validação
+    if novo_status not in ['ativo', 'paralizado', 'finalizado']:
+        session['error_message'] = "Status inválido."
+        return redirect(url_for('consulta_status_eventos', mode=current_mode))
+
+    try:
+        # 4. Lógica de Atualização
+        update_data = {'status': novo_status}
+        
+        # --- Lógica Inteligente de Ativação ---
+        # Se está mudando PARA 'ativo', verifica se a data de ativação já foi setada.
+        if novo_status == 'ativo':
+            evento = db.eventos.find_one({'id_evento': id_evento_int}, {'data_ativado': 1})
+            # Se o evento existe E a data de ativação ainda é Nula, seta ela agora.
+            if evento and evento.get('data_ativado') is None:
+                update_data['data_ativado'] = datetime.utcnow()
+        
+        # 5. Executa a atualização no DB
+        result = db.eventos.update_one(
+            {'id_evento': id_evento_int},
+            {'$set': update_data}
+        )
+        
+        if result.modified_count == 1:
+            session['success_message'] = f"Evento EVE{id_evento_int} atualizado para '{novo_status.upper()}'."
+        else:
+            session['error_message'] = f"Evento EVE{id_evento_int} não foi modificado (ou não foi encontrado)."
+
+    except Exception as e:
+        session['error_message'] = f"Erro de banco de dados: {e}"
+        
+    return redirect(url_for('consulta_status_eventos', mode=current_mode))
 
 # --- Rotas de Colaborador ---
+
 @app.route('/cadastro_colaborador', methods=['GET'])
 @login_required
 def cadastro_colaborador():
@@ -597,16 +649,22 @@ def cadastro_colaborador():
     for colab in colaboradores_lista:
         if '_id' in colab: colab['_id'] = str(colab['_id'])
         if 'senha' in colab: del colab['senha']
+        
+    # --- NOVO: Pega a comissão padrão ---
+    # (Usa 20 como fallback final se 'g' não tiver o valor)
+    default_comissao = g.parametros_globais.get('comissao_padrao', 20)
+    # --- FIM DA ALTERAÇÃO ---
 
     context = {
         'total_colaboradores': total_colaboradores,
         'colaboradores_lista': colaboradores_lista,
         'active_view': active_view,
         'query': search_term, 
-        'colaborador_edicao': colaborador_edicao, # <-- Esta variável agora contém os dados do erro ou do DB
+        'colaborador_edicao': colaborador_edicao,
         'error': error,
         'success': success,
-        'g': g
+        'g': g,
+        'default_comissao': default_comissao # <-- ADICIONADO AO CONTEXTO
     }
     
     return render_template('cadastro_colaborador.html', **context)
@@ -623,8 +681,15 @@ def gravar_colaborador():
     id_colaborador_edicao = request.form.get('id_colaborador_edicao') 
 
     try:
-        # (O seu código 'try' original de coleta e validação permanece idêntico)
-        
+        # --- ATENÇÃO: Carrega a configuração dinâmica de campos ---
+        # (Se você não criou um 'tipo_cadastro_colaborador' nos parâmetros, ele usará este padrão)
+        default_colab_config = {
+            "nome_colaborador": True, "nick": True, "telefone": False,
+            "cpf": True, "cidade": False, "chave_pix": True, "senha": True,
+            "nivel": True, "comissao": True # <-- Adicionado comissao
+        }
+        campos_config = g.parametros_globais.get('tipo_cadastro_colaborador', default_colab_config)
+
         # 1. Coleta e Limpeza de Dados
         nome_colaborador = format_title_case(request.form.get('nome_colaborador'))
         nick = format_title_case(request.form.get('nick'))
@@ -636,55 +701,75 @@ def gravar_colaborador():
         senha = request.form.get('senha')
         confirma_senha = request.form.get('confirma_senha') 
         nivel = int(request.form.get('nivel'))
+        comissao = int(request.form.get('comissao', g.parametros_globais.get('comissao_padrao', 20)))
 
-        # 2. Validação
-        if not (1 <= nivel <= 3):
+        # 2. Validação Dinâmica
+        if campos_config.get("nivel") and not (1 <= nivel <= 3):
             raise ValueError("Nível de acesso deve ser entre 1 e 3.")
+            
+        if campos_config.get("comissao") and not (0 <= comissao <= 30):
+             raise ValueError("Taxa de comissão deve ser entre 0 e 30.")
 
-        # 3. NOVO: Regra de Negócio "TECBIN"
-        if nome_colaborador.upper() == 'TECBIN':
+        if campos_config.get("nome_colaborador") and not nome_colaborador:
+            raise ValueError("O campo Nome do Colaborador é obrigatório.")
+
+        if campos_config.get("nick") and not nick:
+            raise ValueError("O campo Nick é obrigatório.")
+            
+        if "nome_colaborador" in campos_config and nome_colaborador.upper() == 'TECBIN':
             return redirect(url_for('cadastro_colaborador', error="Este colaborador (TECBIN) não pode ser alterado.", view='listar'))
 
-        # 4. NOVAS VALIDAÇÕES (PIX e Senha)
-        if chave_pix != confirma_chave_pix:
+        if "chave_pix" in campos_config and chave_pix != confirma_chave_pix:
             raise ValueError("As chaves PIX não conferem.")
-        
-        # VALIDAÇÃO CRÍTICA DE SENHA
-        if not id_colaborador_edicao:
-            if not senha or senha != confirma_senha:
-                raise ValueError("Senha e Confirmação de Senha não conferem ou estão vazias.")
-        elif senha and senha != confirma_senha:
-            raise ValueError("Senha e Confirmação de Senha não conferem.")
             
-        # VALIDAÇÃO CRÍTICA DO CPF (AGORA OBRIGATÓRIO)
-        if not cpf_raw or not validate_cpf(cpf_raw):
-            raise ValueError("CPF é obrigatório e deve ser válido.")
+        # VALIDAÇÃO CRÍTICA DE SENHA (Dinâmica)
+        if "senha" in campos_config:
+            if not id_colaborador_edicao and campos_config.get("senha") and (not senha or senha != confirma_senha):
+                raise ValueError("Senha e Confirmação de Senha não conferem ou estão vazias.")
+            elif id_colaborador_edicao and senha and (senha != confirma_senha):
+                raise ValueError("Senha e Confirmação de Senha não conferem.")
+                
+        # VALIDAÇÃO CRÍTICA DO CPF (Dinâmica)
+        cpf_limpo = clean_numeric_string(cpf_raw)
+        if campos_config.get("cpf") == True: # Se CPF é OBRIGATÓRIO
+            if not cpf_raw or not validate_cpf(cpf_limpo):
+                raise ValueError("CPF é obrigatório e deve ser válido.")
+        elif "cpf" in campos_config and cpf_raw and not validate_cpf(cpf_limpo):
+            # Se CPF é OPCIONAL (false) mas foi digitado
+            raise ValueError("O CPF inserido não é válido.")
         
         # 3. Verificação de unicidade (Nick e CPF)
-        cpf_limpo = clean_numeric_string(cpf_raw)
         query_exist = {}
         if id_colaborador_edicao:
             query_exist['id_colaborador'] = {'$ne': int(id_colaborador_edicao)} 
         
-        if db.colaboradores.find_one({'$and': [query_exist, {'nick': nick}]}):
+        if "nick" in campos_config and nick and db.colaboradores.find_one({'$and': [query_exist, {'nick': nick}]}):
              raise ValueError("Nick já está em uso, por outro colaborador.")
 
-        if db.colaboradores.find_one({'$and': [query_exist, {'cpf': cpf_limpo}] }):
+        if "cpf" in campos_config and cpf_limpo and db.colaboradores.find_one({'$and': [query_exist, {'cpf': cpf_limpo}] }):
              raise ValueError("CPF já cadastrado para outro colaborador.")
 
-        # 4. Montagem do Documento
+        # 4. Montagem do Documento Dinâmico
         dados_colaborador = {
-            "nome_colaborador": nome_colaborador,
-            "nick": nick,
-            "telefone": telefone,
-            "cidade": cidade,
-            "chave_pix": chave_pix,
-            "nivel": nivel,
-            "cpf": cpf_limpo 
+            "nivel": nivel, # Nível é sempre salvo
+            "comissao": comissao # Comissão é sempre salva
         }
         
-        # Hash da Senha (Apenas se foi fornecida)
-        if senha:
+        if "nome_colaborador" in campos_config:
+            dados_colaborador["nome_colaborador"] = nome_colaborador
+        if "nick" in campos_config:
+            dados_colaborador["nick"] = nick
+        if "telefone" in campos_config:
+            dados_colaborador["telefone"] = telefone
+        if "cidade" in campos_config:
+            dados_colaborador["cidade"] = cidade
+        if "chave_pix" in campos_config:
+            dados_colaborador["chave_pix"] = chave_pix
+        if "cpf" in campos_config:
+            dados_colaborador["cpf"] = cpf_limpo
+        
+        # Hash da Senha (Apenas se foi fornecida e o campo existe)
+        if "senha" in campos_config and senha:
             senha = format_title_case(request.form.get('senha'))
             hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt())
             dados_colaborador['senha'] = hashed_password.decode('utf-8')
@@ -715,7 +800,7 @@ def gravar_colaborador():
         # 6. Redirecionamento de Sucesso
         return redirect(url_for('cadastro_colaborador', success=success_msg, view='listar'))
 
-    # --- INÍCIO DAS CORREÇÕES ---
+
     except ValueError as e:
         # Erros de validação
         
@@ -851,10 +936,13 @@ def nova_venda():
                     dt_obj = datetime.strptime(value.strip(), format_input)
                     return dt_obj.strftime(format_output)
                 except ValueError:
+                    # Se a data já estiver em DD/MM/YYYY
+                    if re.match(r'^\d{2}/\d{2}/\d{4}$', value.strip()):
+                        return value.strip()
                     return value
             return value
         
-        # O MongoDB salva data_evento como string 'YYYY-MM-DD', precisamos formatar.
+        # O MongoDB salva data_evento como string 'YYYY-MM-DD' ou 'DD/MM/YYYY'.
         evento['data_evento'] = format_date_safe('data_evento', '%d/%m/%Y', format_input='%Y-%m-%d')
         evento['hora_evento'] = format_date_safe('hora_evento', '%H:%M') 
         
@@ -927,6 +1015,10 @@ def nova_venda():
                            quantidade=quantidade,
                            custo=custo)
 
+
+# app.py
+
+# ... (todas as outras rotas e imports) ...
 
 @app.route('/processar_venda', methods=['POST'])
 @login_required
@@ -1004,14 +1096,22 @@ def processar_venda():
 
     # --- 3. ETAPA CRÍTICA: LOCK E TRANSAÇÃO ---
     id_evento_para_controle = id_evento_int_para_controle 
+    
+    print(f"{log_prefix} LOG 2: Tentando adquirir 'venda_lock' (timeout=8s)...")
         
     if venda_lock.acquire(timeout=8): 
+        print(f"{log_prefix} LOG 3: 'venda_lock' ADQUIRIDO.")
         try:
+            # 3a. Geração Atômica do ID da Venda
+            print(f"{log_prefix} LOG 3A: Gerando ID da Venda (get_next_global_sequence)...")
             novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
             if novo_id_venda_int is None:
                 raise Exception("Falha ao gerar o ID sequencial da venda.")
             id_venda_formatado = f"V{novo_id_venda_int:05d}"
+            print(f"{log_prefix} ... ID Venda gerado: {id_venda_formatado}")
 
+            # 3b. Geração Atômica dos Números de Bilhetes/Cartelas
+            print(f"{log_prefix} LOG 3B: Gerando IDs de Bilhetes (get_next_bilhete_sequence)...")
             numero_inicial_evento = int(selected_event.get('numero_inicial', 1))
             numero_inicial = get_next_bilhete_sequence(db, 
                                                        id_evento_para_controle, 
@@ -1065,13 +1165,18 @@ def processar_venda():
             }
             
             # 5. Atualiza data da última compra do cliente
+            print(f"{log_prefix} LOG 3C: Atualizando cliente {id_cliente_final} (update_one)...")
             db.clientes.update_one(
                 {"id_cliente": id_cliente_final}, 
                 {"$set": {"data_ultimo_compra": datetime.utcnow()}}
             )
+            print(f"{log_prefix} ... Cliente atualizado.")
+
             # 6. Inserção no Banco de Dados
             nome_colecao_venda = f"vendas{str(id_evento_para_controle).strip()}"
+            print(f"{log_prefix} LOG 3D: Inserindo venda na coleção '{nome_colecao_venda}' (insert_one)...")
             db[nome_colecao_venda].insert_one(registro_venda)
+            print(f"{log_prefix} ... Venda inserida.")
             
             # 7. Pós-Venda (Comprovante)
             # ... (código para montar o success_msg) ...
@@ -1080,6 +1185,13 @@ def processar_venda():
             http_apk = g.parametros_globais.get('http_apk', '')
             data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
             nome_sala  = g.parametros_globais.get('nome_sala', '')
+            
+            # --- Link APK ---
+            link_periodos = f"&periodo={numero_inicial},{numero_final}"
+            if numero_inicial2 > 0:
+                link_periodos += f"&periodo={numero_inicial2},{numero_final2}"
+            link_periodos = link_periodos.replace('&', '?', 1) # Troca o primeiro & por ?
+            link_final = f"<strong> {http_apk}?idrodada={id_evento_int_para_controle}{link_periodos} </strong>"
             
             success_msg = (
                 f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
@@ -1098,7 +1210,7 @@ def processar_venda():
                 f"{periodo_adicional}"
                 f"  VALOR:<span style='font-size: 1.2rem; color: #B91C1C;'>R$ {valor_total:.2f}</span><br>"
                 f"<br>"
-                f"<strong> {http_apk} <strong>"
+                f"{link_final}"
             )
             
             print(f"{log_prefix} LOG 4: Gravação concluída. Preparando redirect de SUCESSO.")
@@ -1122,6 +1234,7 @@ def processar_venda():
             return redirect(url_for('nova_venda', **error_redirect_kwargs))
             
         finally:
+            print(f"{log_prefix} LOG FIM: Liberando 'venda_lock'.")
             venda_lock.release()
             
     else:
@@ -1151,7 +1264,6 @@ def cadastro_cliente():
     
     # --- INÍCIO DA CORREÇÃO (Lógica de Erro) ---
     # 1. Tenta pegar dados de um erro anterior. 
-    #    .pop() lê e remove os dados, para não ficarem "presos" na sessão.
     form_data_erro = session.pop('form_data', None)
     # --- FIM DA CORREÇÃO ---
     
@@ -1164,7 +1276,7 @@ def cadastro_cliente():
     
     clientes_lista = []
     total_clientes = 0
-    cliente_edicao = None # Importante começar como None
+    cliente_edicao = None # <-- Importante começar como None
     
     error = request.args.get('error')
     success = request.args.get('success')
@@ -1203,16 +1315,13 @@ def cadastro_cliente():
             active_view = 'listar'
             
     # --- FIM DA CORREÇÃO ---
-
+            
     if db_status:
         try:
-            # 2. Contagem Total
             total_clientes = db.clientes.count_documents({})
             
-            # 3. Lógica de BUSCA DO CLIENTE PARA EDIÇÃO
-            # (A lógica principal já foi movida para cima, para tratar o 'form_data_erro')
+            # A lógica de 'alterar' já foi movida para cima
             
-            # 4. Lógica de Consulta/Listagem
             if active_view == 'listar':
                clientes_cursor = db.clientes.find({}).sort("nick", pymongo.ASCENDING)
                clientes_lista = list(clientes_cursor)
@@ -1251,7 +1360,7 @@ def cadastro_cliente():
         'clientes_lista': clientes_lista,
         'active_view': active_view,
         'query': search_term, 
-        'cliente_edicao': cliente_edicao, # <-- Esta variável agora contém os dados do erro ou do DB
+        'cliente_edicao': cliente_edicao, # <-- AQUI ESTÁ A MÁGICA
         'next_url': next_url, 
         'id_evento_retorno': id_evento_retorno,
         'error': error,
@@ -1263,6 +1372,7 @@ def cadastro_cliente():
     }
     
     return render_template('cadastro_cliente.html', **context)
+
 
 
 @app.route('/gravar_cliente', methods=['POST'])
@@ -1279,12 +1389,12 @@ def gravar_cliente():
     id_cliente_edicao = request.form.get('id_cliente_edicao') 
 
     if not db_status:
+        # CORREÇÃO DE FLUXO: Mantém o destino original e os dados em caso de erro.
         view_redirect = 'alterar' if id_cliente_edicao else 'novo'
         return redirect(url_for('cadastro_cliente', error="DB Offline. Gravação Crítica Falhou.", view=view_redirect, next=next_url, id_evento=id_evento_retorno))
     
     try:
         # --- 1. Carregar a configuração de campos ---
-        # (Usamos o 'default_config_cadastro' definido no before_request se 'tipo_cadastro_cliente' não estiver em 'g')
         default_config = {} # Um padrão vazio caso 'g' falhe
         if hasattr(g, 'parametros_globais'):
              default_config = g.parametros_globais.get('tipo_cadastro_cliente', {})
@@ -1293,7 +1403,6 @@ def gravar_cliente():
 
 
         # --- 2. Coleta e Limpeza de Dados ---
-        # (Coletamos tudo o que *pode* vir do formulário)
         nome_cliente = format_title_case(request.form.get('nome_cliente'))
         nick = format_title_case(request.form.get('nick'))
         telefone = clean_numeric_string(request.form.get('telefone'))
@@ -1305,8 +1414,6 @@ def gravar_cliente():
         confirma_senha = format_title_case(request.form.get('confirma_senha'))
 
         # --- 3. VALIDAÇÃO DINÂMICA (A CORREÇÃO) ---
-        # (Substitui o 'if not nome_cliente or not nick...')
-        
         if campos_config.get("nome_cliente") and not nome_cliente:
             raise ValueError("O campo Nome Completo é obrigatório.")
         
@@ -1410,10 +1517,8 @@ def gravar_cliente():
         redirect_kwargs = {'success': success_msg}
 
         if next_url == 'nova_venda':
-            # Se o nick foi o campo usado, busca pelo nick
             cliente_id_para_retorno = id_cliente_edicao if id_cliente_edicao else str(novo_id_cliente_int)
             
-            # Se o ID não foi gerado (ex: só nick e telefone), passa o nick para a busca
             if not cliente_id_para_retorno and "nick" in dados_cliente:
                  redirect_kwargs['id_cliente_busca'] = dados_cliente['nick']
             else:
@@ -1422,21 +1527,16 @@ def gravar_cliente():
             if id_evento_retorno:
                 redirect_kwargs['id_evento'] = id_evento_retorno
         
-        # Correção: Se o destino não for 'nova_venda', redireciona para 'cadastro_cliente'
         if next_url != 'nova_venda':
              next_url = 'cadastro_cliente'
-             redirect_kwargs['view'] = 'listar' # Garante que volte para a lista
+             redirect_kwargs['view'] = 'listar' 
 
         return redirect(url_for(next_url, **redirect_kwargs))
 
 
     except ValueError as e:
-        # --- INÍCIO DA CORREÇÃO ---
-        
-        # 1. Salva os dados que o usuário digitou na sessão
-        session['form_data'] = dict(request.form)
-        
-        # 2. Prepara os argumentos para o redirect
+        # Erros de validação
+        session['form_data'] = dict(request.form) # Salva dados na sessão
         view_redirect = 'alterar' if id_cliente_edicao else 'novo'
         
         redirect_args = {
@@ -1445,20 +1545,27 @@ def gravar_cliente():
             'next': next_url,
             'id_evento': id_evento_retorno
         }
-        
-        # 3. CRÍTICO: Se estávamos editando, passa o ID do cliente de volta
-        #    para que a rota 'cadastro_cliente' saiba que ainda estamos no modo 'alterar'.
         if id_cliente_edicao:
             redirect_args['id_cliente'] = id_cliente_edicao
-        
+            
         return redirect(url_for('cadastro_cliente', **redirect_args))
-        # --- FIM DA CORREÇÃO ---
         
     except Exception as e:
         # Erros gerais (DB, Geração de ID)
         print(f"ERRO CRÍTICO na gravação/atualização de cliente: {e}")
+        session['form_data'] = dict(request.form) # Salva dados na sessão
         view_redirect = 'alterar' if id_cliente_edicao else 'novo'
-        return redirect(url_for('cadastro_cliente', error=f"Erro interno ao gravar/atualizar cliente: {e}", view=view_redirect, next=next_url, id_evento=id_evento_retorno))
+        
+        redirect_args = {
+            'error': "Erro interno ao gravar/atualizar cliente.",
+            'view': view_redirect,
+            'next': next_url,
+            'id_evento': id_evento_retorno
+        }
+        if id_cliente_edicao:
+            redirect_args['id_cliente'] = id_cliente_edicao
+            
+        return redirect(url_for('cadastro_cliente', **redirect_args))
 
 
 @app.route('/cliente/excluir/<int:id_cliente>', methods=['POST'])
@@ -1486,18 +1593,17 @@ def excluir_cliente(id_cliente):
 
 
 # --- ROTAS DE CADASTRO DE EVENTO (NOVO CRUD) ---
-# app.py
 
-# app.py
-
-# --- ROTAS DE CADASTRO DE EVENTO (NOVO CRUD) ---
 @app.route('/cadastro_evento', methods=['GET'])
 @login_required
 def cadastro_evento():
     db = g.db
     db_status = g.db_status
     
+    # --- INÍCIO DA CORREÇÃO (Lógica de Erro) ---
+    # 1. Tenta pegar dados de um erro anterior. 
     form_data_erro = session.pop('form_data', None)
+    # --- FIM DA CORREÇÃO ---
     
     active_view = request.args.get('view', 'novo')
     search_term = request.args.get('query', '').strip()
@@ -1510,18 +1616,24 @@ def cadastro_evento():
     error = request.args.get('error')
     success = request.args.get('success')
 
+    # --- INÍCIO DA CORREÇÃO (Lógica de Preenchimento) ---
     if form_data_erro:
-        # Se houver erro, os dados já estão no formato do formulário (YYYY-MM-DD)
+        # 2. Se 'form_data_erro' existe, um erro acabou de ocorrer.
+        #    Usamos esses dados para preencher o formulário.
+        #    O HTML (Jinja) já usa a variável 'evento_edicao'.
         evento_edicao = form_data_erro
         
+        # Garante que a view ('novo' or 'alterar') esteja correta
         if 'id_evento_edicao' in form_data_erro and form_data_erro['id_evento_edicao']:
              active_view = 'alterar'
+             # Passa o ID de volta para o 'context'
              id_evento_edicao = form_data_erro['id_evento_edicao']
         else:
              active_view = 'novo'
              
     elif active_view == 'alterar' and id_evento_edicao and db_status:
-        # Se for carregamento normal de "alterar", busca no DB
+        # 3. Se NÃO há 'form_data_erro', é um carregamento normal.
+        #    Buscamos no DB como na sua lógica original.
         try:
             id_evento_int = int(id_evento_edicao)
             evento_edicao = db.eventos.find_one({'id_evento': id_evento_int})
@@ -1529,8 +1641,7 @@ def cadastro_evento():
             if evento_edicao:
                 if '_id' in evento_edicao: evento_edicao['_id'] = str(evento_edicao['_id'])
 
-                # --- INÍCIO DA CORREÇÃO DA DATA ---
-                # O DB salva como DD/MM/YYYY. O input[type=date] precisa de YYYY-MM-DD.
+                # --- CORREÇÃO DA DATA (para formulário) ---
                 data_evento_db = evento_edicao.get('data_evento') # Ex: "10/11/2025"
                 if data_evento_db and isinstance(data_evento_db, str):
                     try:
@@ -1539,8 +1650,7 @@ def cadastro_evento():
                         # Formata de volta para YYYY-MM-DD para o input HTML
                         evento_edicao['data_evento'] = dt_obj.strftime('%Y-%m-%d')
                     except ValueError:
-                        # Se já estiver no formato YYYY-MM-DD ou outro, não quebra
-                        pass 
+                        pass # Deixa como está se já for YYYY-MM-DD
                 # --- FIM DA CORREÇÃO DA DATA ---
 
                 # Converte todos os Decimal128 para float para o Jinja
@@ -1561,12 +1671,17 @@ def cadastro_evento():
         try:
             total_eventos = db.eventos.count_documents({})
             
+            # A lógica de 'alterar' já foi movida para cima
+            
+            # Lógica de Consulta/Listagem
             if active_view == 'listar':
+                # Ordena pela data do evento mais próxima
                 eventos_cursor = db.eventos.find({}).sort([("data_evento", pymongo.ASCENDING), ("hora_evento", pymongo.ASCENDING)])
                 eventos_lista = list(eventos_cursor)
             
             elif active_view == 'consulta' and search_term:
                 query_filter = {}
+                
                 if search_term.isdigit(): 
                     query_filter = {'id_evento': int(search_term)}
                 
@@ -1578,6 +1693,7 @@ def cadastro_evento():
                             {'data_evento': {'$regex': regex_term}}
                         ]
                     }
+                    
                 eventos_cursor = db.eventos.find(query_filter).sort("data_evento", pymongo.ASCENDING)
                 eventos_lista = list(eventos_cursor) 
 
@@ -1597,14 +1713,13 @@ def cadastro_evento():
         'eventos_lista': eventos_lista,
         'active_view': active_view,
         'query': search_term, 
-        'evento_edicao': evento_edicao, 
+        'evento_edicao': evento_edicao, # <-- Esta variável agora contém os dados do erro ou do DB
         'error': error,
         'success': success,
         'g': g
     }
     
     return render_template('cadastro_evento.html', **context)
-
 
 @app.route('/gravar_evento', methods=['POST'])
 @login_required
@@ -1731,44 +1846,28 @@ def gravar_evento():
 
     except ValueError as e:
         # --- INÍCIO DA CORREÇÃO ---
-        # Erros de validação (Conversão ou Range de Valores)
-        
-        # 1. Salva os dados que o usuário digitou na sessão
         session['form_data'] = dict(request.form)
-        
-        # 2. Prepara os argumentos para o redirect
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
         redirect_args = {
             'error': f"Erro de Validação: {e}",
             'view': view_redirect
         }
-        
-        # 3. CRÍTICO: Se estávamos editando, passa o ID do evento de volta
         if id_evento_edicao:
             redirect_args['id_evento'] = id_evento_edicao
-            
         return redirect(url_for('cadastro_evento', **redirect_args))
         # --- FIM DA CORREÇÃO ---
         
     except Exception as e:
-        # --- INÍCIO DA CORREÇÃO (Opcional, mas recomendado) ---
-        # Erros gerais (DB, Geração de ID)
+        # --- INÍCIO DA CORREÇÃO ---
         print(f"ERRO CRÍTICO na gravação/atualização de evento: {e}")
-        
-        # 1. Salva os dados que o usuário digitou na sessão
         session['form_data'] = dict(request.form)
-        
-        # 2. Prepara os argumentos para o redirect
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
         redirect_args = {
             'error': "Erro interno ao gravar/atualizar evento.",
             'view': view_redirect
         }
-        
-        # 3. CRÍTICO: Se estávamos editando, passa o ID do evento de volta
         if id_evento_edicao:
             redirect_args['id_evento'] = id_evento_edicao
-
         return redirect(url_for('cadastro_evento', **redirect_args))
         # --- FIM DA CORREÇÃO ---
 
@@ -1793,66 +1892,84 @@ def excluir_evento(id_evento):
         print(f"ERRO CRÍTICO na exclusão de evento ID {id_evento}: {e}")
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento.", view='listar'))
 
-
-# Rotas de Consulta de Vendas
+# --- Rota de Consulta de Vendas (com cálculo de comissão) ---
 @app.route('/consulta_vendas', methods=['GET'])
 @login_required
 def consulta_vendas():
     """
     Página principal de consulta de vendas.
-    Passo 1: Seleciona o Evento.
-    Passo 2: Filtra por Colaborador (se Nível 3) ou mostra logado (Nível < 3).
-    Passo 3: Mostra cartões de resumo.
+    (Com cálculo de comissão)
     """
     db = g.db
     if not g.db_status:
         return render_template('consulta_vendas.html', error="DB Offline.", g=g)
 
-    # --- INÍCIO DA MODIFICAÇÃO ---
-    # Captura mensagens da sessão (de ações como 'Gerar Lista')
+    # Captura mensagens da sessão
     error_from_session = session.pop('error_message', None)
     success = session.pop('success_message', None)
-    # --- FIM DA MODIFICAÇÃO ---
 
-    # --- 1. Obter Nível de Acesso ---
+    # 1. Obter Nível de Acesso
     nivel_usuario = session.get('nivel', 1)
     id_colaborador_logado = session.get('id_colaborador', 'N/A')
     
-    # --- 2. Obter Parâmetros da URL ---
+    # 2. Obter Parâmetros da URL
     id_evento_param = request.args.get('id_evento')
     id_colaborador_param = request.args.get('id_colaborador')
 
-    # --- 3. Variáveis de Contexto (Inicialização) ---
+    # 3. Variáveis de Contexto
     eventos_ativos = []
     colaboradores_lista = []
     selected_event = None
     resultados_agregados = []
-    resumo_geral = None # <-- NOVO: Inicializa o resumo geral
+    resumo_geral = None 
     error = error_from_session
     selected_colab_id_str = None
+    
+    # --- NOVO: Pega comissão padrão e cria mapa ---
+    default_comissao = g.parametros_globais.get('comissao_padrao', 0)
+    comissao_map = {} # Mapa para guardar {id_colab: taxa}
 
     try:
-        # --- 4. Lógica de Carregamento da Página ---
-        
-        # Etapa A: Se nenhum evento foi selecionado ainda...
+        # --- Helper Interno para limpar eventos ---
+        def clean_event_numerics(evento):
+            if not evento: return evento
+            decimal_fields = [
+                'valor_de_venda', 'premio_quadra', 'premio_linha', 'premio_bingo', 
+                'premio_segundobingo', 'premio_acumulado', 'minimo_de_venda', 'premio_total'
+            ]
+            for key in decimal_fields:
+                if key in evento:
+                    evento[key] = safe_float(evento.get(key, 0.0))
+            return evento
+
+        # 4. Lógica de Carregamento
         if not id_evento_param:
+            # Etapa A: Seleção de Evento
             eventos_ativos_cursor = db.eventos.find({'status': 'ativo'}).sort('data_evento', pymongo.ASCENDING)
-            eventos_ativos = list(eventos_ativos_cursor)
+            for evento in eventos_ativos_cursor:
+                eventos_ativos.append(clean_event_numerics(evento))
         
-        # Etapa B: Se um evento FOI selecionado...
         else:
+            # Etapa B: Evento Selecionado
             evento_oid = try_object_id(id_evento_param)
-            selected_event = db.eventos.find_one({'_id': evento_oid})
+            selected_event_raw = db.eventos.find_one({'_id': evento_oid})
+            selected_event = clean_event_numerics(selected_event_raw)
             
             if not selected_event:
                 error = "Evento não encontrado."
                 return render_template('consulta_vendas.html', error=error, g=g)
 
-            # 4.2. (Se Nível 3) Busca a lista de colaboradores
+            # 4.2. (Se Nível 3) Busca lista de colaboradores
             if nivel_usuario == 3:
                 colaboradores_lista.append({'nick': 'TODOS', 'id_colaborador': 'ALL'})
-                colabs_cursor = db.colaboradores.find({}, {'nick': 1, 'id_colaborador': 1}).sort('nick', pymongo.ASCENDING)
-                colaboradores_lista.extend(list(colabs_cursor))
+                # --- Otimização: Busca comissões de TODOS ---
+                colabs_cursor = db.colaboradores.find({}, {'nick': 1, 'id_colaborador': 1, 'comissao': 1}).sort('nick', pymongo.ASCENDING)
+                for colab in colabs_cursor:
+                    colaboradores_lista.append(colab)
+                    # Preenche o mapa de comissões
+                    taxa = colab.get('comissao')
+                    if isinstance(taxa, (int, float)):
+                        comissao_map[colab['id_colaborador']] = taxa
             
             # 4.3. Define o filtro do colaborador
             filtro_colaborador_query = {} 
@@ -1860,17 +1977,22 @@ def consulta_vendas():
             if nivel_usuario < 3:
                 filtro_colaborador_query = {'id_colaborador': id_colaborador_logado}
                 selected_colab_id_str = str(id_colaborador_logado)
+                # Busca a comissão do usuário logado
+                colab_doc = db.colaboradores.find_one({'id_colaborador': id_colaborador_logado}, {'comissao': 1})
+                if colab_doc:
+                    taxa = colab_doc.get('comissao')
+                    if isinstance(taxa, (int, float)):
+                         comissao_map[id_colaborador_logado] = taxa
             
             elif nivel_usuario == 3:
                 if id_colaborador_param and id_colaborador_param != 'ALL':
                     filtro_colaborador_query = {'id_colaborador': int(id_colaborador_param)}
                     selected_colab_id_str = id_colaborador_param
+                    # (comissão já foi pega no loop 'TODOS' acima)
                 elif id_colaborador_param == 'ALL':
-                    # "TODOS" foi selecionado
                     selected_colab_id_str = 'ALL'
-                # (Se id_colaborador_param for None, o filtro fica vazio)
 
-            # --- 5. Execução da Consulta (Aggregation Pipeline) ---
+            # 5. Execução da Consulta (Aggregation Pipeline)
             id_evento_int = selected_event.get('id_evento')
             nome_colecao_venda = f"vendas{id_evento_int}"
 
@@ -1895,34 +2017,43 @@ def consulta_vendas():
             
             resultados_cursor = db[nome_colecao_venda].aggregate(pipeline)
             
-            # 6. Formata os resultados
+            # 6. Formata os resultados e CALCULA COMISSÃO
             for res in resultados_cursor:
                 res['total_valor_float'] = safe_float(res['total_valor'])
+                
+                # --- Cálculo da Comissão ---
+                colab_id = res['_id'] # ID do colaborador
+                taxa_aplicada = comissao_map.get(colab_id, default_comissao) # Pega do mapa ou usa o padrão
+                
+                res['taxa_comissao_aplicada'] = taxa_aplicada
+                res['valor_comissao_float'] = (res['total_valor_float'] * taxa_aplicada) / 100.0
+                # --- Fim do Cálculo ---
+                
                 resultados_agregados.append(res)
                 
-            # --- NOVO: CÁLCULO DO RESUMO GERAL ---
+            # --- CÁLCULO DO RESUMO GERAL (com comissão) ---
             if selected_colab_id_str == 'ALL' and resultados_agregados:
-                # Se o filtro é "TODOS" e há resultados, calcula o total
                 total_kits_geral = sum(r['total_kits'] for r in resultados_agregados)
                 total_cartelas_geral = sum(r['total_cartelas'] for r in resultados_agregados)
                 total_valor_geral = sum(r['total_valor_float'] for r in resultados_agregados)
                 total_vendas_geral = sum(r['total_vendas'] for r in resultados_agregados)
+                total_comissao_geral = sum(r['valor_comissao_float'] for r in resultados_agregados) # <-- NOVO
                 data_inicial_geral = min(r['data_inicial'] for r in resultados_agregados)
                 data_final_geral = max(r['data_final'] for r in resultados_agregados)
                 
                 resumo_geral = {
                     'nick_colaborador': '⭐ Resumo Geral (TODOS)',
-                    '_id': 'ALL', # Para o link de detalhes
+                    '_id': 'ALL',
                     'total_kits': total_kits_geral,
                     'total_cartelas': total_cartelas_geral,
                     'total_valor_float': total_valor_geral,
                     'total_vendas': total_vendas_geral,
+                    'valor_comissao_float': total_comissao_geral, # <-- NOVO
                     'data_inicial': data_inicial_geral,
                     'data_final': data_final_geral
                 }
-            # --- FIM DO NOVO CÁLCULO ---
                 
-            if not resultados_agregados and id_colaborador_param:
+            if not resultados_agregados and id_colaborador_param and not error:
                 error = "Nenhuma venda encontrada para este filtro."
 
     except Exception as e:
@@ -1934,15 +2065,15 @@ def consulta_vendas():
                            error=error,
                            success=success,
                            nivel=nivel_usuario,
-                           eventos=eventos_ativos,
-                           selected_event=selected_event,
+                           eventos=eventos_ativos, 
+                           selected_event=selected_event, 
                            colaboradores=colaboradores_lista,
                            selected_colab_id=selected_colab_id_str, 
-                           resumo_geral=resumo_geral, # <-- NOVO: Passa o resumo
+                           resumo_geral=resumo_geral, 
                            resultados_agregados=resultados_agregados)
 
 
-# Rotas de Consulta de Vendas Detalhadas
+# --- ROTA MODIFICADA 'consulta_vendas_detalhes' ---
 @app.route('/consulta_vendas/detalhes', methods=['GET'])
 @login_required
 def consulta_vendas_detalhes():
@@ -1951,7 +2082,7 @@ def consulta_vendas_detalhes():
     if not g.db_status:
         return render_template('consulta_vendas_detalhes.html', error="DB Offline.", g=g)
 
-    # --- 1. Obter Nível de Acesso e Parâmetros ---
+    # 1. Obter Nível de Acesso e Parâmetros
     nivel_usuario = session.get('nivel', 1)
     id_colaborador_logado = session.get('id_colaborador', 'N/A')
     
@@ -1960,11 +2091,16 @@ def consulta_vendas_detalhes():
 
     vendas_detalhadas = []
     error = None
-    info_evento = None
+    info_evento_nome = None
+    info_evento_id = None # <-- VARIÁVEL ADICIONADA
     info_colaborador = "N/A"
+    
+    # --- NOVO: Pega comissão padrão e cria mapa ---
+    default_comissao = g.parametros_globais.get('comissao_padrao', 0)
+    comissao_map = {} # Mapa para guardar {id_colab: taxa}
 
     try:
-        # --- 2. Validação e Busca de Infos ---
+        # 2. Validação e Busca de Infos
         evento_oid = try_object_id(id_evento_param)
         selected_event = db.eventos.find_one({'_id': evento_oid})
         
@@ -1973,37 +2109,62 @@ def consulta_vendas_detalhes():
             return render_template('consulta_vendas_detalhes.html', error=error, g=g, vendas=[])
 
         id_evento_int = selected_event.get('id_evento')
-        info_evento = selected_event.get('descricao')
+        info_evento_nome = selected_event.get('descricao')
+        info_evento_id = id_evento_int # <-- VALOR ATRIBUÍDO
         nome_colecao_venda = f"vendas{id_evento_int}"
         
-        # --- 3. Construção do Filtro (Query) ---
+        # 3. Construção do Filtro (Query)
         query_filter = {'id_evento': id_evento_int}
+        colab_ids_para_buscar_comissao = []
 
         # Segurança: Nível < 3 só pode ver seus próprios detalhes
         if nivel_usuario < 3:
             query_filter['id_colaborador'] = id_colaborador_logado
             info_colaborador = session.get('nick', 'N/A')
+            if isinstance(id_colaborador_logado, int):
+                 colab_ids_para_buscar_comissao.append(id_colaborador_logado)
         
         elif nivel_usuario == 3:
             # Nível 3 pode ver "TODOS" ou um ID específico
             if id_colaborador_param and id_colaborador_param != 'ALL':
                 id_colab_int = int(id_colaborador_param)
                 query_filter['id_colaborador'] = id_colab_int
-                
-                # Busca o nick para exibir no título
+                colab_ids_para_buscar_comissao.append(id_colab_int)
                 colab_doc = db.colaboradores.find_one({'id_colaborador': id_colab_int}, {'nick': 1})
                 info_colaborador = colab_doc.get('nick') if colab_doc else f"ID {id_colab_int}"
                 
             elif id_colaborador_param == 'ALL':
                 # Filtro "TODOS", não adiciona filtro de colaborador
                 info_colaborador = "TODOS"
+                # --- Otimização: Busca comissões de TODOS ---
+                todos_colabs = db.colaboradores.find({}, {'id_colaborador': 1, 'comissao': 1})
+                for c in todos_colabs:
+                    taxa = c.get('comissao')
+                    if isinstance(taxa, (int, float)):
+                        comissao_map[c['id_colaborador']] = taxa
             
-        # --- 4. Execução da Consulta (Find) ---
+        # 4. Otimização: Busca comissões (se não for "TODOS")
+        if colab_ids_para_buscar_comissao:
+             colab_docs = db.colaboradores.find(
+                 {'id_colaborador': {'$in': colab_ids_para_buscar_comissao}},
+                 {'id_colaborador': 1, 'comissao': 1}
+             )
+             for colab_doc in colab_docs:
+                 if colab_doc:
+                     taxa = colab_doc.get('comissao')
+                     if isinstance(taxa, (int, float)):
+                         comissao_map[colab_doc['id_colaborador']] = taxa
+                 
+        # 5. Execução da Consulta (Find)
         vendas_cursor = db[nome_colecao_venda].find(query_filter).sort('data_venda', pymongo.DESCENDING)
         
         for venda in vendas_cursor:
-            # Converte valores para float
+            # --- Cálculo da Comissão (DETALHADO) ---
             venda['valor_total_float'] = safe_float(venda.get('valor_total'))
+            colab_id = venda.get('id_colaborador')
+            taxa_comissao = comissao_map.get(colab_id, default_comissao) # Pega do mapa ou usa o padrão
+            venda['valor_comissao_float'] = (venda['valor_total_float'] * taxa_comissao) / 100.0
+            # --- Fim do Cálculo ---
             vendas_detalhadas.append(venda)
             
         if not vendas_detalhadas:
@@ -2017,12 +2178,170 @@ def consulta_vendas_detalhes():
                            g=g,
                            error=error,
                            vendas=vendas_detalhadas,
-                           info_evento=info_evento,
+                           info_evento=info_evento_nome, # Nome do evento
+                           info_evento_id=info_evento_id, # <-- ID DO EVENTO ADICIONADO
                            info_colaborador=info_colaborador)
 
-# app.py
-# (Lembre-se de manter os imports 'Response' e 'io' no topo do arquivo)
 
+# --- ROTA DE REIMPRESSÃO (TXT) ---
+@app.route('/reimprimir_comprovante_txt', methods=['POST'])
+@login_required
+def reimprimir_comprovante_txt():
+    """
+    Gera o texto (TXT) de um comprovante para "Venda Única" ou "Vendas Cliente"
+    e retorna como JSON para ser copiado pela área de transferência.
+    """
+    db = g.db
+    if not g.db_status:
+        return jsonify({'status': 'error', 'message': 'DB Offline'})
+
+    try:
+        # 1. Coletar dados da requisição AJAX
+        data = request.json
+        tipo_reimpressao = data.get('tipo_reimpressao') # 'unica' ou 'cliente'
+        id_venda_str = data.get('id_venda')           # Ex: "V00123"
+        id_evento_int = int(data.get('id_evento'))
+        id_cliente_int = int(data.get('id_cliente'))
+        
+        # 2. Buscar dados globais (do evento e parâmetros)
+        evento = db.eventos.find_one({'id_evento': id_evento_int})
+        if not evento:
+            return jsonify({'status': 'error', 'message': 'Evento não encontrado'})
+
+        http_apk = g.parametros_globais.get('http_apk', '')
+        nome_sala = g.parametros_globais.get('nome_sala', '')
+        data_evento_str = evento.get('data_evento', 'N/A')
+        hora_evento_str = evento.get('hora_evento', 'N/A')
+        data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
+        
+        nome_colecao_venda = f"vendas{id_evento_int}"
+        
+        # 3. Preparar variáveis
+        receipt_html = "" # O comprovante formatado
+        link_periodos = "" # O string de períodos para o link
+        
+        # --- LÓGICA PARA VENDA ÚNICA ---
+        if tipo_reimpressao == 'unica':
+            venda = db[nome_colecao_venda].find_one({'id_venda': id_venda_str})
+            if not venda:
+                return jsonify({'status': 'error', 'message': 'Venda não encontrada'})
+            
+            # Formata os períodos (Usamos tags <br> e <strong> que serão limpas depois)
+            periodo_principal = f"   > {venda['numero_inicial']} a {venda['numero_final']}<br>"
+            periodo_adicional = ""
+            
+            link_periodos = f"&periodo={venda['numero_inicial']},{venda['numero_final']}"
+            
+            if venda.get('numero_inicial2', 0) > 0:
+                periodo_adicional = f"    > {venda['numero_inicial2']} a {venda['numero_final2']}<br>"
+                link_periodos += f"&periodo={venda['numero_inicial2']},{venda['numero_final2']}"
+
+            receipt_html = (
+                f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
+                f"  {nome_sala}<br>"
+                f"     >  {venda['id_venda']}  < <br>"
+                f"----------------------------<br>"
+                f"Cliente: <strong>{venda['nome_cliente']}</strong><br>"
+                f"Evento: {evento['descricao']}<br>"
+                f"<strong>Data: {data_evento_formatada} às {hora_evento_str}</strong><br>"
+                f"Colaborador:{venda['id_colaborador']}-{venda['nick_colaborador']}<br>"
+                f"----------------------------<br>"
+                f"Unidades Compradas: <strong>{venda['quantidade_unidades']}<strong><br>"
+                f"     (Cartelas: {venda['quantidade_cartelas']})<br>"
+                f"<strong> >  Período de Cartelas  <<strong><br>"
+                f"{periodo_principal}"
+                f"{periodo_adicional}"
+                f"  VALOR: R$ {safe_float(venda['valor_total']):.2f}<br>"
+            )
+
+        # --- LÓGICA PARA VENDAS DO CLIENTE ---
+        elif tipo_reimpressao == 'cliente':
+            vendas_cliente = list(db[nome_colecao_venda].find(
+                {'id_cliente': id_cliente_int}
+            ).sort('numero_inicial', 1))
+            
+            if not vendas_cliente:
+                return jsonify({'status': 'error', 'message': 'Nenhuma venda encontrada para este cliente no evento.'})
+
+            nome_cliente = vendas_cliente[0]['nome_cliente']
+            
+            total_unidades = 0
+            total_cartelas = 0
+            total_valor = 0.0
+            periodos_html_list = []
+            
+            for venda in vendas_cliente:
+                total_unidades += venda['quantidade_unidades']
+                total_cartelas += venda['quantidade_cartelas']
+                total_valor += safe_float(venda['valor_total'])
+                
+                periodos_html_list.append(f"   > {venda['numero_inicial']} a {venda['numero_final']}<br>")
+                link_periodos += f"&periodo={venda['numero_inicial']},{venda['numero_final']}"
+                
+                if venda.get('numero_inicial2', 0) > 0:
+                    periodos_html_list.append(f"    > {venda['numero_inicial2']} a {venda['numero_final2']}<br>")
+                    link_periodos += f"&periodo={venda['numero_inicial2']},{venda['numero_final2']}"
+
+            todos_periodos_html = "".join(periodos_html_list)
+
+            receipt_html = (
+                f"<strong>🧾 COMPROVANTE CLIENTE</strong><br>"
+                f"  {nome_sala}<br>"
+                f"     >  Resumo do Cliente  < <br>"
+                f"----------------------------<br>"
+                f"Cliente: <strong>{nome_cliente}</strong> (ID: {id_cliente_int})<br>"
+                f"Evento: {evento['descricao']}<br>"
+                f"<strong>Data: {data_evento_formatada} às {hora_evento_str}</strong><br>"
+                f"Gerado por: {session.get('nick', 'N/A')}<br>"
+                f"----------------------------<br>"
+                f"Total Unidades: <strong>{total_unidades}<strong><br>"
+                f"     (Total Cartelas: {total_cartelas})<br>"
+                f"<strong> >  Períodos Adquiridos  <<strong><br>"
+                f"{todos_periodos_html}"
+                f"  VALOR TOTAL: R$ {total_valor:.2f}<br>"
+            )
+
+        else:
+            return jsonify({'status': 'error', 'message': 'Tipo de reimpressão inválido.'})
+        
+        # 4. Montar o Link Final
+        if link_periodos:
+            # Substitui o PRIMEIRO '&' por '?'
+            link_periodos = link_periodos.replace('&', '?', 1) 
+        
+        # O 'http_apk' não deve ter '<strong>' no link final
+        link_final_limpo = f"{http_apk}?idrodada={id_evento_int}{link_periodos}"
+        receipt_html += f"<br><strong> {link_final_limpo} </strong>"
+
+        # --- 6. VERSÃO TXT (A ÚNICA QUE SERÁ ENVIADA) ---
+        def clean_html_to_txt(html_str):
+            # Substitui <br> por quebra de linha
+            txt = re.sub(r'<br\s*/?>', '\n', html_str, flags=re.IGNORECASE)
+            # Remove todas as outras tags HTML
+            txt = re.sub(r'<[^>]+>', '', txt)
+            # Decodifica entidades HTML (como &gt;)
+            txt = html.unescape(txt)
+            # Remove espaços extras no início/fim de cada linha
+            txt_limpo = '\n'.join([linha.strip() for linha in txt.split('\n')])
+            return txt_limpo.strip()
+
+        receipt_text = clean_html_to_txt(receipt_html)
+
+        return jsonify({
+            'status': 'success',
+            'receipt_text': receipt_text # Envia a versão TXT limpa
+        })
+
+    except Exception as e:
+        print(f"Erro ao reimprimir comprovante: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': f'Erro interno: {e}'})
+
+# --- FIM DA NOVA ROTA ---
+
+
+# --- ROTA GERAR LISTA (DOWNLOAD TXT) ---
 @app.route('/gerar_lista_vendas')
 @login_required
 def gerar_lista_vendas():
@@ -2109,26 +2428,21 @@ def gerar_lista_vendas():
             return redirect(redirect_url)
 
         # --- 6. Otimização (Abordagem "Map") ---
-        # 6a. Pega todos os IDs de cliente únicos da lista de vendas
         cliente_ids_set = {v.get('id_cliente') for v in lista_vendas if v.get('id_cliente')}
         
-        # 6b. Faz UMA ÚNICA consulta ao DB para pegar todos esses clientes
         clientes_cursor = db.clientes.find(
             {'id_cliente': {'$in': list(cliente_ids_set)}},
             {'id_cliente': 1, 'telefone': 1, 'cidade': 1} # Pega só os campos extras
         )
         
-        # 6c. Cria um "mapa" (dicionário) para busca rápida em memória
         clientes_map = {c['id_cliente']: c for c in clientes_cursor}
         # --- Fim da Otimização ---
 
         # 7. Escreve as Linhas de Venda
         contagem_linhas = 0
         for venda in lista_vendas:
-            
-            # Pega os dados extras do cliente usando o "map"
             id_cliente = venda.get('id_cliente')
-            cliente_info = clientes_map.get(id_cliente, {}) # Padrão é um dict vazio
+            cliente_info = clientes_map.get(id_cliente, {})
             
             line_venda = (
                 f"{venda.get('numero_inicial', 0)}!"
@@ -2139,7 +2453,6 @@ def gerar_lista_vendas():
                 f"{venda.get('nome_cliente', 'N/A')}!"
                 f"{venda.get('id_colaborador', 'N/A')}!"
                 f"{venda.get('nick_colaborador', 'N/A')}!"
-                # --- NOVOS CAMPOS DO CLIENTE ---
                 f"{cliente_info.get('telefone', 'N/A')}!"
                 f"{cliente_info.get('cidade', 'N/A')}\n"
             )
@@ -2163,10 +2476,6 @@ def gerar_lista_vendas():
 
 if __name__ == '__main__':
     # Para desenvolvimento local apenas
-    # Em produção, use Gunicorn via Dockerfile
-    # Comando: gunicorn -w 4 -b 0.0.0.0:8080 app:app
-
-    # Verifica se NÃO está em produção
     if os.environ.get('FLASK_ENV') != 'production':
         app.run(debug=True, host='0.0.0.0', port=5001)
     else:

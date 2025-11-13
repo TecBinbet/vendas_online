@@ -8,10 +8,10 @@
 </head>
 <body>
     <div class="container">
-        <h4 class="text-sm -mb-2">Operadorª: {{ logado }} </h4>
+        <h4 class="text-sm mt-2">Olá, {{ logado }} </h4>
         <h2>🎯 Menu de Operações</h2>
         <a href="{{ url_for('nova_venda') }}" class="menu-item menu-item-venda">⭐ Nova Venda</a>
-        <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" class="menu-item">🗓️ Consulta de Eventos</a>
+        <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" class="menu-item">🗓️ Consulta de Eventos Ativos</a>
         <a href="{{ url_for('consulta_vendas') }}" class="menu-item">
              <span class="emoji">📊</span>
              <span class="menu-text">Consultar Vendas</span>
@@ -20,7 +20,7 @@
         <a href="{{ url_for('cadastro_cliente', view='novo', next='menu_operacoes') }}" class="menu-item">👥 Cadastro de Clientes</a>
         
         {% if nivel >= 3 %} 
-            <hr>
+            <hr class="my-0">
             <a href="{{ url_for('cadastro_evento', view='listar') }}" class="menu-item gerencial-item">🗓️ Cadastro de Eventos</a>
             <a href="{{ url_for('consulta_status_eventos', mode='detailed') }}" class="menu-item gerencial-item">💰 Status de Vendas dos Eventos</a>
             <a href="{{ url_for('cadastro_colaborador', view='listar') }}" class="menu-item gerencial-item">🛠️ Cadastro de Colaboradores</a>
