@@ -1023,20 +1023,21 @@ def nova_venda():
 @app.route('/processar_venda', methods=['POST'])
 @login_required
 def processar_venda():
-    """Processo Crítico de Venda - Aplica atomicidade e grava no MongoDB."""
-
-    # --- 1. LEITURA E VALIDAÇÃO INICIAL ---
+    """
+    Processo Crítico de Venda - ATUALIZADO para incluir todos os períodos
+    do cliente no comprovante e no link final.
+    """
+    db = g.db
     
-    # CRÍTICO PARA LOGS: Coleta os dados crus PRIMEIRO para o prefixo
+    # --- 1. LEITURA E VALIDAÇÃO INICIAL ---
     id_evento_string = request.form.get('id_evento') 
     id_cliente_final_str = request.form.get('id_cliente_final') 
     quantidade_str = request.form.get('quantidade', '0')
-
-    # --- NOVO: Prefixo de Log para esta requisição ---
-    # Isso nos permite rastrear UMA venda específica no meio de muitas.
+    
     log_prefix = f"[VENDA REQ_COLAB:{session.get('nick', 'N/A')}_CLI:{id_cliente_final_str}_QTD:{quantidade_str}]"
     
     if not g.db_status:
+        # ... (código de erro de DB Offline) ...
         error_redirect_kwargs = {
             'id_evento': id_evento_string,
             'id_cliente_busca': f"CLI{id_cliente_final_str}" if id_cliente_final_str else '',
@@ -1044,14 +1045,12 @@ def processar_venda():
         }
         return redirect(url_for('nova_venda', **error_redirect_kwargs))
 
-    db = g.db
-    
     try:
         id_cliente_final = int(id_cliente_final_str)
         quantidade = int(quantidade_str)
         if quantidade <= 0: raise ValueError("Quantidade deve ser positiva")
     except (TypeError, ValueError) as e:
-        print(f"{log_prefix} LOG X (FALHA): Erro de tipo nos dados. Cliente='{id_cliente_final_str}', Qtd='{quantidade_str}'. Erro: {e}")
+        # ... (código de erro de dados inválidos) ...
         error_redirect_kwargs = {
             'id_evento': id_evento_string, 
             'error': f"Dados inválidos: {e}",
@@ -1061,15 +1060,14 @@ def processar_venda():
 
     id_evento_mongo = try_object_id(id_evento_string)
     if not id_evento_mongo:
-        print(f"{log_prefix} LOG X (FALHA): ID de Evento Mongo inválido.")
         return redirect(url_for('nova_venda', error="Dados inválidos: Evento não selecionado."))
     
-    # 2. Busca Evento e Cliente
+    # --- 2. Busca Evento e Cliente ---
     selected_event = db.eventos.find_one({'_id': id_evento_mongo})
     cliente_doc = db.clientes.find_one({"id_cliente": id_cliente_final})
     
     if not selected_event or not cliente_doc:
-        print(f"{log_prefix} LOG X (FALHA): Evento ou Cliente não encontrado.")
+        # ... (código de erro de evento/cliente não encontrado) ...
         error_redirect_kwargs = {
             'id_evento': id_evento_string,
             'error': "Evento ou Cliente não encontrado no sistema.",
@@ -1081,73 +1079,73 @@ def processar_venda():
     id_evento_int_para_controle = selected_event.get('id_evento') 
     limite_maximo_cartelas = int(selected_event.get('numero_maximo', 72000))
     if not isinstance(id_evento_int_para_controle, int):
-        print(f"{log_prefix} LOG X (FALHA): ID sequencial (int) do evento não encontrado.")
         error_redirect_kwargs = { 'error': "Erro: ID sequencial do evento (int) não encontrado." }
         return redirect(url_for('nova_venda', **error_redirect_kwargs))
 
     valor_unitario = safe_float(selected_event.get('valor_de_venda', 0.00))
     unidade_de_venda = int(selected_event.get('unidade_de_venda', 1))
 
-    # Cálculo da Venda
-    valor_total = valor_unitario * quantidade
-    quantidade_cartelas = quantidade * unidade_de_venda
+    # Cálculo da Venda Atual
+    valor_total_atual = valor_unitario * quantidade
+    quantidade_cartelas_atual = quantidade * unidade_de_venda
     colaborador_id = session.get('id_colaborador', 'N/A')
     nick_colaborador = session.get('nick', 'Colaborador') 
+    nome_colecao_venda = f"vendas{str(id_evento_int_para_controle).strip()}"
 
     # --- 3. ETAPA CRÍTICA: LOCK E TRANSAÇÃO ---
-    id_evento_para_controle = id_evento_int_para_controle 
+    
+    # Variáveis que serão preenchidas dentro do lock
+    id_venda_formatado = None
+    numero_inicial_atual = None
+    numero_final_atual = None
+    numero_inicial2_atual = 0 # Default 0
+    numero_final2_atual = 0 # Default 0
     
     print(f"{log_prefix} LOG 2: Tentando adquirir 'venda_lock' (timeout=8s)...")
-        
+    
     if venda_lock.acquire(timeout=8): 
         print(f"{log_prefix} LOG 3: 'venda_lock' ADQUIRIDO.")
         try:
             # 3a. Geração Atômica do ID da Venda
-            print(f"{log_prefix} LOG 3A: Gerando ID da Venda (get_next_global_sequence)...")
+            print(f"{log_prefix} LOG 3A: Gerando ID da Venda...")
             novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
             if novo_id_venda_int is None:
                 raise Exception("Falha ao gerar o ID sequencial da venda.")
-            id_venda_formatado = f"V{novo_id_venda_int:05d}"
-            print(f"{log_prefix} ... ID Venda gerado: {id_venda_formatado}")
+            id_venda_formatado = f"V{novo_id_venda_int:05d}" # Salva na variável externa
 
             # 3b. Geração Atômica dos Números de Bilhetes/Cartelas
-            print(f"{log_prefix} LOG 3B: Gerando IDs de Bilhetes (get_next_bilhete_sequence)...")
+            print(f"{log_prefix} LOG 3B: Gerando IDs de Bilhetes...")
             numero_inicial_evento = int(selected_event.get('numero_inicial', 1))
-            numero_inicial = get_next_bilhete_sequence(db, 
-                                                       id_evento_para_controle, 
+            numero_inicial_atual = get_next_bilhete_sequence(db, 
+                                                       id_evento_int_para_controle, 
                                                        'inicial_proxima_venda', 
-                                                       quantidade_cartelas,
+                                                       quantidade_cartelas_atual,
                                                        limite_maximo_cartelas)
-            if numero_inicial is None:
+            if numero_inicial_atual is None:
                 raise Exception("Falha ao obter o número inicial do bilhete/cartela.")
 
-            if numero_inicial == 1: 
-                numero_inicial = numero_inicial_evento
+            if numero_inicial_atual == 1: 
+                numero_inicial_atual = numero_inicial_evento
                 db.controle_venda.update_one(
-                    {'id_evento': id_evento_para_controle},
-                    {'$set': {'inicial_proxima_venda': numero_inicial + quantidade_cartelas}}
+                    {'id_evento': id_evento_int_para_controle},
+                    {'$set': {'inicial_proxima_venda': numero_inicial_atual + quantidade_cartelas_atual}}
                 )
 
-            numero_final = numero_inicial + quantidade_cartelas - 1
-            # ... (cálculo de rollover, numero_inicial2, numero_final2, etc.) ...
-            numero_final2 = 0
-            numero_inicial2 = 0  
-            periodo_adicional = "<br>"
-            if numero_final > limite_maximo_cartelas:
-                numero_inicial2 = 1
-                numero_final2 = numero_final - limite_maximo_cartelas
-                numero_final = limite_maximo_cartelas
-                periodo_adicional = (
-                        f"    <span style='font-size: 1.4rem; color: #0047AB;'><strong>{numero_inicial2} a {numero_final2}</strong></span><br>"
-                    )
-            print(f"{log_prefix} ... IDs Bilhete gerados: {numero_inicial} a {numero_final} (e {numero_inicial2} a {numero_final2})")
+            numero_final_atual = numero_inicial_atual + quantidade_cartelas_atual - 1
+            
+            # 3c. Lógica de Rollover
+            if numero_final_atual > limite_maximo_cartelas:
+                numero_inicial2_atual = 1
+                numero_final2_atual = numero_final_atual - limite_maximo_cartelas
+                numero_final_atual = limite_maximo_cartelas
+            
+            print(f"{log_prefix} ... IDs Bilhete gerados: {numero_inicial_atual}-{numero_final_atual}...")
 
-            # 4. Gravação Final do Registro de Venda
+            # 4. Montagem do Registro de Venda (Apenas a venda ATUAL)
             registro_venda = {
-                # ... (seus campos de registro) ...
                 "id_venda": id_venda_formatado,
                 "id_evento_ObjectId": id_evento_mongo, 
-                "id_evento": id_evento_para_controle, 
+                "id_evento": id_evento_int_para_controle, 
                 "descricao_evento": selected_event.get('descricao'),
                 "id_cliente": id_cliente_final, 
                 "nome_cliente": cliente_doc.get('nome_cliente'),
@@ -1155,75 +1153,30 @@ def processar_venda():
                 "nick_colaborador": nick_colaborador,
                 "data_venda": datetime.utcnow(),
                 "quantidade_unidades": quantidade,
-                "quantidade_cartelas": quantidade_cartelas,
-                "numero_inicial": numero_inicial,
-                "numero_final": numero_final,
-                "numero_inicial2": numero_inicial2,
-                "numero_final2": numero_final2,
+                "quantidade_cartelas": quantidade_cartelas_atual,
+                "numero_inicial": numero_inicial_atual,
+                "numero_final": numero_final_atual,
+                "numero_inicial2": numero_inicial2_atual,
+                "numero_final2": numero_final2_atual,
                 "valor_unitario": Decimal128(str(valor_unitario)), 
-                "valor_total": Decimal128(str(valor_total))
+                "valor_total": Decimal128(str(valor_total_atual))
             }
             
             # 5. Atualiza data da última compra do cliente
-            print(f"{log_prefix} LOG 3C: Atualizando cliente {id_cliente_final} (update_one)...")
+            print(f"{log_prefix} LOG 3C: Atualizando cliente {id_cliente_final}...")
             db.clientes.update_one(
                 {"id_cliente": id_cliente_final}, 
                 {"$set": {"data_ultimo_compra": datetime.utcnow()}}
             )
-            print(f"{log_prefix} ... Cliente atualizado.")
 
             # 6. Inserção no Banco de Dados
-            nome_colecao_venda = f"vendas{str(id_evento_para_controle).strip()}"
-            print(f"{log_prefix} LOG 3D: Inserindo venda na coleção '{nome_colecao_venda}' (insert_one)...")
+            print(f"{log_prefix} LOG 3D: Inserindo venda na coleção '{nome_colecao_venda}'...")
             db[nome_colecao_venda].insert_one(registro_venda)
             print(f"{log_prefix} ... Venda inserida.")
             
-            # 7. Pós-Venda (Comprovante)
-            # ... (código para montar o success_msg) ...
-            data_evento_str = selected_event.get('data_evento', 'N/A')
-            hora_evento_str = selected_event.get('hora_evento', 'N/A')
-            http_apk = g.parametros_globais.get('http_apk', '')
-            data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
-            nome_sala  = g.parametros_globais.get('nome_sala', '')
-            
-            # --- Link APK ---
-            link_periodos = f"&periodo={numero_inicial},{numero_final}"
-            if numero_inicial2 > 0:
-                link_periodos += f"&periodo={numero_inicial2},{numero_final2}"
-            link_periodos = link_periodos.replace('&', '?', 1) # Troca o primeiro & por ?
-            link_final = f"<strong> {http_apk}?idrodada={id_evento_int_para_controle}{link_periodos} </strong>"
-            
-            success_msg = (
-                f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
-                f"  <span style='font-size: 1.2rem; color: #B91C1C;'>{nome_sala}</span><br>"
-                f"</strong>     >  {id_venda_formatado}  < </strong><br>"
-                f"----------------------------<br>"
-                f"Cliente: <strong>{cliente_doc.get('nick')}</strong><br>"
-                f"Evento: {selected_event.get('descricao')}<br>"
-                f"<strong>Data: {data_evento_formatada} às {hora_evento_str}</strong><br>"
-                f"Colaborador:{colaborador_id}-{nick_colaborador}<br>"
-                f"----------------------------<br>"
-                f"Unidades Compradas: <strong>{quantidade}<strong><br>"
-                f"     <strong>(Cartelas: {quantidade_cartelas})<strong><br>"
-                f"<strong> >  Período de Cartelas  <<strong><br>"
-                f"   <span style='font-size: 1.4rem; color: #0047AB;'><strong>{numero_inicial} a {numero_final}</strong></span><br>"
-                f"{periodo_adicional}"
-                f"  VALOR:<span style='font-size: 1.2rem; color: #B91C1C;'>R$ {valor_total:.2f}</span><br>"
-                f"<br>"
-                f"{link_final}"
-            )
-            
-            print(f"{log_prefix} LOG 4: Gravação concluída. Preparando redirect de SUCESSO.")
-            
-            session['success_message'] = success_msg 
-            redirect_kwargs = {
-                'id_evento': id_evento_string,
-                'quantidade': 1 
-            }
-            return redirect(url_for('nova_venda', **redirect_kwargs))
-
         except Exception as e:
-            # --- LOG DE ERRO ---
+            # --- Se algo falhar DENTRO do lock, libera e retorna o erro ---
+            venda_lock.release()
             print(f"{log_prefix} LOG 5 (ERRO INTERNO): Erro crítico durante a transação: {e}")
             error_redirect_kwargs = {
                 'id_evento': id_evento_string,
@@ -1234,13 +1187,14 @@ def processar_venda():
             return redirect(url_for('nova_venda', **error_redirect_kwargs))
             
         finally:
-            print(f"{log_prefix} LOG FIM: Liberando 'venda_lock'.")
-            venda_lock.release()
+            # Garante que o lock seja liberado
+            if venda_lock.locked():
+                 print(f"{log_prefix} LOG FIM (LOCK): Liberando 'venda_lock'.")
+                 venda_lock.release()
             
     else:
-        # --- LOG DE TIMEOUT ---
+        # --- Se o lock NÃO FOI ADQUIRIDO (Timeout) ---
         print(f"{log_prefix} LOG 6 (TIMEOUT): 'venda_lock' não adquirido após 8s. (Sistema ocupado)")
-        
         error_redirect_kwargs = {
             'id_evento': id_evento_string,
             'error': "Sistema muito ocupado. Por favor, tente novamente em alguns segundos.",
@@ -1248,6 +1202,117 @@ def processar_venda():
             'quantidade': quantidade
         }
         return redirect(url_for('nova_venda', **error_redirect_kwargs))
+
+    # --- FIM DO BLOCO DE LOCK ---
+
+    # --- 7. PÓS-VENDA (FORA DO LOCK): Montagem do Comprovante Completo ---
+    # Se chegamos aqui, a venda foi gravada e o lock foi liberado.
+    
+    print(f"{log_prefix} LOG 4: Venda gravada. Montando comprovante completo...")
+    
+    try:
+        # 7a. Busca TODOS os períodos deste cliente para este evento
+        vendas_cliente_cursor = db[nome_colecao_venda].find(
+            {'id_cliente': id_cliente_final}
+        ).sort('data_venda', pymongo.ASCENDING) # Ordena do mais antigo para o mais novo
+        
+        lista_periodos_antigos_html = []
+        periodo_atual_html = ""
+        link_periodos_completos = "" # Para o link
+        
+        total_unidades_cliente = 0
+        total_cartelas_cliente = 0
+        total_valor_cliente = 0.0
+
+        for venda in vendas_cliente_cursor:
+            # 7b. Soma os totais do cliente
+            total_unidades_cliente += venda['quantidade_unidades']
+            total_cartelas_cliente += venda['quantidade_cartelas']
+            total_valor_cliente += safe_float(venda['valor_total'])
+            
+            # 7c. Constrói o link (para TODOS os períodos)
+            link_periodos_completos += f"&periodo={venda['numero_inicial']},{venda['numero_final']}"
+            if venda.get('numero_inicial2', 0) > 0:
+                link_periodos_completos += f"&periodo={venda['numero_inicial2']},{venda['numero_final2']}"
+            
+            # 7d. Constrói o HTML do recibo
+            periodo_str = f" > {venda['numero_inicial']} a {venda['numero_final']}<br>"
+            if venda.get('numero_inicial2', 0) > 0:
+                periodo_str += f" > {venda['numero_inicial2']} a {venda['numero_final2']}<br>"
+
+            # Compara se esta venda é a que acabamos de fazer
+            if venda['id_venda'] == id_venda_formatado:
+                # É a venda atual: destaca
+                periodo_atual_html = (
+                    f"<strong> > PERÍODO ATUAL (Qtd: {quantidade}) <strong><br>"
+                    f"<span style='font-size: 1.4rem; color: #0047AB;'><strong>{periodo_str}</strong></span>"
+                )
+            else:
+                # É uma venda antiga: fonte menor
+                lista_periodos_antigos_html.append(
+                    f"<span style='font-size: 0.9rem; color: #555;'>{periodo_str}</span>"
+                )
+
+        periodos_anteriores_html = "".join(lista_periodos_antigos_html)
+
+        # 7e. Monta o Link Final
+        #if link_periodos_completos:
+            # Troca o primeiro '&' por '?'
+            #link_periodos_completos = link_periodos_completos.replace('&', '?', 1) 
+        
+        http_apk = g.parametros_globais.get('http_apk', '')
+        link_final_limpo = f"{http_apk}?idrodada={id_evento_int_para_controle}{link_periodos_completos}"
+
+        # 7f. Monta o success_msg final
+        nome_sala = g.parametros_globais.get('nome_sala', '')
+        data_evento_str = selected_event.get('data_evento', 'N/A')
+        hora_evento_str = selected_event.get('hora_evento', 'N/A')
+        data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
+        
+        success_msg = (
+            f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
+            f"  <span style='font-size: 1.2rem; color: #B91C1C;'>{nome_sala}</span><br>"
+            f"</strong>     >  {id_venda_formatado}  < </strong><br>"
+            f"----------------------------<br>"
+            f"Cliente: <strong>{cliente_doc.get('nick')}</strong><br>"
+            f"Evento: {selected_event.get('descricao')}<br>"
+            f"<strong>Data: {data_evento_formatada} às {hora_evento_str}</strong><br>"
+            f"Colaborador:{colaborador_id}-{nick_colaborador}<br>"
+            f"----------------------------<br>"
+            f"<strong> > Períodos Anteriores <<strong><br>"
+            f"{periodos_anteriores_html}"
+            f"----------------------------<br>"
+            f"{periodo_atual_html}"
+            f"----------------------------<br>"
+            f"Total Unidades: <strong>{total_unidades_cliente}<strong><br>"
+            f"Total Cartelas: <strong>{total_cartelas_cliente}<strong><br>"
+            f"  VALOR TOTAL: <span style='font-size: 1.2rem; color: #B91C1C;'>R$ {total_valor_cliente:.2f}</span><br>"
+            f"<br>"
+            f"CLIQUE NO <strong>LINK</strong> ABAIXO PARA<br>"
+            f"    ACESSAR SUAS CARTELAS 📱<br>"
+            f"<br>"
+            f"<strong> {link_final_limpo} </strong>"
+        )
+        
+        print(f"{log_prefix} LOG 5: Comprovante completo gerado.")
+        
+        # 8. Redirecionamento de Sucesso
+        session['success_message'] = success_msg 
+        redirect_kwargs = {
+            'id_evento': id_evento_string,
+            'quantidade': 1 
+        }
+        return redirect(url_for('nova_venda', **redirect_kwargs))
+
+    except Exception as e:
+        # Se algo falhar FORA do lock (na montagem do recibo)
+        print(f"{log_prefix} LOG 7 (ERRO PÓS-VENDA): Erro ao montar comprovante: {e}")
+        # A venda foi salva, mas o comprovante falhou. Envia um sucesso genérico.
+        session['success_message'] = (
+            f"<strong>VENDA {id_venda_formatado} GRAVADA!</strong><br>"
+            f"Ocorreu um erro ao gerar o comprovante completo, mas a venda foi registrada."
+        )
+        return redirect(url_for('nova_venda', id_evento=id_evento_string))
 
 
 # --- ROTAS DE CADASTRO DE CLIENTE ---
@@ -2238,14 +2303,14 @@ def reimprimir_comprovante_txt():
 
             receipt_html = (
                 f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
-                f"  {nome_sala}<br>"
+                f"      {nome_sala}<br>"
                 f"     >  {venda['id_venda']}  < <br>"
-                f"----------------------------<br>"
+                f"--------------------------------------------------------<br>"
                 f"Cliente: <strong>{venda['nome_cliente']}</strong><br>"
                 f"Evento: {evento['descricao']}<br>"
                 f"<strong>Data: {data_evento_formatada} às {hora_evento_str}</strong><br>"
                 f"Colaborador:{venda['id_colaborador']}-{venda['nick_colaborador']}<br>"
-                f"----------------------------<br>"
+                f"--------------------------------------------------------<br>"
                 f"Unidades Compradas: <strong>{venda['quantidade_unidades']}<strong><br>"
                 f"     (Cartelas: {venda['quantidade_cartelas']})<br>"
                 f"<strong> >  Período de Cartelas  <<strong><br>"
@@ -2286,28 +2351,32 @@ def reimprimir_comprovante_txt():
 
             receipt_html = (
                 f"<strong>🧾 COMPROVANTE CLIENTE</strong><br>"
-                f"  {nome_sala}<br>"
-                f"     >  Resumo do Cliente  < <br>"
-                f"----------------------------<br>"
-                f"Cliente: <strong>{nome_cliente}</strong> (ID: {id_cliente_int})<br>"
+                f".         {nome_sala}<br>"
+                f".        Resumo do Cliente <br>"
+                f" <strong>{nome_cliente}</strong> (ID: {id_cliente_int})<br>"
+                f"--------------------------------------------------------<br>"
                 f"Evento: {evento['descricao']}<br>"
                 f"<strong>Data: {data_evento_formatada} às {hora_evento_str}</strong><br>"
                 f"Gerado por: {session.get('nick', 'N/A')}<br>"
-                f"----------------------------<br>"
-                f"Total Unidades: <strong>{total_unidades}<strong><br>"
-                f"     (Total Cartelas: {total_cartelas})<br>"
+                f"--------------------------------------------------------<br>"
+                f".       Total Unidades: <strong>{total_unidades}<strong><br>"
+                f".       (Total Cartelas: {total_cartelas})<br>"
                 f"<strong> >  Períodos Adquiridos  <<strong><br>"
                 f"{todos_periodos_html}"
                 f"  VALOR TOTAL: R$ {total_valor:.2f}<br>"
+                f"<br>" 
+                f"<br>"                
+                f">CLIQUE NO <strong>LINK</strong> ABAIXO PARA<br>"
+                f"    ACESSAR SUAS CARTELAS 📱<br>"
             )
 
         else:
             return jsonify({'status': 'error', 'message': 'Tipo de reimpressão inválido.'})
         
         # 4. Montar o Link Final
-        if link_periodos:
+        #if link_periodos:
             # Substitui o PRIMEIRO '&' por '?'
-            link_periodos = link_periodos.replace('&', '?', 1) 
+            #link_periodos = link_periodos.replace('&', '?', 1) 
         
         # O 'http_apk' não deve ter '<strong>' no link final
         link_final_limpo = f"{http_apk}?idrodada={id_evento_int}{link_periodos}"
