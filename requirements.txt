@@ -4,4 +4,6 @@ pymongo[srv]
 python-dotenv
 certifi
 bcrypt
+Flask
+fpdf2
 gunicorn  # Servidor WSGI para produção
