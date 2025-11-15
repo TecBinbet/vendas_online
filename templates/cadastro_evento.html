@@ -132,7 +132,7 @@
                     <div class="form-group">
                         <label for="unidade_de_venda" class="required-label">Unidade de Venda (1-6):</label>
                         <input type="number" id="unidade_de_venda" name="unidade_de_venda" required min="1" max="6" class="form-control"
-                               value="{{ evento.get('unidade_de_venda', 1) }}" oninput="calculatePremioTotal()">
+                               value="{{ evento.get('unidade_de_venda', 6) }}" oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
                         <label for="valor_de_venda" class="required-label">Valor da Unidade (R$):</label>
@@ -212,6 +212,20 @@
                                value="{{ evento.get('bola_tope_acumulado', '') }}" 
                                {% if evento.get('premio_acumulado', 0) <= 0 %}disabled{% endif %}>
                     </div>
+
+                    <div class="form-group">
+                        <label for="tipo_de_cartela" class="required-label">Tipo de Cartela:</label>
+                        {% set valor_selecionado = evento.get('tipo_de_cartela', 15) | int %}            
+                        <select id="tipo_de_cartela" name="tipo_de_cartela" required class="form-control">
+                              <option value="15" {% if valor_selecionado == 15 %}selected{% endif %}>
+                                     15 Números
+                              </option>
+                              <option value="25" {% if valor_selecionado == 25 %}selected{% endif %}>
+                                      25 Números
+                              </option>
+                        </select>
+                    </div>
+
                     <div class="form-group">
                          <label for="status">Status (Automático):</label>
                         <input type="text" id="status" name="status" disabled class="form-control bg-gray-100 font-semibold text-red-500"

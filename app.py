@@ -2,7 +2,9 @@
 
 import threading
 import pymongo
-from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify, make_response
+from fpdf import FPDF
+from fpdf.enums import XPos, YPos
 from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 from bson.objectid import ObjectId
@@ -10,6 +12,7 @@ from bson.decimal128 import Decimal128
 from datetime import datetime
 from urllib.parse import quote_plus
 import os
+import io
 import re # Para a busca de clientes
 import bcrypt
 from functools import wraps # Para o decorator login_required
@@ -17,6 +20,7 @@ from datetime import timedelta
 import certifi  # Para certificados SSL
 import html # <-- Importado para a nova rota
 #from passlib.hash import bcrypt # Para hashing de senhas de colaboradores
+
 
 # --- Configuração ---
 app = Flask(__name__)
@@ -52,6 +56,147 @@ venda_lock = threading.Lock()
 cliente_lock = threading.Lock() 
 colaborador_lock = threading.Lock() 
 evento_lock = threading.Lock() # NOVO LOCK para sequência de Eventos
+
+
+class PDF(FPDF):
+    def __init__(self, evento_nome='N/A', colaborador_nome='N/A'):
+        super().__init__(orientation='L', unit='mm', format='A4') # 'L' = Paisagem
+        # Remove acentos para o FPDF (que usa 'latin-1')
+        def clean_text_for_pdf(text):
+            if not text: return "N/A"
+            text = str(text)
+            text = re.sub(r'[áàâãä]', 'a', text, flags=re.IGNORECASE)
+            text = re.sub(r'[éèêë]', 'e', text, flags=re.IGNORECASE)
+            text = re.sub(r'[íìîï]', 'i', text, flags=re.IGNORECASE)
+            text = re.sub(r'[óòôõö]', 'o', text, flags=re.IGNORECASE)
+            text = re.sub(r'[úùûü]', 'u', text, flags=re.IGNORECASE)
+            text = re.sub(r'[ç]', 'c', text, flags=re.IGNORECASE)
+            # Remove caracteres não-latin1
+            return text.encode('latin-1', 'ignore').decode('latin-1')
+
+        self.evento_nome = clean_text_for_pdf(evento_nome)
+        self.colaborador_nome = clean_text_for_pdf(colaborador_nome)
+
+    def header(self):
+        self.set_font('Arial', 'B', 15)
+        self.cell(0, 10, f'Relatorio de Vendas - {self.evento_nome}', 0, 1, 'C')
+        self.set_font('Arial', '', 10)
+        self.cell(0, 5, f"Colaborador: {self.colaborador_nome}", 0, 1, 'C')
+        self.ln(5)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Arial', 'I', 8)
+        self.cell(0, 10, 'Pagina ' + str(self.page_no()) + '/{nb}', 0, 0, 'C')
+
+class PDFCartelas(FPDF):
+    """Classe FPDF customizada para gerar cartelas de Bingo."""
+    
+    def header(self):
+        # Você pode customizar o cabeçalho da página aqui
+        self.set_font('Helvetica', 'B', 12) # 'Arial' -> 'Helvetica'
+        self.cell(0, 10, 'Cartelas de Bingo Geradas pelo Sistema', border=0, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C') # ln=1
+        self.ln(5)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('Helvetica', 'I', 8) # 'Arial' -> 'Helvetica'
+        self.cell(0, 10, 'Pagina ' + str(self.page_no()) + '/{nb}', border=0, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C') # ln=0
+
+    def desenhar_cartela(self, numero_cartela, dados_cartela_2d, pos_x, pos_y):
+        """
+        Desenha uma única cartela 5x5 na posição (x, y) da página.
+        - 'dados_cartela_2d' deve ser uma lista 2D (5 listas de 5 números/strings)
+        """
+        
+        # --- Título da Cartela (Ex: "Cartela N° 0001") ---
+        self.set_xy(pos_x, pos_y)
+        self.set_font('Helvetica', 'B', 12) # 'Arial' -> 'Helvetica'
+        largura_total_cartela = 70 
+        self.cell(largura_total_cartela, 8, f"Cartela N° {numero_cartela:04d}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C') # ln=1
+        
+        # --- Cabeçalho B-I-N-G-O ---
+        self.set_x(pos_x) 
+        self.set_font('Helvetica', 'B', 16) # 'Arial' -> 'Helvetica'
+        self.set_fill_color(220, 220, 220) 
+        
+        cell_width = 14 
+        cell_height_header = 10 
+        
+        self.cell(cell_width, cell_height_header, "B", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True) # ln=0
+        self.cell(cell_width, cell_height_header, "I", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True) # ln=0
+        self.cell(cell_width, cell_height_header, "N", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True) # ln=0
+        self.cell(cell_width, cell_height_header, "G", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True) # ln=0
+        self.cell(cell_width, cell_height_header, "O", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True) # ln=1
+        
+        # --- Números da Cartela ---
+        self.set_font('Helvetica', 'B', 14) # 'Arial' -> 'Helvetica'
+        cell_height_num = 12 
+        
+        for i in range(5): 
+            self.set_x(pos_x) 
+            for j in range(5): 
+                numero = str(dados_cartela_2d[i][j])
+                
+                if numero.upper() == "FREE":
+                    self.set_font('Helvetica', 'B', 12) # 'Arial' -> 'Helvetica'
+                    self.cell(cell_width, cell_height_num, "FREE", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C') # ln=0
+                    self.set_font('Helvetica', 'B', 14) # 'Arial' -> 'Helvetica'
+                else:
+                    self.cell(cell_width, cell_height_num, numero, border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C') # ln=0
+            
+            self.ln(cell_height_num)
+
+# --- FIM DA CLASSE PDF ---
+def buscar_dados_cartela_2d(numero_cartela):
+    """
+    FUNÇÃO PLACEHOLDER: Busca os dados (números) de uma cartela específica.
+    
+    !!!! ATENÇÃO !!!!
+    Você DEVE implementar esta função para ler do seu "arquivo de cartelas".
+    
+    O formato de retorno esperado é uma lista 2D (5x5).
+    
+    Se a cartela 1 for:
+    B  I  N  G  O
+    1 16 31 46 61
+    2 17 32 47 62
+    3 18 FREE 48 63
+    4 19 34 49 64
+    5 20 35 50 65
+    
+    Deveria retornar:
+    [
+        [1, 16, 31, 46, 61],
+        [2, 17, 32, 47, 62],
+        [3, 18, "FREE", 48, 63],
+        [4, 19, 34, 49, 64],
+        [5, 20, 35, 50, 65]
+    ]
+    
+    Vou retornar dados FALSOS (gerados) apenas para o teste.
+    """
+    #print(f"--- [PLACEHOLDER] Buscando dados 2D para cartela {numero_cartela} ---")
+    cartela = []
+    
+    # Simula a geração de uma cartela baseada no seu número
+    # (Substitua isso pela leitura do seu arquivo)
+    b_col = [ (numero_cartela + i) % 15 +  1 for i in range(5) ]
+    i_col = [ (numero_cartela + i) % 15 + 16 for i in range(5) ]
+    n_col = [ (numero_cartela + i) % 15 + 31 for i in range(5) ]
+    g_col = [ (numero_cartela + i) % 15 + 46 for i in range(5) ]
+    o_col = [ (numero_cartela + i) % 15 + 61 for i in range(5) ]
+    
+    # Transpõe os dados para linhas
+    for i in range(5):
+        linha = [b_col[i], i_col[i], n_col[i], g_col[i], o_col[i]]
+        cartela.append(linha)
+        
+    # Adiciona o espaço livre
+    cartela[2][2] = "FREE" 
+    
+    return cartela
+
 
 # --- DECORATOR DE AUTENTICAÇÃO ---
 def login_required(f):
@@ -721,6 +866,12 @@ def gravar_colaborador():
 
         if "chave_pix" in campos_config and chave_pix != confirma_chave_pix:
             raise ValueError("As chaves PIX não conferem.")
+
+        if campos_config.get("nome_colaborador") and nome_colaborador and not nome_colaborador[0].isalpha():
+            raise ValueError("O Nome do Colaborador deve começar com uma letra (não números ou símbolos).")
+
+        if campos_config.get("nick") and nick and not nick[0].isalpha():
+            raise ValueError("O Nick/Apelido deve começar com uma letra (não números ou símbolos).")
             
         # VALIDAÇÃO CRÍTICA DE SENHA (Dinâmica)
         if "senha" in campos_config:
@@ -1439,7 +1590,6 @@ def cadastro_cliente():
     return render_template('cadastro_cliente.html', **context)
 
 
-
 @app.route('/gravar_cliente', methods=['POST'])
 @login_required
 def gravar_cliente():
@@ -1490,7 +1640,14 @@ def gravar_cliente():
         
         if campos_config.get("chave_pix") and not chave_pix:
             raise ValueError("O campo Chave PIX é obrigatório.")
+
+        if campos_config.get("nome_cliente") and nome_cliente and not nome_cliente[0].isalpha():
+            raise ValueError("O Nome do Cliente deve começar com uma letra (não números ou símbolos).")
             
+        if campos_config.get("nick") and nick and not nick[0].isalpha():
+            raise ValueError("O Nick/Apelido deve começar com uma letra (não números ou símbolos).")
+
+        # --- FIM DA NOVA VALIDAÇÃO ---            
         # Validação de CPF (agora dinâmica)
         cpf_limpo = clean_numeric_string(cpf_raw)
         if campos_config.get("cpf") == True: # Se CPF é OBRIGATÓRIO
@@ -1681,24 +1838,42 @@ def cadastro_evento():
     error = request.args.get('error')
     success = request.args.get('success')
 
+    # --- INÍCIO DA CORREÇÃO: Lista de campos que DEVEM ser numéricos ---
+    numeric_float_fields = [
+        'valor_de_venda', 'premio_quadra', 'premio_linha', 'premio_bingo', 
+        'premio_segundobingo', 'premio_acumulado', 'minimo_de_venda', 'premio_total'
+    ]
+    # (Campos Int, como 'bola_tope_acumulado', 'unidade_de_venda', etc., 
+    # também serão convertidos para float pelo safe_float, o que não é um problema para o template)
+    numeric_int_fields = [
+        'unidade_de_venda', 'numero_inicial', 'numero_maximo', 
+        'quantidade_de_linhas', 'bola_tope_acumulado'
+    ]
+    all_numeric_fields = numeric_float_fields  # + numeric_int_fields
+    # --- FIM DA CORREÇÃO ---
+
     # --- INÍCIO DA CORREÇÃO (Lógica de Preenchimento) ---
     if form_data_erro:
         # 2. Se 'form_data_erro' existe, um erro acabou de ocorrer.
-        #    Usamos esses dados para preencher o formulário.
-        #    O HTML (Jinja) já usa a variável 'evento_edicao'.
         evento_edicao = form_data_erro
         
         # Garante que a view ('novo' or 'alterar') esteja correta
         if 'id_evento_edicao' in form_data_erro and form_data_erro['id_evento_edicao']:
              active_view = 'alterar'
-             # Passa o ID de volta para o 'context'
              id_evento_edicao = form_data_erro['id_evento_edicao']
         else:
              active_view = 'novo'
+        
+        # --- NOVO: Converte os dados do formulário de erro (que são strings) para float/int ---
+        for key in all_numeric_fields:
+            if key in evento_edicao:
+                # Usa 'safe_float' para converter a string do formulário de volta para float
+                # A função 'safe_float' lida bem com strings vazias
+                evento_edicao[key] = safe_float(evento_edicao.get(key, 0.0))
+        # --- FIM DA CONVERSÃO DE ERRO ---
              
     elif active_view == 'alterar' and id_evento_edicao and db_status:
         # 3. Se NÃO há 'form_data_erro', é um carregamento normal.
-        #    Buscamos no DB como na sua lógica original.
         try:
             id_evento_int = int(id_evento_edicao)
             evento_edicao = db.eventos.find_one({'id_evento': id_evento_int})
@@ -1710,18 +1885,19 @@ def cadastro_evento():
                 data_evento_db = evento_edicao.get('data_evento') # Ex: "10/11/2025"
                 if data_evento_db and isinstance(data_evento_db, str):
                     try:
-                        # Converte de DD/MM/YYYY para um objeto datetime
                         dt_obj = datetime.strptime(data_evento_db, '%d/%m/%Y')
-                        # Formata de volta para YYYY-MM-DD para o input HTML
                         evento_edicao['data_evento'] = dt_obj.strftime('%Y-%m-%d')
                     except ValueError:
                         pass # Deixa como está se já for YYYY-MM-DD
                 # --- FIM DA CORREÇÃO DA DATA ---
 
-                # Converte todos os Decimal128 para float para o Jinja
-                for key in evento_edicao:
-                    if isinstance(evento_edicao[key], Decimal128):
-                        evento_edicao[key] = safe_float(evento_edicao[key])
+                # --- CORREÇÃO ROBUSTA DE TIPOS NUMÉRICOS ---
+                # Converte todos os campos (Decimal128, int, str) para float
+                for key in all_numeric_fields:
+                    if key in evento_edicao:
+                        evento_edicao[key] = safe_float(evento_edicao.get(key, 0.0))
+                # --- FIM DA CORREÇÃO ---
+
             else:
                  error = f"Evento ID {id_evento_int} não encontrado para edição."
                  active_view = 'listar'
@@ -1740,7 +1916,6 @@ def cadastro_evento():
             
             # Lógica de Consulta/Listagem
             if active_view == 'listar':
-                # Ordena pela data do evento mais próxima
                 eventos_cursor = db.eventos.find({}).sort([("data_evento", pymongo.ASCENDING), ("hora_evento", pymongo.ASCENDING)])
                 eventos_lista = list(eventos_cursor)
             
@@ -1766,12 +1941,16 @@ def cadastro_evento():
             print(f"Erro ao buscar dados no MongoDB em cadastro_evento: {e}")
             error = f"Erro crítico ao carregar dados do DB: {e}"
 
-    # Conversão de Decimal128 para float (para a LISTA de eventos)
+    # --- CORREÇÃO ROBUSTA DE TIPOS NUMÉRICOS (PARA A LISTA) ---
+    # Esta é a correção que resolve o erro do traceback (TypeError)
     for evento in eventos_lista:
         if '_id' in evento: evento['_id'] = str(evento['_id'])
-        for key in evento:
-            if isinstance(evento[key], Decimal128):
-                evento[key] = safe_float(evento[key])
+        # Converte todos os campos (Decimal128, int, str) para float
+        for key in all_numeric_fields:
+            if key in evento:
+                # Usa .get() para segurança, caso a chave não exista
+                evento[key] = safe_float(evento.get(key, 0.0))
+    # --- FIM DA CORREÇÃO ---
 
     context = {
         'total_eventos': total_eventos,
@@ -1786,6 +1965,7 @@ def cadastro_evento():
     
     return render_template('cadastro_evento.html', **context)
 
+
 @app.route('/gravar_evento', methods=['POST'])
 @login_required
 def gravar_evento():
@@ -1798,6 +1978,7 @@ def gravar_evento():
     
     # --- FUNÇÃO AUXILIAR DE LIMPEZA DE FLOAT ---
     def clean_float_input(form_key, default_value='0'):
+        """Trata a entrada do formulário, convertendo '' para default_value e trocando ',' por '.'"""
         value_raw = request.form.get(form_key, default_value)
         if not value_raw or value_raw.strip() == '':
             value_raw = str(default_value)
@@ -1823,17 +2004,24 @@ def gravar_evento():
         numero_maximo = int(request.form.get('numero_maximo', 72000))
         quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
         bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
+        tipo_de_cartela = int(request.form.get('tipo_de_cartela', 15)) 
         
         
+        # --- INÍCIO DA CORREÇÃO ---
         # 2. Validação Mínima e de Formato
-        if not all([data_evento_str, hora_evento, descricao, unidade_de_venda, valor_de_venda]):
+        # 'valor_de_venda' foi REMOVIDO da lista, pois 0.0 (grátis) é um valor válido.
+        if not all([data_evento_str, hora_evento, descricao, unidade_de_venda]):
              raise ValueError("Preencha todos os campos obrigatórios (*).")
+        # --- FIM DA CORREÇÃO ---
         
         if not (1 <= unidade_de_venda <= 6):
              raise ValueError("Unidade de venda deve ser entre 1 e 6.")
 
         if not (1 <= quantidade_de_linhas <= 3):
              raise ValueError("Quantidade de linhas deve ser entre 1 e 3.")
+
+        if tipo_de_cartela not in [15, 25]:
+             raise ValueError("O tipo de cartela deve ser 15 ou 25.")
 
         try:
              data_obj = datetime.strptime(data_evento_str, '%Y-%m-%d')
@@ -1866,6 +2054,7 @@ def gravar_evento():
             "premio_acumulado": Decimal128(str(premio_acumulado)),
             "bola_tope_acumulado": bola_tope_acumulado,
             "minimo_de_venda": Decimal128(str(minimo_de_venda)),
+            "tipo_de_cartela": tipo_de_cartela,
             "id_colaborador": session.get('id_colaborador', 'N/A'),
         }
         
@@ -1887,7 +2076,7 @@ def gravar_evento():
         else:
             # --- Modo INSERÇÃO (INSERT) ---
             try:
-                global get_next_evento_sequence 
+                # Assumindo que 'get_next_evento_sequence' está definida globalmente
                 novo_id_evento_int = get_next_evento_sequence(db)
             except NameError:
                 novo_id_evento_int = None 
@@ -1910,7 +2099,7 @@ def gravar_evento():
 
 
     except ValueError as e:
-        # --- INÍCIO DA CORREÇÃO ---
+        # Erros de validação (Seu código de 'session' está correto)
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
         redirect_args = {
@@ -1920,10 +2109,9 @@ def gravar_evento():
         if id_evento_edicao:
             redirect_args['id_evento'] = id_evento_edicao
         return redirect(url_for('cadastro_evento', **redirect_args))
-        # --- FIM DA CORREÇÃO ---
         
     except Exception as e:
-        # --- INÍCIO DA CORREÇÃO ---
+        # Erros gerais (Seu código de 'session' está correto)
         print(f"ERRO CRÍTICO na gravação/atualização de evento: {e}")
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
@@ -1934,7 +2122,6 @@ def gravar_evento():
         if id_evento_edicao:
             redirect_args['id_evento'] = id_evento_edicao
         return redirect(url_for('cadastro_evento', **redirect_args))
-        # --- FIM DA CORREÇÃO ---
 
 
 @app.route('/excluir_evento/<int:id_evento>', methods=['POST'])
@@ -1956,6 +2143,7 @@ def excluir_evento(id_evento):
     except Exception as e:
         print(f"ERRO CRÍTICO na exclusão de evento ID {id_evento}: {e}")
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento.", view='listar'))
+
 
 # --- Rota de Consulta de Vendas (com cálculo de comissão) ---
 @app.route('/consulta_vendas', methods=['GET'])
@@ -1989,7 +2177,7 @@ def consulta_vendas():
     resumo_geral = None 
     error = error_from_session
     selected_colab_id_str = None
-    
+    info_tipo_cartela = None    
     # --- NOVO: Pega comissão padrão e cria mapa ---
     default_comissao = g.parametros_globais.get('comissao_padrao', 0)
     comissao_map = {} # Mapa para guardar {id_colab: taxa}
@@ -2059,6 +2247,7 @@ def consulta_vendas():
 
             # 5. Execução da Consulta (Aggregation Pipeline)
             id_evento_int = selected_event.get('id_evento')
+            info_tipo_cartela = selected_event.get('tipo_de_cartela', 15)
             nome_colecao_venda = f"vendas{id_evento_int}"
 
             pipeline = []
@@ -2135,7 +2324,8 @@ def consulta_vendas():
                            colaboradores=colaboradores_lista,
                            selected_colab_id=selected_colab_id_str, 
                            resumo_geral=resumo_geral, 
-                           resultados_agregados=resultados_agregados)
+                           resultados_agregados=resultados_agregados,
+                           info_tipo_cartela=info_tipo_cartela)
 
 
 # --- ROTA MODIFICADA 'consulta_vendas_detalhes' ---
@@ -2541,6 +2731,113 @@ def gerar_lista_vendas():
         print(f"ERRO GERAL ao gerar lista: {e}")
         session['error_message'] = f"Erro inesperado ao gerar arquivo: {e}"
         return redirect(redirect_url)
+
+# --- ROTA DE GERAÇÃO DE PDF DE CARTELAS ---
+
+@app.route('/gerar_cartelas_pdf_15')
+@login_required
+def gerar_cartelas_pdf_15():
+    """
+    [PLACEHOLDER] Rota para gerar cartelas de 15 números.
+    Atualmente em desenvolvimento.
+    """
+       
+    # Retorna uma mensagem simples em vez de um PDF
+    # (Quando estiver pronto, substitua isso pela lógica de geração do PDF)
+    return "Rota 'gerar_cartelas_pdf_15' está em desenvolvimento."
+
+
+@app.route('/gerar_cartelas_pdf_25')
+@login_required
+def gerar_cartelas_pdf_25():
+    """
+    Gera um PDF contendo cartelas de bingo para um período específico.
+    Parâmetros (query string):
+    - numero_inicial_pdf (int)
+    - numero_final_pdf (int)
+    - id_evento (int) - Usado para o nome do arquivo
+    """
+    
+    # 2. Obter Parâmetros da URL
+    try:
+        numero_inicial_pdf = int(request.args.get('numero_inicial_pdf'))
+        numero_final_pdf = int(request.args.get('numero_final_pdf'))
+        id_evento = int(request.args.get('id_evento', 0)) # Pega o ID do evento para o nome
+    except (TypeError, ValueError):
+        return "Erro: Parâmetros 'numero_inicial_pdf' e 'numero_final_pdf' são obrigatórios e devem ser números."
+        
+    if numero_inicial_pdf > numero_final_pdf:
+         return "Erro: O número inicial não pode ser maior que o final."
+         
+    # Limite de segurança para não sobrecarregar o servidor
+    total_cartelas = (numero_final_pdf - numero_inicial_pdf) + 1
+    if total_cartelas > 2000: # Limite de 2000 cartelas por vez
+         return f"Erro: Limite de 2000 cartelas por geração excedido (tentou gerar {total_cartelas})."
+
+    try:
+        # 3. Inicializar o PDF
+        pdf = PDFCartelas(orientation='P', unit='mm', format='A4') # 'P' = Retrato
+        pdf.alias_nb_pages()
+        
+        # Define as posições (layout 2x2)
+        margem = 15
+        largura_cartela = 70
+        altura_cartela_total = 8 + 10 + (5*12) # 78mm (Título + Header + 5*Números)
+        
+        # Posições (X, Y) para o canto superior esquerdo de cada cartela
+        posicoes = [
+            (margem, 25),                                         # Topo-Esquerda
+            (margem + largura_cartela + 10, 25),                  # Topo-Direita
+            (margem, 25 + altura_cartela_total + 10),             # Meio-Esquerda
+            (margem + largura_cartela + 10, 25 + altura_cartela_total + 10) # Meio-Direita
+        ]
+        
+        cartela_idx_na_pagina = 0 # Contador de 0 a 3
+
+        # 4. Loop de Geração das Cartelas
+        for num_cartela in range(numero_inicial_pdf, numero_final_pdf + 1):
+            
+            # Adiciona uma nova página se for a primeira cartela da página
+            if cartela_idx_na_pagina == 0:
+                pdf.add_page()
+            
+            # --- [PONTO CRÍTICO] ---
+            # Aqui chamamos a função (que você deve implementar)
+            dados_cartela = buscar_dados_cartela_2d(num_cartela) 
+            # --- [FIM DO PONTO CRÍTICO] ---
+            
+            if not dados_cartela or len(dados_cartela) != 5:
+                 print(f"AVISO: Pulei a cartela {num_cartela}, dados não encontrados ou mal formatados.")
+                 continue
+                 
+            # Desenha a cartela na posição correta
+            pos_x, pos_y = posicoes[cartela_idx_na_pagina]
+            pdf.desenhar_cartela(num_cartela, dados_cartela, pos_x, pos_y)
+            
+            # Incrementa o índice da posição na página
+            cartela_idx_na_pagina += 1
+            
+            # Se preenchemos as 4 posições, zera o contador (próxima página)
+            if cartela_idx_na_pagina >= len(posicoes):
+                cartela_idx_na_pagina = 0
+        
+        # 5. Gerar Saída em memória
+        pdf_output = bytes(pdf.output())
+        
+        # 6. Criar Resposta (Download)
+        nome_arquivo = f'EVE{id_evento}_cartelas_{numero_inicial_pdf}_a_{numero_final_pdf}.pdf'
+        
+        response = make_response(pdf_output)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename={nome_arquivo}'
+        
+        return response
+
+    except Exception as e:
+        print(f"ERRO CRÍTICO ao gerar PDF de cartelas: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"Erro interno ao gerar PDF: {e}"
 
 
 if __name__ == '__main__':
