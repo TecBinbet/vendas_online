@@ -4,34 +4,151 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Vendas de Cartelas - Login</title>
+    <!-- Certifique-se de que o caminho para o CSS está correto -->
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"> 
+    <style>
+        /* --- CSS DO SPINNER --- */
+        .spinner-overlay {
+            position: fixed;
+            inset: 0; /* top: 0, right: 0, bottom: 0, left: 0 */
+            background-color: rgba(17, 24, 39, 0.75); /* Fundo escuro semi-transparente */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 50;
+        }
+        
+        /* Classes para controlar a visibilidade via JS */
+        .spinner-hidden {
+             display: none;
+        }
 
+        .spinner-visible {
+            display: flex;
+        }
+
+        .spinner-animation {
+            animation: spin 1s linear infinite;
+            border-radius: 9999px; /* Círculo perfeito */
+            height: 5rem; /* Tamanho ajustado */
+            width: 5rem;
+            
+            /* Estilo da borda */
+            border-width: 4px;
+            border-style: solid;
+            border-color: transparent; /* Fundo transparente */
+            border-top-color: #3B82F6; /* Cor azul apenas no topo */
+        }
+
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+
+        /* Estilo para a Info da Sala */
+        .sala-info {
+            background-color: #E6F7FF;
+            color: #005696;
+            padding: 2px;
+            margin-bottom: 20px;
+            border-radius: 6px;
+            /*font-weight: bold;*/
+            text-align: center;
+            border: 1px solid #B3D9FF;
+            font-size: 0.9rem;
+        }
+    </style>
 </head>
 <body>
+
     <div class="container">
         <h2>🔒 Login</h2>
+        
+        <!-- Mensagens de Erro do Flask -->
         <div id="message-container" class="text-xl text-red-500"></div> 
-         <!-- NOVO: Lógica Jinja para exibir erros do Flask -->
+        
         {% if error %}
-            <div class="text-xl text-red-500">{{ error }}</div>
+            <div class="text-xl text-red-500 mb-4 p-3 bg-red-100 border border-red-400 rounded">{{ error }}</div>
         {% endif %}
+        
         {% if db_error %}
-            <div class="text-xl text-red-500">{{ db_error }}</div>
+            <div class="text-xl text-red-500 mb-4 p-3 bg-red-100 border border-red-400 rounded">{{ db_error }}</div>
         {% endif %}       
-<form method="POST" action="{{ url_for('login') }}" id="login-form"> 
-    
-    <label for="nome">Nome/Nick:</label>
-    <input type="text" id="nome" name="nome" required>
+        
+        <!-- Formulário de Login -->
+        <!-- Nota: A action pode incluir o id_sala na URL apenas como garantia, mas o before_request é o principal -->
+        <form method="POST" action="{{ url_for('login', id_sala=id_sala_exibicao) }}" id="login-form"> 
+            
+            <label for="nome">Nome/Nick:</label>
+            <input type="text" id="nome" name="nome" required autocomplete="username">
 
-    <div class="password-group">
-        <label for="senha">Senha:</label>
-        <button type="button" id="toggleSenha">👁️ Visualizar</button> 
-        <input type="password" id="senha" name="senha" required>
+            <div class="password-group">
+                <label for="senha">Senha:</label>
+                <!-- Botão de toggle senha movido para dentro ou ajustado via CSS externo se necessário -->
+                <button type="button" id="toggleSenha" style="float: right; font-size: 0.8em; cursor: pointer; background: none; border: none; color: #007bff;">👁️ Visualizar</button> 
+                <input type="password" id="senha" name="senha" required autocomplete="current-password">
+            </div>
+            
+            <!-- O CAMPO OCULTO 'id_sala_hidden' FOI REMOVIDO -->
+            
+            <button type="submit" class="mt-4 w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded">
+                Acessar
+            </button>
+        </form>
+        <!-- Bloco de Exibição da Sala -->
+        <!-- O backend envia 'id_sala_exibicao' se estiver disponível na sessão ou URL -->
+        {% if id_sala_exibicao %}
+            <div class="sala-info">
+                Acessando Sala ID: {{ id_sala_exibicao }}
+            </div>
+        {% endif %}
+
     </div>
-    
-    <button type="submit">Acessar</button>
-</form>
+
+    <!-- ELEMENTO DO SPINNER (Invisível por padrão) -->
+    <div id="loading-spinner" class="spinner-overlay spinner-hidden">
+        <div class="spinner-animation"></div>
     </div>
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+
+    <script>
+        // 1. Lógica para Mostrar/Ocultar Senha
+        const toggleSenha = document.getElementById('toggleSenha');
+        const senhaInput = document.getElementById('senha');
+        
+        if (toggleSenha && senhaInput) {
+            toggleSenha.addEventListener('click', function() {
+                const type = senhaInput.getAttribute('type') === 'password' ? 'text' : 'password';
+                senhaInput.setAttribute('type', type);
+                this.textContent = type === 'password' ? '👁️ Visualizar' : '🙈 Ocultar';
+            });
+        }
+
+        // 2. Lógica do Spinner de Carregamento
+        const loginForm = document.getElementById('login-form');
+        const loadingSpinner = document.getElementById('loading-spinner');
+
+        if (loginForm && loadingSpinner) {
+            loginForm.addEventListener('submit', function(event) {
+                // Não usamos preventDefault aqui porque queremos que o form seja enviado!
+                // Apenas mostramos o spinner antes do envio.
+                
+                // Verifica se o formulário é válido (HTML5 validation)
+                if (loginForm.checkValidity()) {
+                    loadingSpinner.classList.remove('spinner-hidden');
+                    loadingSpinner.classList.add('spinner-visible');
+                }
+                // Se não for válido, o navegador mostra os balões de erro e não envia, 
+                // então não mostramos o spinner.
+            });
+        }
+        
+        // 3. Ocultar Spinner se o usuário voltar na página (bfcache)
+        window.addEventListener('pageshow', function(event) {
+            if (event.persisted && loadingSpinner) {
+                loadingSpinner.classList.add('spinner-hidden');
+                loadingSpinner.classList.remove('spinner-visible');
+            }
+        });
+    </script>
 </body>
 </html>

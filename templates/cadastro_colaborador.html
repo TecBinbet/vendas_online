@@ -62,14 +62,46 @@
             padding-right: 70px; /* Espaço para o botão */
         }
 
-        /* CORREÇÃO CRÍTICA PARA O PISCA-PISCA: Oculta todas as views por padrão,
-           permitindo que o Jinja as exiba imediatamente se 'active_view' for correspondente */
         .view-content {
             display: none;
         }
         .view-content.active-view-show {
-            display: block !important; /* Força a exibição quando o Jinja define a classe */
+            display: block !important; 
         }
+
+        /* --- INÍCIO CSS DA MODAL DE EXCLUSÃO (NOVO) --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: none; /* Começa escondido */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #FFF;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .modal-btn {
+            padding: 0.6rem 1rem;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-danger { background-color: #EF4444; color: white; }
+        .btn-danger:hover { background-color: #DC2626; }
+        .btn-cancel { background-color: #D1D5DB; color: #374151; }
+        .btn-cancel:hover { background-color: #B2B8C2; }
+        /* --- FIM CSS DA MODAL DE EXCLUSÃO --- */
     </style>
 </head>
 <body>
@@ -103,19 +135,16 @@
             Total de Colaboradores Cadastrados: <strong id="total-colaboradores">{{ total_colaboradores }}</strong>.
         </div>
         
-        <!-- APLICA A CLASSE 'active-view-show' DIRETAMENTE NO RENDER DO JINJA -->
         {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
         <div id="view-novo" class="view-content {% if is_novo_alterar %}active-view-show{% endif %}">
             
-            <!-- CORREÇÃO CRÍTICA: Sintaxe correta do Jinja "is not none" -->
             {% set colab = colaborador_edicao if colaborador_edicao is not none else {} %} 
             
             <h3 class="text-xl font-semibold mb-2 {% if active_view == 'alterar' %}text-accent{% else %}text-primary{% endif %}">
                 {% if active_view == 'alterar' %}Alteração de Colaborador (ID: {{ colab.get('id_colaborador', 'N/A') }}){% else %}Cadastro de Novo Colaborador{% endif %}
             </h3>
 
-            <!-- CORREÇÃO: Uso de 'colab' (variável segura) para prevenir 'None' has no attribute 'get' -->
-            <form method="POST" action="{{ url_for('gravar_colaborador') }}" id="form-cadastro" class="space-y-4">
+            <form method="POST" action="{{ url_for('gravar_colaborador') }}" id="form-cadastro" class="space-y-4" onkeydown="return handleEnterKey(event)">
                 
                 {% if active_view == 'alterar' %}
                     <input type="hidden" name="id_colaborador_edicao" value="{{ colab.get('id_colaborador', '') }}">
@@ -241,15 +270,21 @@
                             <p><strong>CPF:</strong> {{ colaborador.cpf | default('N/A') }}</p>
                             <div class="mt-2 flex space-x-3">
 
-                             {% if colaborador.nome_colaborador != 'TecBin' %}
+                             {% if colaborador.nome_colaborador != 'Tecbin' %}
 
                                 <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                 
+                                <!-- === INÍCIO DA MUDANÇA (CONSULTA) === -->
                                 <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
-                                      class="inline-block"
-                                      onsubmit="return confirm('ATENÇÃO: Confirma a exclusão de {{ colaborador.nick }}? Esta ação é IRREVERSÍVEL.')">
-                                    <button type="submit" class="action-link delete-link hover:text-red-600">Excluir</button>
+                                      id="form-excluir-consulta-{{ colaborador.id_colaborador }}"
+                                      class="inline-block">
+                                    <!-- 1. ONSUBMIT REMOVIDO -->
+                                    <!-- 2. Alterado para type="button" e chama a modal (usando ' no onclick) -->
+                                    <button type="button" 
+                                            onclick='openDeleteModal("{{ colaborador.id_colaborador }}", {{ colaborador.nick | tojson }}, "consulta")'
+                                            class="action-link delete-link hover:text-red-600">Excluir</button>
                                 </form>
+                                <!-- === FIM DA MUDANÇA (CONSULTA) === -->
 
                               {% endif %}
 
@@ -288,15 +323,21 @@
                                 <td class="py-3 px-4 border-b text-sm">{{ colaborador.telefone }}</td>
                                 <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
 
-                                  {% if colaborador.nome_colaborador != 'TecBin' %}
+                                  {% if colaborador.nome_colaborador != 'Tecbin' %}
 
                                     <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                     
+                                    <!-- === INÍCIO DA MUDANÇA (LISTAR) === -->
                                     <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
-                                          class="inline-block"
-                                          onsubmit="return confirm('ATENÇÃO: Confirma a exclusão de {{ colaborador.nick }}? Esta ação é IRREVERSÍVEL.')">
-                                        <button type="submit" class="action-link delete-link hover:text-red-600">Excluir</button>
+                                          id="form-excluir-listar-{{ colaborador.id_colaborador }}"
+                                          class="inline-block">
+                                        <!-- 1. ONSUBMIT REMOVIDO -->
+                                        <!-- 2. Alterado para type="button" e chama a modal (usando ' no onclick) -->
+                                        <button type="button" 
+                                                onclick='openDeleteModal("{{ colaborador.id_colaborador }}", {{ colaborador.nick | tojson }}, "listar")'
+                                                class="action-link delete-link hover:text-red-600">Excluir</button>
                                     </form>
+                                    <!-- === FIM DA MUDANÇA (LISTAR) === -->
 
                                   {% endif %}
 
@@ -317,6 +358,21 @@
         
     </div>
     
+    <!-- === INÍCIO DA MODAL DE EXCLUSÃO (NOVO) === -->
+    <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
+            <p class="mb-4">Tem a certeza que deseja excluir este colaborador? Esta ação é irreversível.</p>
+            <p class="mb-4"><strong>ID:</strong> <span id="modal-delete-id" class="font-bold">...</span></p>
+            <p class="mb-4"><strong>Nick:</strong> <span id="modal-delete-nick" class="font-bold">...</span></p>
+            <div class="flex justify-end space-x-2 mt-6">
+                <button type="button" class="modal-btn btn-cancel" onclick="closeDeleteModal()">Cancelar</button>
+                <button type="button" id="modal-btn-confirm-delete" class="modal-btn btn-danger">Confirmar Exclusão</button>
+            </div>
+        </div>
+    </div>
+    <!-- === FIM DA MODAL DE EXCLUSÃO === -->
+
     <script>
         // NOVO: Função para manipular a tecla Enter e mover o foco
         function handleEnterKey(event) {
@@ -366,14 +422,63 @@
             }
         }
         
-        // A lógica JS para controle de view foi removida,
-        // pois o CSS/Jinja agora lida com a visibilidade,
-        // garantindo um carregamento mais suave.
+        // --- LÓGICA DA MODAL DE EXCLUSÃO (NOVO) ---
         
-        // Função para simular o confirm para ambientes que bloqueiam window.confirm (se necessário)
-        function ShowConfirm(message) {
-            return window.confirm(message);
+        // Elementos da Modal
+        const deleteModal = document.getElementById('delete-modal');
+        const modalDeleteId = document.getElementById('modal-delete-id');
+        const modalDeleteNick = document.getElementById('modal-delete-nick');
+        const btnConfirmDelete = document.getElementById('modal-btn-confirm-delete');
+        
+        let formIdParaExcluir = null; // Guarda o ID do formulário a ser submetido
+
+        /**
+         * Abre a modal e configura qual formulário deve ser submetido.
+         * @param {string} id - O ID do colaborador
+         * @param {string} nick - O Nick do colaborador
+         * @param {string} view - 'listar' ou 'consulta', para encontrar o formulário correto
+         */
+        function openDeleteModal(id, nick, view) {
+            if (!deleteModal) return;
+
+            // 1. Guarda o ID do formulário que deve ser submetido
+            formIdParaExcluir = `form-excluir-${view}-${id}`;
+
+            // 2. Preenche os dados na modal
+            modalDeleteId.textContent = id;
+            modalDeleteNick.textContent = nick; // Mostra o Nick
+            
+            // 3. Mostra a modal
+            deleteModal.style.display = 'flex';
         }
+
+        /**
+         * Fecha a modal e limpa o ID do formulário.
+         */
+        function closeDeleteModal() {
+            if (!deleteModal) return;
+            formIdParaExcluir = null;
+            deleteModal.style.display = 'none';
+        }
+
+        /**
+         * Event listener para o botão "Confirmar Exclusão" dentro da modal.
+         */
+        if (btnConfirmDelete) {
+            btnConfirmDelete.onclick = function() {
+                if (formIdParaExcluir) {
+                    const form = document.getElementById(formIdParaExcluir);
+                    if (form) {
+                        form.submit(); // Submete o formulário correto
+                    } else {
+                        console.error('Formulário de exclusão não encontrado:', formIdParaExcluir);
+                    }
+                }
+                closeDeleteModal(); // Fecha a modal
+            };
+        }
+        
+        // REMOVIDO: A função 'ShowConfirm(message)' (que usava window.confirm) foi removida.
         
     </script>
 </body>

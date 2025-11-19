@@ -41,7 +41,93 @@
         .action-link { text-decoration: none; font-weight: 600; margin-right: 10px; }
         .delete-link { color: #EF4444; }
         
-        /* NOVO: Apenas tailwind 'hidden' e controle pelo Jinja */
+        /* Grupo de Senha para o toggle */
+        .password-group {
+            position: relative;
+        }
+        .password-toggle {
+            position: absolute; 
+            right: 5px; 
+            top: 35px; /* Ajustado para alinhar com o input */
+            padding: 5px 10px; 
+            background: #e9ecef; 
+            border: 1px solid #ced4da;
+            border-radius: 3px;
+            cursor: pointer; 
+            font-size: 0.8rem;
+            color: #007bff;
+            z-index: 10;
+        }
+        .password-group input {
+            padding-right: 70px; /* Espaço para o botão */
+        }
+
+        /* --- INÍCIO CSS DA MODAL DE EXCLUSÃO --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: none; /* Começa escondido */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #FFF;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .modal-btn {
+            padding: 0.6rem 1rem;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-danger { background-color: #EF4444; color: white; }
+        .btn-danger:hover { background-color: #DC2626; }
+        .btn-cancel { background-color: #D1D5DB; color: #374151; }
+        .btn-cancel:hover { background-color: #B2B8C2; }
+        /* --- FIM CSS DA MODAL DE EXCLUSÃO --- */
+
+        /* --- CSS DA LISTA DE RESULTADOS DE BUSCA --- */
+        #search-results-list {
+            position: absolute;
+            top: 100%; /* Logo abaixo do input */
+            left: 0;
+            right: 0; /* Mesma largura do container pai */
+            background: white;
+            border: 1px solid #D1D5DB;
+            border-radius: 0 0 6px 6px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 50;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none; /* Começa oculto */
+        }
+        
+        .search-result-item {
+            padding: 10px;
+            border-bottom: 1px solid #F3F4F6;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .search-result-item:last-child { border-bottom: none; }
+        .search-result-item:hover { background-color: #F0FDF4; } /* Verde claro */
+        
+        .search-type-selector {
+            display: flex; gap: 15px; margin-bottom: 8px; font-size: 0.9rem; color: #4B5563;
+        }
+        .search-type-selector label { font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+        
+        .client-search-group { position: relative; } /* Necessário para posicionar a lista */
+
     </style>
 </head>
 <body>
@@ -69,7 +155,7 @@
                class="nav-link {% if active_view == 'listar' %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
                 📋 Listar
             </a>
-            <!-- CRÍTICO: next_url e id_evento_retorno passados como hidden fields para manter o contexto -->
+            <!-- Hidden fields para manter contexto -->
             <input type="hidden" id="next_url_val" value="{{ next_url | default('menu_operacoes') }}">
             {% if id_evento_retorno %}
                 <input type="hidden" id="id_evento_retorno_val" value="{{ id_evento_retorno }}">
@@ -83,7 +169,7 @@
         <!-- VISUALIZAÇÃO NOVO/ALTERAR -->
         {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
         <!-- NOVO: Adiciona a classe 'hidden' se não for a view ativa -->
-        <div id="view-novo" class="view-content {% if not is_novo_alterar %}hidden{% endif %}">
+        <div id="view-novo" class="{% if not is_novo_alterar %}hidden{% endif %}">
             
             <!-- DEFINIÇÃO SEGURA: Garante que 'cliente' é um dicionário mesmo se 'cliente_edicao' for None -->
             {% set cliente = cliente_edicao if cliente_edicao is not none else {} %} 
@@ -92,7 +178,12 @@
                 {% if active_view == 'alterar' %}Alteração de Cliente (ID: CLI{{ cliente.get('id_cliente', 'N/A') }}){% else %}Cadastro de Novo Cliente{% endif %}
             </h3>
 
-            {% set campos = g.parametros_globais.tipo_cadastro_cliente %}
+            <!-- Captura as configurações de campos do objeto global 'g' -->
+            <!-- Fallback seguro caso g.parametros_globais não esteja definido -->
+            {% set config_padrao = {'nome_cliente': True, 'nick': True, 'telefone': True, 'cpf': False, 'cidade': True, 'chave_pix': True, 'senha': True} %}
+            
+            <!-- CORREÇÃO: Verifica se g.parametros_globais E g.parametros_globais.tipo_cadastro_cliente existem -->
+            {% set campos = g.parametros_globais.tipo_cadastro_cliente if (g.parametros_globais is defined and g.parametros_globais.tipo_cadastro_cliente is defined) else config_padrao %}
   
            <form method="POST" action="{{ url_for('gravar_cliente') }}" id="form-cadastro" class="space-y-4">
                 
@@ -116,98 +207,90 @@
                                disabled class="form-control bg-gray-100">
                     </div>
 
+                    <!-- Campos dinâmicos baseados na configuração -->
+
                     {% if "nome_cliente" in campos %}
                     <div class="form-group">
-                        <label for="nome_cliente">Nome Completo {% if campos.nome_cliente %} (*){% endif %}</label>
+                        <label for="nome_cliente" class="{% if campos.get('nome_cliente') %}required-label{% endif %}">Nome Completo:</label>
                         <input type="text" id="nome_cliente" name="nome_cliente" class="form-control" 
-                                 value="{{ cliente_edicao.nome_cliente | default('', true) }}"
-                                 {% if campos.nome_cliente %}required{% endif %}>
+                                 value="{{ cliente.get('nome_cliente', '') }}"
+                                 {% if campos.get('nome_cliente') %}required{% endif %}>
                     </div>
                     {% endif %}
-
+                    
                     {% if "nick" in campos %}
                     <div class="form-group">
-                         <label for="nick">Nick/Apelido {% if campos.nick %} (*){% endif %}</label>
+                         <label for="nick" class="{% if campos.get('nick') %}required-label{% endif %}">Nick/Apelido:</label>
                          <input type="text" id="nick" name="nick" class="form-control"
-                                   value="{{ cliente_edicao.nick | default('', true) }}"
-                                   {% if campos.nick %}required{% endif %}>
+                                   value="{{ cliente.get('nick', '') }}"
+                                   {% if campos.get('nick') %}required{% endif %}>
                     </div>
                     {% endif %}
 
                     {% if "telefone" in campos %}
                     <div class="form-group">
-                        <label for="telefone">Telefone:{% if campos.telefone %} (*){% endif %}</label>
-                        <input type="text" id="telefone" name="telefone" class="form-control"
-                                  value="{{ cliente_edicao.telefone | default('', true) }}"
-                                  {% if campos.telefone %}required{% endif %}>
+                        <label for="telefone" class="{% if campos.get('telefone') %}required-label{% endif %}">Telefone:</label>
+                        <input type="tel" id="telefone" name="telefone" class="form-control"
+                                  value="{{ cliente.get('telefone', '') }}"
+                                  {% if campos.get('telefone') %}required{% endif %}>
+                    </div>
+                    {% endif %}
+                    
+                    {% if "cpf" in campos %}
+                    <div class="form-group">
+                        <label for="cpf" class="{% if campos.get('cpf') %}required-label{% endif %}">CPF:</label>
+                        <input type="text" id="cpf" name="cpf" class="form-control" placeholder="Apenas números"
+                                  value="{{ cliente.get('cpf', '') }}"
+                                  {% if campos.get('cpf') %}required{% endif %}>
                     </div>
                     {% endif %}
 
-                    {% if "cpf" in campos %}                   
+                    {% if "cidade" in campos %}
                     <div class="form-group">
-                        <label for="cpf">CPF {% if campos.cpf %} (*){% endif %}</label>
-                        <input type="text" id="cpf" name="cpf" class="form-control"
-                                  value="{{ cliente_edicao.cpf | default('', true) }}"
-                                  {% if campos.cpf %}required{% endif %}>
-                    </div>
-                    {% endif %}
-
-                    {% if "cidade" in campos %}                   
-                    <div class="form-group">
-                        <label for="cidade">Cidade:{% if campos.cidade %} (*){% endif %}</label>
+                        <label for="cidade" class="{% if campos.get('cidade') %}required-label{% endif %}">Cidade:</label>
                         <input type="text" id="cidade" name="cidade" class="form-control"
-                                  value="{{ cliente_edicao.cidade | default('', true) }}"
-                                  {% if campos.cidade %}required{% endif %}>
+                                  value="{{ cliente.get('cidade', '') }}"
+                                  {% if campos.get('cidade') %}required{% endif %}>
                     </div>
                     {% endif %}
 
                     {% if "chave_pix" in campos %}
                     <div class="form-group">
-                       <label for="chave_pix">Chave PIX: {% if campos.chave_pix %} (*){% endif %}</label>
+                       <label for="chave_pix" class="{% if campos.get('chave_pix') %}required-label{% endif %}">Chave PIX:</label>
                        <input type="text" id="chave_pix" name="chave_pix" class="form-control"
-                           value="{{ cliente_edicao.chave_pix | default('', true) }}" 
+                           value="{{ cliente.get('chave_pix', '') }}" 
                            autocomplete="off"
-                           {% if campos.chave_pix %}required{% endif %}>
+                           {% if campos.get('chave_pix') %}required{% endif %}>
                     </div>
-                    {% endif %}
-
-                    {% if "chave_pix" in campos %}                   
+                    
                     <div class="form-group">
-                        <label for="confirma_chave_pix">Confirmar Chave PIX: {% if campos.chave_pix %} (*){% endif %} </label>
+                        <label for="confirma_chave_pix" class="{% if campos.get('chave_pix') %}required-label{% endif %}">Confirmar Chave PIX:</label>
                        <input type="text" id="confirma_chave_pix" name="confirma_chave_pix" class="form-control"
-                           value="{{ cliente_edicao.chave_pix | default('', true) }}" 
+                           value="{{ cliente.get('chave_pix', '') }}" 
                            autocomplete="off"
-                           {% if campos.chave_pix %}required{% endif %}>
+                           {% if campos.get('chave_pix') %}required{% endif %}>
                     </div>
                     {% endif %}
 
-                    {% if "senha" in campos %}                   
+                    {% if "senha" in campos %}
                     <div class="form-group password-group">
-                    <label for="senha" class="required-label">
-                          Senha: {% if campos.senha %} (*){% endif %}
-                    </label>
-    
-                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('senha')">👁️</button>
-                    <input type="password" id="senha" name="senha" 
-                              class="form-control" 
-                              autocomplete="new-password"       
-                              placeholder="{% if cliente_edicao %}Deixe em branco para não alterar{% else %}Digite a senha{% endif %}"
-                              {% if campos.senha and not cliente_edicao %}required{% endif %}>
+                        <label for="senha" class="{% if campos.get('senha') and active_view != 'alterar' %}required-label{% endif %}">Senha:</label>
+                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('senha')">👁️</button>
+                        <input type="password" id="senha" name="senha" 
+                                  class="form-control" 
+                                  autocomplete="new-password"       
+                                  placeholder="{% if active_view == 'alterar' %}Deixe em branco para não alterar{% else %}Digite a senha{% endif %}"
+                                  {% if campos.get('senha') and active_view != 'alterar' %}required{% endif %}>
                      </div>
-                     {% endif %}
 
-                     {% if "senha" in campos %}                   
                      <div class="form-group password-group">
-                     <label for="confirma_senha" class="required-label">
-                          Senha: {% if campos.senha %} (*){% endif %}
-                    </label>
-    
-                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirma_senha')">👁️</button>
-                    <input type="password" id="confirma_senha"name="confirma_senha" 
-                              class="form-control" 
-                              autocomplete="new-password"       
-                              placeholder=="Repita a senha"
-                              {% if campos.senha and not cliente_edicao %}required{% endif %}>
+                        <label for="confirma_senha" class="{% if campos.get('senha') and active_view != 'alterar' %}required-label{% endif %}">Confirmar Senha:</label>
+                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirma_senha')">👁️</button>
+                        <input type="password" id="confirma_senha" name="confirma_senha" 
+                                  class="form-control" 
+                                  autocomplete="new-password"       
+                                  placeholder="Repita a senha"
+                                  {% if campos.get('senha') and active_view != 'alterar' %}required{% endif %}>
                      </div>
                     {% endif %}
                     
@@ -228,17 +311,36 @@
             </form>
         </div>
 
-        <!-- VISUALIZAÇÃO CONSULTA -->
-        <!-- NOVO: Adiciona a classe 'hidden' se não for a view ativa -->
-        <div id="view-consulta" class="view-content {% if active_view != 'consulta' %}hidden{% endif %}">
+        <!-- VISUALIZAÇÃO CONSULTA (COM BUSCA DINÂMICA) -->
+        <div id="view-consulta" class="{% if active_view != 'consulta' %}hidden{% endif %}">
             <h3 class="text-xl font-semibold mb-4 text-accent">Consulta de Cliente</h3>
-            <form method="GET" action="{{ url_for('cadastro_cliente') }}" class="mb-4 space-y-2">
+            
+            <form method="GET" action="{{ url_for('cadastro_cliente') }}" class="mb-4 space-y-2" id="form-consulta">
                 <input type="hidden" name="view" value="consulta">
-                <input type="hidden" name="next" value="{{ next_url | default('menu_operacoes') }}">
-                <label for="consulta_termo" class="form-group">Buscar por Nick, CPF ou ID:</label>
-                <div class="flex space-x-2">
-                    <input type="text" id="consulta_termo" name="query" value="{{ query | default('') }}" placeholder="Digite o termo de busca..." class="form-control mb-0">
+                <input type="hidden" name="next" value="{{ next_url }}">
+                <input type="hidden" name="id_evento_retorno" value="{{ id_evento_retorno }}">
+                
+                <label for="consulta_termo" class="form-group">Buscar por Nick, Nome ou ID:</label>
+                
+                <!-- SELETOR DE TIPO DE BUSCA -->
+                <div class="search-type-selector">
+                    <label><input type="radio" name="search_type" value="nick" checked onchange="clearSearch()"> Nick (Apelido)</label>
+                    <label><input type="radio" name="search_type" value="nome" onchange="clearSearch()"> Nome</label>
+                    <label><input type="radio" name="search_type" value="id" onchange="clearSearch()"> ID</label>
+                </div>
+
+                <div class="flex space-x-2 client-search-group">
+                    <input type="text" id="consulta_termo" name="query" 
+                           value="{{ query | default('') }}" 
+                           placeholder="Digite o termo de busca..." 
+                           class="form-control mb-0"
+                           autocomplete="off"
+                           onkeyup="handleSearchInput(this)">
+                           
                     <button type="submit" class="nav-link bg-accent text-white hover:opacity-90 min-w-[100px]">Buscar</button>
+                    
+                    <!-- LISTA DE RESULTADOS FLUTUANTE -->
+                    <div id="search-results-list"></div>
                 </div>
             </form>
             
@@ -247,26 +349,20 @@
                     <h4 class="font-bold mb-3">{{ clientes_lista | length }} Resultado(s) encontrado(s) para "{{ query }}"</h4>
                     {% for cliente in clientes_lista %}
                         <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0">
-                            <p>ID: <strong>CLI{{ cliente.id_cliente }}</strong></p>
-                            <p>Nome: <strong>{{ cliente.nome_cliente }} ({{ cliente.nick }})</strong> </p>
-                            {% if nivel >= 3 or id_logado == cliente.id_colaborador %} 
-                                <p>Telefone:<strong> {{ cliente.telefone | default('N/A') }}</strong></p>
-                            {% endif %}
-                            <p>Cidade: <strong> {{ cliente.cidade | default('N/A') }}</strong></p>
+                            <p><strong>ID:</strong> {{ cliente.id_cliente }}</p>
+                            <p><strong>Nome:</strong> {{ cliente.nome_cliente }}</p>
+                            <p><strong>Nick:</strong> <span class="font-semibold text-primary">{{ cliente.nick }}</span></p>
+                            <p><strong>Cidade:</strong> {{ cliente.cidade | default('N/A') }}</p>
                             <div class="mt-2 flex space-x-3">
-                                <!-- CORREÇÃO DE LINK -->
                                 <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                 
                                 <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" 
-                                          class="inline-block"
-                                          id="form-excluir-{{ cliente.id_cliente }}"> <!-- Adiciona ID para JS -->
-                                          <button type="button" 
-                                                       class="action-link delete-link hover:text-red-600"
-                                                       onclick="confirmDelete('{{ cliente.nick }}', '{{ cliente.id_cliente }}')">
-                                               Excluir
-                                          </button>
+                                      id="form-excluir-consulta-{{ cliente.id_cliente }}"
+                                      class="inline-block">
+                                    <button type="button" 
+                                            onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta")'
+                                            class="action-link delete-link hover:text-red-600">Excluir</button>
                                 </form>
-
                             </div>
                         </div>
                     {% endfor %}
@@ -277,10 +373,9 @@
                 {% endif %}
             </div>
         </div>
-        
+
         <!-- VISUALIZAÇÃO LISTAR -->
-        <!-- NOVO: Adiciona a classe 'hidden' se não for a view ativa -->
-        <div id="view-listar" class="view-content {% if active_view != 'listar' %}hidden{% endif %}">
+        <div id="view-listar" class="{% if active_view != 'listar' %}hidden{% endif %}">
             <h3 class="text-xl font-semibold mb-4 text-gray-700">Lista de Clientes (Ordenada por Nick)</h3>
             
             <div class="overflow-x-auto shadow-md rounded-lg">
@@ -289,9 +384,8 @@
                         <tr class="list-header">
                             <th class="py-2 px-4 border-b text-left">ID</th>
                             <th class="py-2 px-4 border-b text-left">Nome (Nick)</th>
-                            <th class="py-2 px-4 border-b text-left">Telefone</th>
                             <th class="py-2 px-4 border-b text-left">Cidade</th>
-                            <th class="py-2 px-4 border-b text-left">Última Compra</th>
+                            <th class="py-2 px-4 border-b text-left">Telefone</th>
                             <th class="py-2 px-4 border-b text-left">Ações</th>
                         </tr>
                     </thead>
@@ -299,32 +393,25 @@
                         {% if active_view == 'listar' and clientes_lista %}
                             {% for cliente in clientes_lista %}
                             <tr class="list-row hover:bg-gray-100 transition duration-150">
-                                <td class="py-3 px-4 border-b text-sm">CLI{{ cliente.id_cliente }}</td>
+                                <td class="py-3 px-4 border-b text-sm">{{ cliente.id_cliente }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.nome_cliente }} ({{ cliente.nick }})</td>
-                                {% if nivel >= 3 or id_logado == cliente.id_colaborador %}
-                                    <td class="py-3 px-4 border-b text-sm">{{ cliente.telefone }}</td>
-                                {% else %}
-                                    <td class="py-3 px-4 border-b text-sm"> . . .</td>
-                                {% endif %} 
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.cidade }}</td>
-                                <td class="py-3 px-4 border-b text-sm">{{ cliente.data_ultimo_compra_formatada | default('N/A') }}</td>
+                                <td class="py-3 px-4 border-b text-sm">{{ cliente.telefone }}</td>
                                 <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
                                     <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                     
                                     <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" 
-                                          class="inline-block"
-                                          id="form-excluir-{{ cliente.id_cliente }}"> <!-- Adiciona ID para JS -->
-                                          <button type="button" 
-                                                       class="action-link delete-link hover:text-red-600"
-                                                       onclick="confirmDelete('{{ cliente.nick }}', '{{ cliente.id_cliente }}')">
-                                               Excluir
-                                          </button>
+                                          id="form-excluir-listar-{{ cliente.id_cliente }}"
+                                          class="inline-block">
+                                        <button type="button" 
+                                                onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "listar")'
+                                                class="action-link delete-link hover:text-red-600">Excluir</button>
                                     </form>
-                                 </td>
+                                </td>
                             </tr>
                             {% endfor %}
                         {% else %}
-                            <tr class="list-row"><td colspan="5" class="py-4 text-center text-gray-500">Nenhum cliente cadastrado ou selecione a opção "Listar" acima.</td></tr>
+                            <tr><td colspan="5" class="py-8 text-center text-gray-500 font-bold">Nenhum cliente cadastrado.</td></tr>
                         {% endif %}
                     </tbody>
                 </table>
@@ -332,119 +419,56 @@
         </div>
 
         <div class="flex justify-center mt-8">
-            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+            <!-- Rota de retorno atualizada -->
+            <a href="{{ url_for(next_url | default('menu_operacoes'), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-medium">← Voltar</a>
         </div>
+        
     </div>
     
+    <!-- MODAL DE EXCLUSÃO -->
+    <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
+            <p class="mb-4">Tem a certeza que deseja excluir este cliente? Esta ação é irreversível.</p>
+            <p class="mb-4"><strong>ID:</strong> <span id="modal-delete-id" class="font-bold">...</span></p>
+            <p class="mb-4"><strong>Nick:</strong> <span id="modal-delete-nick" class="font-bold">...</span></p>
+            <div class="flex justify-end space-x-2 mt-6">
+                <button type="button" class="modal-btn btn-cancel" onclick="closeDeleteModal()">Cancelar</button>
+                <button type="button" id="modal-btn-confirm-delete" class="modal-btn btn-danger">Confirmar Exclusão</button>
+            </div>
+        </div>
+    </div>
+
     <script>
-        function syncAndConfirm(event) {
-            const campoQuantidade = document.getElementById('quantidade');
-            const postQuantidade = document.getElementById('post_quantidade');
-            const elementoCustoTotal = document.getElementById('total-custo');
-            const btnCustoText = document.getElementById('btn-custo-text');
-            
-            // Pega o botão de confirmação que foi clicado
-            const confirmButton = event.target.closest('button[type="submit"]');
+        let searchTimeout = null;
 
-            // 1. Sincroniza o campo hidden 'quantidade' com o valor atual do input
-            if (campoQuantidade && postQuantidade) {
-                postQuantidade.value = campoQuantidade.value;
-            }
-
-            // 2. Atualiza o texto do botão de confirmação para o valor ATUAL (visível na div)
-            if (elementoCustoTotal && btnCustoText) {
-                // Remove 'Custo Total: ' para obter apenas o valor formatado
-                const custoText = elementoCustoTotal.textContent.replace('Custo Total: ', '');
-                btnCustoText.textContent = custoText;
-            }
-            
-            // 3. Dispara a confirmação de segurança
-            const quantidadeAtual = campoQuantidade ? (parseInt(campoQuantidade.value) || 0) : 0;
-            const custoConfirm = elementoCustoTotal ? elementoCustoTotal.textContent.replace('Custo Total: ', '') : 'R$ 0,00';
-            
-            if (quantidadeAtual === 0) {
-                 alert("A quantidade de unidades deve ser maior que zero.");
-                 return false;
-            }
-
-            // A função confirm() padrão é usada
-            const isConfirmed = confirm(`ATENÇÃO: Confirma a venda de ${custoConfirm} (${quantidadeAtual} unidades)? Esta é uma transação CRÍTICA.`);
-
-            if (!isConfirmed) {
-                event.preventDefault(); // Evita o submit se não for confirmado
-                return false; 
-            }
-            
-            // 4. NOVO: Se confirmado, oculta e desabilita o botão imediatamente
-            if (confirmButton) {
-                confirmButton.disabled = true;
-                confirmButton.textContent = 'Processando Venda...';
-                confirmButton.style.opacity = '0.7';
-                confirmButton.style.cursor = 'not-allowed';
-            }
-            
-            return true; // Permite o submit do formulário
-        }
-
-
-        // NOVO: Função para manipular a tecla Enter e mover o foco
         function handleEnterKey(event) {
             if (event.key === 'Enter') {
-                event.preventDefault(); // Impede o submit padrão do formulário
-                
+                event.preventDefault(); 
                 const form = event.target.form;
                 if (!form) return true;
 
-                const elements = Array.from(form.elements); // Converte para Array
+                const elements = Array.from(form.elements);
                 const index = elements.indexOf(event.target);
                 
-                // Procura o próximo elemento que pode receber foco
                 for (let i = index + 1; i < elements.length; i++) {
                     const element = elements[i];
-                    
-                    // Pula elementos desabilitados, botões de toggle de senha e campos ocultos
                     if (element.type !== 'hidden' && !element.disabled && 
                         !element.classList.contains('password-toggle') && element.name) {
-                        
                         element.focus();
-                        return false; // Sucesso ao mover o foco
+                        return false; 
                     }
                 }
-                
-                // Se chegou ao fim, tenta focar no botão de submit
                 const submitButton = form.querySelector('button[type="submit"]');
-                if (submitButton) {
-                    submitButton.focus();
-                }
-                
-                return false; // Sempre retorna false para impedir o submit
+                if (submitButton) submitButton.focus();
+                return false; 
             }
-            return true; // Deixa outras teclas funcionarem normalmente
+            return true; 
         }
 
-        // NOVO: Função que dispara a confirmação e submete o formulário se confirmado
-        function confirmDelete(nick, id_cliente) {
-            const message = `ATENÇÃO: Confirma a exclusão de ${nick} (CLI${id_cliente})? Esta ação é IRREVERSÍVEL.`;
-            
-            // Usa o confirm padrão do navegador
-            if (window.confirm(message)) {
-                // Se confirmado, encontra o formulário (ID dinâmico) e o submete
-                // Checa primeiro o ID da consulta, depois o da lista
-                let form = document.getElementById(`form-excluir-${id_cliente}`);
-                if (!form) {
-                    form = document.getElementById(`form-excluir-list-${id_cliente}`);
-                }
-                
-                if (form) {
-                    form.submit();
-                }
-            }
-        }
-
-        // NOVO: Função para alternar a visibilidade da senha
         function togglePasswordVisibility(fieldId) {
             const passwordInput = document.getElementById(fieldId);
-            const toggleButton = passwordInput.previousElementSibling; // O botão está imediatamente antes do input
+            const toggleButton = passwordInput.previousElementSibling; 
             
             if (passwordInput.type === 'password') {
                 passwordInput.type = 'text';
@@ -454,17 +478,119 @@
                 toggleButton.textContent = '👁️';
             }
         }
-        // Função para simular o confirm para ambientes que bloqueiam window.confirm (se necessário)
-        function ShowConfirm(message) {
-            return window.confirm(message);
+        
+        // Lógica de Busca Dinâmica
+        function handleSearchInput(inputElement) {
+            const termo = inputElement.value.trim();
+            const resultsDiv = document.getElementById('search-results-list');
+            
+            if (searchTimeout) clearTimeout(searchTimeout);
+
+            if (termo.length < 2) {
+                resultsDiv.style.display = 'none';
+                resultsDiv.innerHTML = '';
+                return;
+            }
+
+            searchTimeout = setTimeout(() => {
+                executarBusca(termo);
+            }, 400);
         }
         
-        // Simulação de inicialização para evitar erros no navegador
-        document.addEventListener('DOMContentLoaded', () => {
-             if (!document.getElementById('total-clientes').textContent) {
-                document.getElementById('total-clientes').textContent = 'N/A';
+        function getSearchType() {
+            const radios = document.getElementsByName('search_type');
+            for (let radio of radios) {
+                if (radio.checked) return radio.value;
             }
-        });
+            return 'nick'; 
+        }
+        
+        function clearSearch() {
+             const input = document.getElementById('consulta_termo');
+             if(input) input.value = '';
+             document.getElementById('search-results-list').style.display = 'none';
+        }
+
+        async function executarBusca(termo) {
+            const tipo = getSearchType();
+            const resultsDiv = document.getElementById('search-results-list');
+            
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center">Buscando...</div>';
+
+            try {
+                const response = await fetch(`/buscar_clientes?termo=${encodeURIComponent(termo)}&tipo=${tipo}`);
+                const data = await response.json();
+
+                resultsDiv.innerHTML = ''; 
+
+                if (data.clientes && data.clientes.length > 0) {
+                    data.clientes.forEach(cli => {
+                        const div = document.createElement('div');
+                        div.className = 'search-result-item';
+                        div.innerHTML = `
+                            <div class="font-bold text-gray-800">${cli.nick || cli.nome}</div>
+                            <div class="text-sm text-gray-600">ID: ${cli.id} | ${cli.nome} | ${cli.cidade}</div>
+                        `;
+                        // Ao clicar, redireciona para alterar
+                        div.onclick = () => selecionarClienteParaEdicao(cli);
+                        resultsDiv.appendChild(div);
+                    });
+                } else {
+                    resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center">Nenhum cliente encontrado.</div>';
+                }
+            } catch (err) {
+                console.error(err);
+                resultsDiv.innerHTML = '<div class="p-2 text-red-500 text-center">Erro na busca.</div>';
+            }
+        }
+
+        function selecionarClienteParaEdicao(cliente) {
+            const nextUrl = "{{ next_url }}";
+            const idEvento = "{{ id_evento_retorno }}";
+            let url = `{{ url_for('cadastro_cliente', view='alterar') }}&id_cliente=${cliente.id}`;
+            
+            if (nextUrl) url += `&next=${nextUrl}`;
+            if (idEvento) url += `&id_evento=${idEvento}`;
+            
+            window.location.href = url;
+        }
+
+        // Lógica da Modal de Exclusão
+        const deleteModal = document.getElementById('delete-modal');
+        const modalDeleteId = document.getElementById('modal-delete-id');
+        const modalDeleteNick = document.getElementById('modal-delete-nick');
+        const btnConfirmDelete = document.getElementById('modal-btn-confirm-delete');
+        
+        let formIdParaExcluir = null; 
+
+        function openDeleteModal(id, nick, view) {
+            if (!deleteModal) return;
+            formIdParaExcluir = `form-excluir-${view}-${id}`;
+            modalDeleteId.textContent = id;
+            modalDeleteNick.textContent = nick; 
+            deleteModal.style.display = 'flex';
+        }
+
+        function closeDeleteModal() {
+            if (!deleteModal) return;
+            formIdParaExcluir = null;
+            deleteModal.style.display = 'none';
+        }
+
+        if (btnConfirmDelete) {
+            btnConfirmDelete.onclick = function() {
+                if (formIdParaExcluir) {
+                    const form = document.getElementById(formIdParaExcluir);
+                    if (form) {
+                        form.submit(); 
+                    } else {
+                        console.error('Formulário de exclusão não encontrado:', formIdParaExcluir);
+                    }
+                }
+                closeDeleteModal(); 
+            };
+        }
     </script>
 </body>
 </html>

@@ -29,11 +29,11 @@
         }
         .modal-content {
             background-color: #FFF;
-            padding: 2rem;
+            padding: 1rem;
             border-radius: 8px;
             width: 90%;
-            max-width: 500px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            max-width: 350px;
+            box-shadow: 0 5px 5px rgba(0,0,0,0.3);
         }
         .modal-btn {
             display: block;
@@ -52,6 +52,10 @@
         .btn-secondary:hover { background-color: #2D3748; }
         .btn-cancel { background-color: #D1D5DB; color: #374151; }
         .btn-cancel:hover { background-color: #B2B8C2; }
+        
+        /* Botão de Perigo (Excluir) */
+        .btn-danger { background-color: #DC2626; color: white; }
+        .btn-danger:hover { background-color: #B91C1C; }
         
         /* Mensagem de "Copiado!" */
         #copy-toast {
@@ -75,7 +79,6 @@
     <div class="max-w-6xl mx-auto">
         <h2 class="text-xl font-bold mb-1 text-blue-800">📊 Vendas Detalhadas</h2>
         <p class="text-lg text-gray-700 mb-1">
-            <!-- Usamos a nova variável 'info_evento' (nome) -->
             Evento:<strong> {{ info_evento | default('N/A') }}</strong> | 
             Colaborador:<strong> {{ info_colaborador | default('N/A') }}</strong>
         </p>
@@ -98,23 +101,23 @@
                             <th>Colaborador</th>
                         {% endif %}
                         <th>Data</th>
-                        <th>ID Venda</th>   
+                        <th>ID Venda</th> 
                     </tr>
                 </thead>
                 <tbody>
                     {% for venda in vendas %}
-                        <!-- ADICIONADO 'onclick' e 'cursor-pointer' -->
                         <tr class="hover:bg-green-200 cursor-pointer" 
                             onclick="openReprintModal(
                                 '{{ venda.id_venda }}', 
                                 '{{ venda.id_cliente }}', 
                                 '{{ info_evento_id }}',  
                                 '{{ venda.nome_cliente }}',
-                                '{{ venda.numero_inicial }}',      /* <-- NOVO */
-                                '{{ venda.numero_final }}',        /* <-- NOVO */
-                                '{{ venda.numero_inicial2 | default(0) }}', /* <-- NOVO */
-                                '{{ venda.numero_final2 | default(0) }}'   /* <-- NOVO */
-                            )">
+                                '{{ venda.numero_inicial }}',
+                                '{{ venda.numero_final }}',
+                                '{{ venda.numero_inicial2 | default(0) }}',
+                                '{{ venda.numero_final2 | default(0) }}',
+                                '{{ venda.telefone_cliente | default('') }}'
+                            )">,
                             <td class="font-bold">
                                 {{ venda.numero_inicial }} a {{ venda.numero_final }}
                                 {% if venda.numero_inicial2 > 0 %}
@@ -142,51 +145,60 @@
         </div>
     </div>
 
-    <!-- --- HTML DA MODAL (COMEÇA ESCONDIDO) --- -->
     <div id="reprint-modal" class="modal-overlay" onclick="closeReprintModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
-            <h3 class="text-xl font-bold mb-2">Reimprimir Comprovante (TXT)</h3>
-            <p class="mb-4">Cliente: <strong id="modal-nome-cliente">...</strong></p>
+            <h3 class="text-xl text-blue-600 mb-0">Gerenciar Venda</h3>
+            <p class="mb-2">Cliente: <strong id="modal-nome-cliente">...</strong></p>
             
-            <!-- Botões de Ação -->
             <button id="modal-btn-unica" class="modal-btn btn-primary">
                 Reimprimir Venda Única (ID: <span id="modal-id-venda">...</span>)
             </button>
             <button id="modal-btn-cliente" class="modal-btn btn-secondary">
                 Reimprimir TODAS as Vendas do Cliente
             </button>
+
+            {% if session.get('nivel') == 3 %}
+            <button id="modal-btn-excluir" class="modal-btn btn-danger mt-2">
+                🗑️ Excluir Venda Permanente
+            </button>
+            {% endif %}
            
-            <hr class="my-3 border-gray-300">
-            
+            <hr class="my-2 border-gray-300">
+
+            {% if info_tipo_cartela == 25 %}            
+            <p class="text-sm text-gray-600 mb-2 font-bold">Opções de PDF:</p>
             <button id="modal-btn-pdf1" class="modal-btn text-white" 
                     style="background-color: #D97706;" 
                     onmouseover="this.style.backgroundColor='#B45309'" 
                     onmouseout="this.style.backgroundColor='#D97706'">
                 Gerar PDF (Período: <span id="modal-pdf-periodo1">...</span>)
-            </button>
-            
+            </button>            
+
             <button id="modal-btn-pdf2" class="modal-btn text-white" 
                     style="background-color: #D97706; display: none;" onmouseover="this.style.backgroundColor='#B45309'" 
                     onmouseout="this.style.backgroundColor='#D97706'">
                 Gerar PDF (Período: <span id="modal-pdf-periodo2">...</span>)
             </button>          
-            <button class="modal-btn btn-cancel" onclick="closeReprintModal()">
+            {% endif %}            
+            <button class="modal-btn btn-cancel mt-2" onclick="closeReprintModal()">
                 Cancelar
             </button>
         </div>
     </div>
     
-    <!-- Mensagem "Copiado!" -->
     <div id="copy-toast" style="display: none; position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background-color: #2D3748; color: white; padding: 10px 20px; border-radius: 20px; z-index: 2000; opacity: 0; transition: opacity 0.5s;">Copiado!</div>
 
 
-    <!-- --- JAVASCRIPT DA MODAL --- -->
     <script>
         const modal = document.getElementById('reprint-modal');
         const modalNomeCliente = document.getElementById('modal-nome-cliente');
         const modalIdVenda = document.getElementById('modal-id-venda');
         const btnVendaUnica = document.getElementById('modal-btn-unica');
         const btnVendasCliente = document.getElementById('modal-btn-cliente');
+        
+        // Tenta pegar o botão (pode ser null se o usuário não for nível 3)
+        const btnExcluir = document.getElementById('modal-btn-excluir');
+        
         const toast = document.getElementById('copy-toast');
 
         const btnPdf1 = document.getElementById('modal-btn-pdf1');
@@ -194,124 +206,86 @@
         const spanPdf1 = document.getElementById('modal-pdf-periodo1');
         const spanPdf2 = document.getElementById('modal-pdf-periodo2');
 
-        // Variáveis temporárias para guardar os dados
         let tempIdVenda = '';
         let tempIdCliente = '';
         let tempIdEvento = '';
-
+        let tempNomeCliente = '';
         let tempNumInicial1 = 0;
         let tempNumFinal1 = 0;
         let tempNumInicial2 = 0;
         let tempNumFinal2 = 0;
-        /**
-         * Abre a modal e armazena os dados da linha clicada.
-         */
-        function openReprintModal(idVenda, idCliente, idEvento, nomeCliente, numIni1, numFin1, numIni2, numFin2) {
-            // Preenche os dados temporários
+        let tempTelefone = '';
+
+        function openReprintModal(idVenda, idCliente, idEvento, nomeCliente, numIni1, numFin1, numIni2, numFin2, telefone) {
             tempIdVenda = idVenda;
             tempIdCliente = idCliente;
             tempIdEvento = idEvento;
+            tempNomeCliente = nomeCliente;
+            tempTelefone = telefone;
 
-            // Converte para números para segurança
             tempNumInicial1 = parseInt(numIni1) || 0;
             tempNumFinal1 = parseInt(numFin1) || 0;
             tempNumInicial2 = parseInt(numIni2) || 0;
             tempNumFinal2 = parseInt(numFin2) || 0;
 
-            // Atualiza o texto da modal
             modalNomeCliente.textContent = `${nomeCliente} (ID: ${idCliente})`;
             modalIdVenda.textContent = idVenda;
             
-            // Atribui as funções de clique aos botões
             btnVendaUnica.onclick = () => handleReprint('unica');
             btnVendasCliente.onclick = () => handleReprint('cliente');
-
-            // --- LÓGICA DOS NOVOS BOTÕES DE PDF ---
             
-            // Configura o botão 1 (sempre visível)
+            // SÓ ADICIONA O EVENTO SE O BOTÃO EXISTIR NA PÁGINA
+            if (btnExcluir) {
+                btnExcluir.onclick = () => handleExcluirVenda();
+            }
+
+            // Lógica dos PDFs
             spanPdf1.textContent = `${tempNumInicial1} a ${tempNumFinal1}`;
             btnPdf1.onclick = () => handleGerarPdf(tempNumInicial1, tempNumFinal1);
-            btnPdf1.style.display = 'block'; // Garante que está visível
+            btnPdf1.style.display = 'block'; 
 
-            // Configura o botão 2 (condicional)
             if (tempNumInicial2 > 0 && tempNumFinal2 > 0) {
                 spanPdf2.textContent = `${tempNumInicial2} a ${tempNumFinal2}`;
                 btnPdf2.onclick = () => handleGerarPdf(tempNumInicial2, tempNumFinal2);
-                btnPdf2.style.display = 'block'; // Mostra o botão
+                btnPdf2.style.display = 'block'; 
             } else {
-                btnPdf2.style.display = 'none'; // Garante que está escondido
+                btnPdf2.style.display = 'none'; 
             }
-            // --- FIM DA LÓGICA DO PDF ---
-            // Mostra a modal
+            
             modal.style.display = 'flex';
         }
 
-        /**
-         * Fecha a modal.
-         */
         function closeReprintModal() {
             modal.style.display = 'none';
         }
-        // ==================================
-        //     ADICIONE ESTA NOVA FUNÇÃO
-        // ==================================
-        /**
-         * Abre uma nova janela para o download do PDF.
-         */
+
         function handleGerarPdf(numInicial, numFinal) {
             if (!numInicial || !numFinal || !tempIdEvento) {
-                alert("Erro: Dados incompletos para gerar PDF (Evento, Início ou Fim ausente).");
+                alert("Erro: Dados incompletos para gerar PDF.");
                 return;
             }
-            
-            if (info_tipo_cartela = 15) {
-                alert("Erro: Em desenvolvimento.");
-                return;
-            }
-
-            // Constrói a URL de destino
-            // Usamos url_for para a base da rota, e adicionamos os parâmetros aquix
             const baseUrl = "{{ url_for('gerar_cartelas_pdf_' ~ info_tipo_cartela | default(15)) }}";            
             const params = new URLSearchParams({
                 numero_inicial_pdf: numInicial,
                 numero_final_pdf: numFinal,
-                id_evento: tempIdEvento
+                id_evento: tempIdEvento,
+                id_cliente: tempIdCliente,
+                nome_cliente: tempNomeCliente
             });
-            
-            const finalUrl = `${baseUrl}?${params.toString()}`;
-            
-            // Abre em uma nova aba (o navegador vai tratar como download)
-            window.open(finalUrl, '_blank');
-            
-            // Fecha a modal após o clique
+            window.open(`${baseUrl}?${params.toString()}`, '_blank');
             closeReprintModal();
         }
-        // ==================================
-        //       FIM DA NOVA FUNÇÃO
-        // ==================================
 
-        /**
-         * Mostra a mensagem "Copiado!" por 2 segundos.
-         */
         function showToast(message) {
             toast.textContent = message;
             toast.style.display = 'block';
-            setTimeout(() => { // Delay para a transição de opacidade funcionar
-                 toast.style.opacity = 1;
-            }, 10);
-            
+            setTimeout(() => { toast.style.opacity = 1; }, 10);
             setTimeout(() => {
                 toast.style.opacity = 0;
-                setTimeout(() => {
-                    toast.style.display = 'none';
-                }, 500); // Tempo da transição
-            }, 2000); // Tempo que o toast fica visível
+                setTimeout(() => { toast.style.display = 'none'; }, 500);
+            }, 2000);
         }
 
-        /**
-         * Função de helper para copiar texto (TXT)
-         * (Usa document.execCommand para máxima compatibilidade)
-         */
         function copyTextToClipboard(text) {
             if (!text) return;
             const tempTextArea = document.createElement('textarea');
@@ -321,22 +295,85 @@
             document.body.appendChild(tempTextArea);
             tempTextArea.select();
             
+            // REMOVIDO: abrirWhatsApp(text) <-- Essa linha estava duplicada aqui fora
+            
             try {
-                const successful = document.execCommand('copy');
-                if (successful) {
-                    showToast('Comprovante copiado!');
+                 if (document.execCommand('copy'))  {
+                   abrirWhatsApp(text); // Mantém apenas esta chamada
+                   showToast('Comprovante copiado!');
                 } else {
-                    showToast('Falha ao copiar.');
+                   showToast('Falha ao copiar.');
                 }
-            } catch (err) {
-                showToast('Erro ao copiar.');
-            }
+            } catch (err) { showToast('Erro ao copiar.'); }
             document.body.removeChild(tempTextArea);
         }
 
-        /**
-         * Chamada AJAX (Fetch) para o back-end para gerar o comprovante.
-         */
+        // Atualizei a função para receber o texto
+           function abrirWhatsApp(textoParaEnviar) {
+           // Garante que é uma string vazia se for null/undefined
+           var rawTelefone = tempTelefone || ""; 
+           var telefone = rawTelefone.replace(/\D/g, '');
+         
+           // Lógica do 55 (Brasil)
+           if (telefone && telefone.length > 0) {
+               // Se o número tiver 10 ou 11 dígitos (ex: 11999998888), adiciona 55
+               // Se já tiver 12 ou 13 (ex: 5511...), não adiciona
+               if (telefone.length <= 11) {
+                   telefone = "55" + telefone;
+               }
+           } else {
+               telefone = "";
+           }
+ 
+           var mensagem = textoParaEnviar || "";
+           var mensagemCodificada = encodeURIComponent(mensagem);
+
+           var url = "https://wa.me/" + telefone + "?text=" + mensagemCodificada;
+
+           window.open(url, '_blank');
+        }
+        // --- FUNÇÃO DE EXCLUSÃO (SEGURA) ---
+        async function handleExcluirVenda() {
+            if (!btnExcluir) return; // Segurança extra
+
+            const confirmacao = confirm(`ATENÇÃO CRÍTICA!\n\nVocê está prestes a excluir a venda ID: ${tempIdVenda} do cliente ${tempNomeCliente}.\n\nEssa ação NÃO pode ser desfeita.\n\nDeseja realmente continuar?`);
+            
+            if (!confirmacao) return;
+
+            const data = {
+                id_venda: tempIdVenda,
+                id_evento: tempIdEvento
+            };
+
+            const textoOriginal = btnExcluir.textContent;
+            btnExcluir.textContent = "Excluindo...";
+            btnExcluir.disabled = true;
+
+            try {
+                const response = await fetch("{{ url_for('excluir_venda') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    alert("Sucesso: " + result.message);
+                    location.reload(); 
+                } else {
+                    alert("Erro: " + result.message);
+                    btnExcluir.textContent = textoOriginal;
+                    btnExcluir.disabled = false;
+                }
+            } catch (err) {
+                alert('Erro de conexão ao tentar excluir a venda.');
+                console.error(err);
+                btnExcluir.textContent = textoOriginal;
+                btnExcluir.disabled = false;
+            }
+        }
+
         async function handleReprint(tipo) {
             const data = {
                 tipo_reimpressao: tipo,
@@ -345,39 +382,28 @@
                 id_evento: tempIdEvento
             };
 
-            // Mostra um feedback de carregamento
-            if (tipo === 'unica') {
-                btnVendaUnica.textContent = 'Gerando...';
-            } else {
-                btnVendasCliente.textContent = 'Gerando...';
-            }
+            if (tipo === 'unica') btnVendaUnica.textContent = 'Gerando...';
+            else btnVendasCliente.textContent = 'Gerando...';
 
             try {
-                // --- ROTA ATUALIZADA ---
                 const response = await fetch("{{ url_for('reimprimir_comprovante_txt') }}", {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json'
-                    },
+                    headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)
                 });
 
                 const result = await response.json();
 
                 if (result.status === 'success') {
-                    // Copia o texto limpo (TXT) para a área de transferência
                     copyTextToClipboard(result.receipt_text);
                 } else {
-                    // Mostra a mensagem de erro do back-end
                     alert(`Erro: ${result.message}`);
                 }
-
             } catch (err) {
-                alert('Erro de conexão ao tentar gerar o comprovante.');
                 console.error(err);
+                alert('Erro de conexão ou processamento.');
             } finally {
-                // Restaura os botões e fecha a modal
-                btnVendaUnica.textContent = `Reimprimir Venda Únicas (ID: ${tempIdVenda})`;
+                btnVendaUnica.textContent = `Reimprimir Venda Única (ID: ${tempIdVenda})`;
                 btnVendasCliente.textContent = 'Reimprimir TODAS as Vendas do Cliente';
                 closeReprintModal();
             }

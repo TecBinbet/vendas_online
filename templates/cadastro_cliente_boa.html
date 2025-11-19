@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cadastro de Clientes</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#059669',
+                        'secondary': '#10B981',
+                        'accent': '#F59E0B', // Amber
+                        'danger': '#EF4444',
+                        'info': '#3B82F6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F7F7F7; }
+        .container { max-width: 900px; margin: 20px auto; padding: 30px; background-color: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
+        .nav-link { padding: 10px 20px; border-radius: 6px; font-weight: bold; transition: background-color 0.3s; text-decoration: none; display: inline-block; text-align: center; }
+        .form-group label { font-weight: 600; display: block; margin-bottom: 5px; color: #374151; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px; }
+        .required-label::after { content: ' *'; color: #EF4444; }
+
+        .btn-submit { padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; color: white; border: none; }
+        .btn-save { background-color: #059669; } 
+        .btn-save:hover { background-color: #047857; }
+
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #FCA5A5; }
+        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; }
+
+        /* Estilos da Tabela */
+        .list-header { background-color: #E5E7EB; color: #374151; font-weight: bold; }
+        .list-row:nth-child(even) { background-color: #F9FAFB; }
+        .action-link { text-decoration: none; font-weight: 600; margin-right: 10px; }
+        .delete-link { color: #EF4444; }
+        
+        /* NOVO: Apenas tailwind 'hidden' e controle pelo Jinja */
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h2 class="text-2xl mb-4 text-blue-800 text-center">Gestão de Clientes</h2>
+
+        {% if error %}
+            <div class="alert-danger">{{ error }}</div>
+        {% endif %}
+        {% if success %}
+            <div class="alert-success">{{ success | safe }}</div>
+        {% endif %}
+
+        <div class="flex space-x-4 mb-4 border-b pb-4">
+            <a href="{{ url_for('cadastro_cliente', view='novo', next=next_url) }}" 
+               class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
+                ➕ Novo
+            </a>
+            <a href="{{ url_for('cadastro_cliente', view='consulta', next=next_url) }}" 
+               class="nav-link {% if active_view == 'consulta' %}bg-accent text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:opacity-90">
+                🔎 Consulta
+            </a>
+            <a href="{{ url_for('cadastro_cliente', view='listar', next=next_url) }}" 
+               class="nav-link {% if active_view == 'listar' %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
+                📋 Listar
+            </a>
+            <!-- CRÍTICO: next_url e id_evento_retorno passados como hidden fields para manter o contexto -->
+            <input type="hidden" id="next_url_val" value="{{ next_url | default('menu_operacoes') }}">
+            {% if id_evento_retorno %}
+                <input type="hidden" id="id_evento_retorno_val" value="{{ id_evento_retorno }}">
+            {% endif %}
+        </div>
+
+        <div class="mb-2 p-2 bg-info text-white border border-blue-600 rounded-lg">
+            Total de Clientes Cadastrados: <strong id="total-clientes">{{ total_clientes | default(0) }}</strong>.
+        </div>
+        
+        <!-- VISUALIZAÇÃO NOVO/ALTERAR -->
+        {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
+        <!-- NOVO: Adiciona a classe 'hidden' se não for a view ativa -->
+        <div id="view-novo" class="view-content {% if not is_novo_alterar %}hidden{% endif %}">
+            
+            <!-- DEFINIÇÃO SEGURA: Garante que 'cliente' é um dicionário mesmo se 'cliente_edicao' for None -->
+            {% set cliente = cliente_edicao if cliente_edicao is not none else {} %} 
+            
+            <h3 class="text-xl font-semibold mb-2 {% if active_view == 'alterar' %}text-accent{% else %}text-primary{% endif %}">
+                {% if active_view == 'alterar' %}Alteração de Cliente (ID: CLI{{ cliente.get('id_cliente', 'N/A') }}){% else %}Cadastro de Novo Cliente{% endif %}
+            </h3>
+
+            {% set campos = g.parametros_globais.tipo_cadastro_cliente %}
+  
+           <form method="POST" action="{{ url_for('gravar_cliente') }}" id="form-cadastro" class="space-y-4">
+                
+                {% if active_view == 'alterar' %}
+                    <input type="hidden" name="id_cliente_edicao" value="{{ cliente.get('id_cliente', '') }}">
+                {% endif %}
+                
+                <!-- Campos ocultos para manter o fluxo de retorno -->
+                <input type="hidden" name="next_url" value="{{ next_url | default('menu_operacoes') }}">
+                {% if id_evento_retorno %}
+                    <input type="hidden" name="id_evento_retorno" value="{{ id_evento_retorno }}">
+                {% endif %}
+
+
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+
+                    <div class="form-group">
+                        <label>ID Cliente:</label>
+                        <input type="text" 
+                               value="{% if active_view == 'alterar' %}CLI{{ cliente.get('id_cliente', 'N/A') }}{% else %}Gerado Automaticamente{% endif %}" 
+                               disabled class="form-control bg-gray-100">
+                    </div>
+
+                    {% if "nome_cliente" in campos %}
+                    <div class="form-group">
+                        <label for="nome_cliente">Nome Completo {% if campos.nome_cliente %} (*){% endif %}</label>
+                        <input type="text" id="nome_cliente" name="nome_cliente" class="form-control" 
+                                 value="{{ cliente_edicao.nome_cliente | default('', true) }}"
+                                 {% if campos.nome_cliente %}required{% endif %}>
+                    </div>
+                    {% endif %}
+
+                    {% if "nick" in campos %}
+                    <div class="form-group">
+                         <label for="nick">Nick/Apelido {% if campos.nick %} (*){% endif %}</label>
+                         <input type="text" id="nick" name="nick" class="form-control"
+                                   value="{{ cliente_edicao.nick | default('', true) }}"
+                                   {% if campos.nick %}required{% endif %}>
+                    </div>
+                    {% endif %}
+
+                    {% if "telefone" in campos %}
+                    <div class="form-group">
+                        <label for="telefone">Telefone:{% if campos.telefone %} (*){% endif %}</label>
+                        <input type="text" id="telefone" name="telefone" class="form-control"
+                                  value="{{ cliente_edicao.telefone | default('', true) }}"
+                                  {% if campos.telefone %}required{% endif %}>
+                    </div>
+                    {% endif %}
+
+                    {% if "cpf" in campos %}                   
+                    <div class="form-group">
+                        <label for="cpf">CPF {% if campos.cpf %} (*){% endif %}</label>
+                        <input type="text" id="cpf" name="cpf" class="form-control"
+                                  value="{{ cliente_edicao.cpf | default('', true) }}"
+                                  {% if campos.cpf %}required{% endif %}>
+                    </div>
+                    {% endif %}
+
+                    {% if "cidade" in campos %}                   
+                    <div class="form-group">
+                        <label for="cidade">Cidade:{% if campos.cidade %} (*){% endif %}</label>
+                        <input type="text" id="cidade" name="cidade" class="form-control"
+                                  value="{{ cliente_edicao.cidade | default('', true) }}"
+                                  {% if campos.cidade %}required{% endif %}>
+                    </div>
+                    {% endif %}
+
+                    {% if "chave_pix" in campos %}
+                    <div class="form-group">
+                       <label for="chave_pix">Chave PIX: {% if campos.chave_pix %} (*){% endif %}</label>
+                       <input type="text" id="chave_pix" name="chave_pix" class="form-control"
+                           value="{{ cliente_edicao.chave_pix | default('', true) }}" 
+                           autocomplete="off"
+                           {% if campos.chave_pix %}required{% endif %}>
+                    </div>
+                    {% endif %}
+
+                    {% if "chave_pix" in campos %}                   
+                    <div class="form-group">
+                        <label for="confirma_chave_pix">Confirmar Chave PIX: {% if campos.chave_pix %} (*){% endif %} </label>
+                       <input type="text" id="confirma_chave_pix" name="confirma_chave_pix" class="form-control"
+                           value="{{ cliente_edicao.chave_pix | default('', true) }}" 
+                           autocomplete="off"
+                           {% if campos.chave_pix %}required{% endif %}>
+                    </div>
+                    {% endif %}
+
+                    {% if "senha" in campos %}                   
+                    <div class="form-group password-group">
+                    <label for="senha" class="required-label">
+                          Senha: {% if campos.senha %} (*){% endif %}
+                    </label>
+    
+                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('senha')">👁️</button>
+                    <input type="password" id="senha" name="senha" 
+                              class="form-control" 
+                              autocomplete="new-password"       
+                              placeholder="{% if cliente_edicao %}Deixe em branco para não alterar{% else %}Digite a senha{% endif %}"
+                              {% if campos.senha and not cliente_edicao %}required{% endif %}>
+                     </div>
+                     {% endif %}
+
+                     {% if "senha" in campos %}                   
+                     <div class="form-group password-group">
+                     <label for="confirma_senha" class="required-label">
+                          Senha: {% if campos.senha %} (*){% endif %}
+                    </label>
+    
+                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirma_senha')">👁️</button>
+                    <input type="password" id="confirma_senha"name="confirma_senha" 
+                              class="form-control" 
+                              autocomplete="new-password"       
+                              placeholder=="Repita a senha"
+                              {% if campos.senha and not cliente_edicao %}required{% endif %}>
+                     </div>
+                    {% endif %}
+                    
+                </div>
+                
+                <div class="mt-6 flex justify-end space-x-2">
+                    <button type="submit" class="btn-submit btn-save">
+                        {% if active_view == 'alterar' %}
+                            ✓ Salvar Alterações
+                        {% else %}
+                            💾 Salvar Cliente
+                        {% endif %}
+                    </button>
+                    {% if active_view == 'alterar' %}
+                        <a href="{{ url_for('cadastro_cliente', view='listar', next=next_url) }}" class="nav-link bg-gray-400 text-white hover:bg-gray-500">Cancelar</a>
+                    {% endif %}
+                </div>
+            </form>
+        </div>
+
+        <!-- VISUALIZAÇÃO CONSULTA -->
+        <!-- NOVO: Adiciona a classe 'hidden' se não for a view ativa -->
+        <div id="view-consulta" class="view-content {% if active_view != 'consulta' %}hidden{% endif %}">
+            <h3 class="text-xl font-semibold mb-4 text-accent">Consulta de Cliente</h3>
+            <form method="GET" action="{{ url_for('cadastro_cliente') }}" class="mb-4 space-y-2">
+                <input type="hidden" name="view" value="consulta">
+                <input type="hidden" name="next" value="{{ next_url | default('menu_operacoes') }}">
+                <label for="consulta_termo" class="form-group">Buscar por Nick, CPF ou ID:</label>
+                <div class="flex space-x-2">
+                    <input type="text" id="consulta_termo" name="query" value="{{ query | default('') }}" placeholder="Digite o termo de busca..." class="form-control mb-0">
+                    <button type="submit" class="nav-link bg-accent text-white hover:opacity-90 min-w-[100px]">Buscar</button>
+                </div>
+            </form>
+            
+            <div class="mt-6 p-4 border rounded-lg bg-gray-50">
+                {% if active_view == 'consulta' and query and clientes_lista|length > 0 %}
+                    <h4 class="font-bold mb-3">{{ clientes_lista | length }} Resultado(s) encontrado(s) para "{{ query }}"</h4>
+                    {% for cliente in clientes_lista %}
+                        <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0">
+                            <p>ID: <strong>CLI{{ cliente.id_cliente }}</strong></p>
+                            <p>Nome: <strong>{{ cliente.nome_cliente }} ({{ cliente.nick }})</strong> </p>
+                            {% if nivel >= 3 or id_logado == cliente.id_colaborador %} 
+                                <p>Telefone:<strong> {{ cliente.telefone | default('N/A') }}</strong></p>
+                            {% endif %}
+                            <p>Cidade: <strong> {{ cliente.cidade | default('N/A') }}</strong></p>
+                            <div class="mt-2 flex space-x-3">
+                                <!-- CORREÇÃO DE LINK -->
+                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+                                
+                                <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" 
+                                          class="inline-block"
+                                          id="form-excluir-{{ cliente.id_cliente }}"> <!-- Adiciona ID para JS -->
+                                          <button type="button" 
+                                                       class="action-link delete-link hover:text-red-600"
+                                                       onclick="confirmDelete('{{ cliente.nick }}', '{{ cliente.id_cliente }}')">
+                                               Excluir
+                                          </button>
+                                </form>
+
+                            </div>
+                        </div>
+                    {% endfor %}
+                {% elif active_view == 'consulta' and query and clientes_lista|length == 0 %}
+                    <p class="text-center text-red-500 font-bold">❌ Nenhum cliente encontrado para o termo "{{ query }}".</p>
+                {% else %}
+                    <p class="text-gray-500 text-center">Utilize o campo acima para buscar um cliente.</p>
+                {% endif %}
+            </div>
+        </div>
+        
+        <!-- VISUALIZAÇÃO LISTAR -->
+        <!-- NOVO: Adiciona a classe 'hidden' se não for a view ativa -->
+        <div id="view-listar" class="view-content {% if active_view != 'listar' %}hidden{% endif %}">
+            <h3 class="text-xl font-semibold mb-4 text-gray-700">Lista de Clientes (Ordenada por Nick)</h3>
+            
+            <div class="overflow-x-auto shadow-md rounded-lg">
+                <table class="min-w-full bg-white border border-gray-200">
+                    <thead>
+                        <tr class="list-header">
+                            <th class="py-2 px-4 border-b text-left">ID</th>
+                            <th class="py-2 px-4 border-b text-left">Nome (Nick)</th>
+                            <th class="py-2 px-4 border-b text-left">Telefone</th>
+                            <th class="py-2 px-4 border-b text-left">Cidade</th>
+                            <th class="py-2 px-4 border-b text-left">Última Compra</th>
+                            <th class="py-2 px-4 border-b text-left">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% if active_view == 'listar' and clientes_lista %}
+                            {% for cliente in clientes_lista %}
+                            <tr class="list-row hover:bg-gray-100 transition duration-150">
+                                <td class="py-3 px-4 border-b text-sm">CLI{{ cliente.id_cliente }}</td>
+                                <td class="py-3 px-4 border-b text-sm">{{ cliente.nome_cliente }} ({{ cliente.nick }})</td>
+                                {% if nivel >= 3 or id_logado == cliente.id_colaborador %}
+                                    <td class="py-3 px-4 border-b text-sm">{{ cliente.telefone }}</td>
+                                {% else %}
+                                    <td class="py-3 px-4 border-b text-sm"> . . .</td>
+                                {% endif %} 
+                                <td class="py-3 px-4 border-b text-sm">{{ cliente.cidade }}</td>
+                                <td class="py-3 px-4 border-b text-sm">{{ cliente.data_ultimo_compra_formatada | default('N/A') }}</td>
+                                <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
+                                    <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+                                    
+                                    <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" 
+                                          class="inline-block"
+                                          id="form-excluir-{{ cliente.id_cliente }}"> <!-- Adiciona ID para JS -->
+                                          <button type="button" 
+                                                       class="action-link delete-link hover:text-red-600"
+                                                       onclick="confirmDelete('{{ cliente.nick }}', '{{ cliente.id_cliente }}')">
+                                               Excluir
+                                          </button>
+                                    </form>
+                                 </td>
+                            </tr>
+                            {% endfor %}
+                        {% else %}
+                            <tr class="list-row"><td colspan="5" class="py-4 text-center text-gray-500">Nenhum cliente cadastrado ou selecione a opção "Listar" acima.</td></tr>
+                        {% endif %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="flex justify-center mt-8">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+        </div>
+    </div>
+    
+    <script>
+        function syncAndConfirm(event) {
+            const campoQuantidade = document.getElementById('quantidade');
+            const postQuantidade = document.getElementById('post_quantidade');
+            const elementoCustoTotal = document.getElementById('total-custo');
+            const btnCustoText = document.getElementById('btn-custo-text');
+            
+            // Pega o botão de confirmação que foi clicado
+            const confirmButton = event.target.closest('button[type="submit"]');
+
+            // 1. Sincroniza o campo hidden 'quantidade' com o valor atual do input
+            if (campoQuantidade && postQuantidade) {
+                postQuantidade.value = campoQuantidade.value;
+            }
+
+            // 2. Atualiza o texto do botão de confirmação para o valor ATUAL (visível na div)
+            if (elementoCustoTotal && btnCustoText) {
+                // Remove 'Custo Total: ' para obter apenas o valor formatado
+                const custoText = elementoCustoTotal.textContent.replace('Custo Total: ', '');
+                btnCustoText.textContent = custoText;
+            }
+            
+            // 3. Dispara a confirmação de segurança
+            const quantidadeAtual = campoQuantidade ? (parseInt(campoQuantidade.value) || 0) : 0;
+            const custoConfirm = elementoCustoTotal ? elementoCustoTotal.textContent.replace('Custo Total: ', '') : 'R$ 0,00';
+            
+            if (quantidadeAtual === 0) {
+                 alert("A quantidade de unidades deve ser maior que zero.");
+                 return false;
+            }
+
+            // A função confirm() padrão é usada
+            const isConfirmed = confirm(`ATENÇÃO: Confirma a venda de ${custoConfirm} (${quantidadeAtual} unidades)? Esta é uma transação CRÍTICA.`);
+
+            if (!isConfirmed) {
+                event.preventDefault(); // Evita o submit se não for confirmado
+                return false; 
+            }
+            
+            // 4. NOVO: Se confirmado, oculta e desabilita o botão imediatamente
+            if (confirmButton) {
+                confirmButton.disabled = true;
+                confirmButton.textContent = 'Processando Venda...';
+                confirmButton.style.opacity = '0.7';
+                confirmButton.style.cursor = 'not-allowed';
+            }
+            
+            return true; // Permite o submit do formulário
+        }
+
+
+        // NOVO: Função para manipular a tecla Enter e mover o foco
+        function handleEnterKey(event) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Impede o submit padrão do formulário
+                
+                const form = event.target.form;
+                if (!form) return true;
+
+                const elements = Array.from(form.elements); // Converte para Array
+                const index = elements.indexOf(event.target);
+                
+                // Procura o próximo elemento que pode receber foco
+                for (let i = index + 1; i < elements.length; i++) {
+                    const element = elements[i];
+                    
+                    // Pula elementos desabilitados, botões de toggle de senha e campos ocultos
+                    if (element.type !== 'hidden' && !element.disabled && 
+                        !element.classList.contains('password-toggle') && element.name) {
+                        
+                        element.focus();
+                        return false; // Sucesso ao mover o foco
+                    }
+                }
+                
+                // Se chegou ao fim, tenta focar no botão de submit
+                const submitButton = form.querySelector('button[type="submit"]');
+                if (submitButton) {
+                    submitButton.focus();
+                }
+                
+                return false; // Sempre retorna false para impedir o submit
+            }
+            return true; // Deixa outras teclas funcionarem normalmente
+        }
+
+        // NOVO: Função que dispara a confirmação e submete o formulário se confirmado
+        function confirmDelete(nick, id_cliente) {
+            const message = `ATENÇÃO: Confirma a exclusão de ${nick} (CLI${id_cliente})? Esta ação é IRREVERSÍVEL.`;
+            
+            // Usa o confirm padrão do navegador
+            if (window.confirm(message)) {
+                // Se confirmado, encontra o formulário (ID dinâmico) e o submete
+                // Checa primeiro o ID da consulta, depois o da lista
+                let form = document.getElementById(`form-excluir-${id_cliente}`);
+                if (!form) {
+                    form = document.getElementById(`form-excluir-list-${id_cliente}`);
+                }
+                
+                if (form) {
+                    form.submit();
+                }
+            }
+        }
+
+        // NOVO: Função para alternar a visibilidade da senha
+        function togglePasswordVisibility(fieldId) {
+            const passwordInput = document.getElementById(fieldId);
+            const toggleButton = passwordInput.previousElementSibling; // O botão está imediatamente antes do input
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleButton.textContent = '🙈';
+            } else {
+                passwordInput.type = 'password';
+                toggleButton.textContent = '👁️';
+            }
+        }
+        // Função para simular o confirm para ambientes que bloqueiam window.confirm (se necessário)
+        function ShowConfirm(message) {
+            return window.confirm(message);
+        }
+        
+        // Simulação de inicialização para evitar erros no navegador
+        document.addEventListener('DOMContentLoaded', () => {
+             if (!document.getElementById('total-clientes').textContent) {
+                document.getElementById('total-clientes').textContent = 'N/A';
+            }
+        });
+    </script>
+</body>
+</html>

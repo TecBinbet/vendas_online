@@ -43,6 +43,40 @@
         /* Visibilidade controlada por Jinja */
         .view-content { display: none; }
         .view-content.active-view-show { display: block !important; }
+
+        /* --- INÍCIO CSS DA MODAL DE EXCLUSÃO --- */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: none; /* Começa escondido */
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .modal-content {
+            background-color: #FFF;
+            padding: 2rem;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 500px;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+        .modal-btn {
+            padding: 0.6rem 1rem;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .btn-danger { background-color: #EF4444; color: white; }
+        .btn-danger:hover { background-color: #DC2626; }
+        .btn-cancel { background-color: #D1D5DB; color: #374151; }
+        .btn-cancel:hover { background-color: #B2B8C2; }
+        /* --- FIM CSS DA MODAL DE EXCLUSÃO --- */
     </style>
 </head>
 <body>
@@ -138,7 +172,7 @@
                         <label for="valor_de_venda" class="required-label">Valor da Unidade (R$):</label>
                         <!-- CORREÇÃO: Valor monetário padronizado para 0.00 -->
                         <input type="number" id="valor_de_venda" name="valor_de_venda" required step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('valor_de_venda', ) }}" oninput="calculatePremioTotal()">
+                               value="{{ evento.get('valor_de_venda', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
 
                     <!-- Linha 4: Controle de Cartelas -->
@@ -158,7 +192,7 @@
                         <label for="premio_quadra" class="required-label">Prêmio Quadra (R$):</label>
                         <!-- CORREÇÃO: Se vazio, use 0.00 -->
                         <input type="number" id="premio_quadra" name="premio_quadra" required step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_quadra', ) }}" oninput="calculatePremioTotal()">
+                               value="{{ evento.get('premio_quadra', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
                         <label for="quantidade_de_linhas" class="required-label">Qtde. de Linhas (1-3):</label>
@@ -169,7 +203,7 @@
                         <label for="premio_linha" class="required-label">Prêmio por Linha (R$):</label>
                         <!-- CORREÇÃO: Se vazio, use 0.00 -->
                         <input type="number" id="premio_linha" name="premio_linha" required step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_linha', ) }}" oninput="calculatePremioTotal()">
+                               value="{{ evento.get('premio_linha', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
 
                     <!-- Linha 6: Prêmios (Linha 2) e Acumulado -->
@@ -177,13 +211,13 @@
                         <label for="premio_bingo" class="required-label">Prêmio Bingo (R$):</label>
                         <!-- CORREÇÃO: Se vazio, use 0.00 -->
                         <input type="number" id="premio_bingo" name="premio_bingo" required step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_bingo', ) }}" oninput="calculatePremioTotal()">
+                               value="{{ evento.get('premio_bingo', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
                         <label for="premio_segundobingo">Prêmio Segundo Bingo (R$):</label>
                         <!-- CORREÇÃO: Se vazio, use 0.00 -->
                         <input type="number" id="premio_segundobingo" name="premio_segundobingo" step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_segundobingo', ) }}" oninput="calculatePremioTotal()">
+                               value="{{ evento.get('premio_segundobingo', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
                         <label for="minimo_de_venda">Mínimo de Venda Necessário (Qtde):</label>
@@ -202,7 +236,7 @@
                         <label for="premio_acumulado">Prêmio Acumulado (R$):</label>
                         <!-- CORREÇÃO: Se vazio, use 0.00 -->
                         <input type="number" id="premio_acumulado" name="premio_acumulado" step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_acumulado', ) }}" oninput="toggleBolaTope(); calculatePremioTotal()">
+                               value="{{ evento.get('premio_acumulado', 0.00) }}" oninput="toggleBolaTope(); calculatePremioTotal()">
                     </div>
                     
                     <div class="form-group">
@@ -273,11 +307,16 @@
                             <div class="mt-2 flex space-x-3">
                                 <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                 
+                                <!-- === INÍCIO DA MUDANÇA (CONSULTA) === -->
                                 <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}" 
-                                      class="inline-block"
-                                      onsubmit="return confirm('ATENÇÃO: Confirma a exclusão do evento ID {{ evento.id_evento }}? Esta ação é IRREVERSÍVEL.')">
-                                    <button type="submit" class="action-link delete-link hover:text-red-600">Excluir</button>
+                                      id="form-excluir-consulta-{{ evento.id_evento }}"
+                                      class="inline-block">
+                                    <!-- CORREÇÃO: Usar ' (apóstrofo) no onclick e " (aspas) nos parâmetros -->
+                                    <button type="button" 
+                                            onclick='openDeleteModal("{{ evento.id_evento }}", {{ evento.descricao | tojson }}, "consulta")'
+                                            class="action-link delete-link hover:text-red-600">Excluir</button>
                                 </form>
+                                <!-- === FIM DA MUDANÇA (CONSULTA) === -->
 
                             </div>
                         </div>
@@ -318,11 +357,16 @@
                                 <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
                                     <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                     
-                                    <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}" 
-                                          class="inline-block"
-                                          onsubmit="return confirm('ATENÇÃO: Confirma a exclusão do evento ID {{ evento.id_evento }}? Esta ação é IRREVERSÍVEL.')">
-                                        <button type="submit" class="action-link delete-link hover:text-red-600">Excluir</button>
+                                    <!-- === INÍCIO DA MUDANÇA (LISTAR) === -->
+                                    <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}"
+                                          id="form-excluir-listar-{{ evento.id_evento }}"
+                                          class="inline-block">
+                                        <!-- CORREÇÃO: Usar ' (apóstrofo) no onclick e " (aspas) nos parâmetros -->
+                                        <button type="button" 
+                                                onclick='openDeleteModal("{{ evento.id_evento }}", {{ evento.descricao | tojson }}, "listar")'
+                                                class="action-link delete-link hover:text-red-600">Excluir</button>
                                     </form>
+                                    <!-- === FIM DA MUDANÇA (LISTAR) === -->
                                 </td>
                             </tr>
                             {% endfor %}
@@ -339,6 +383,21 @@
         </div>
         
     </div>
+
+    <!-- === INÍCIO DA MODAL DE EXCLUSÃO (NOVO) === -->
+    <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
+            <p class="mb-4">Tem a certeza que deseja excluir este evento? Esta ação é irreversível.</p>
+            <p class="mb-4"><strong>ID:</strong> <span id="modal-delete-id" class="font-bold">...</span></p>
+            <p class="mb-4"><strong>Descrição:</strong> <span id="modal-delete-descricao" class="font-bold">...</span></p>
+            <div class="flex justify-end space-x-2 mt-6">
+                <button type="button" class="modal-btn btn-cancel" onclick="closeDeleteModal()">Cancelar</button>
+                <button type="button" id="modal-btn-confirm-delete" class="modal-btn btn-danger">Confirmar Exclusão</button>
+            </div>
+        </div>
+    </div>
+    <!-- === FIM DA MODAL DE EXCLUSÃO === -->
     
     <script>
         document.addEventListener('DOMContentLoaded', (event) => {
@@ -350,61 +409,35 @@
         function preventDefaultOnEnter(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
-                // Opcional: mover o foco para o próximo campo ou para o botão de salvar.
                 return false; 
             }
         }
 
         // Função que calcula o prêmio total e o mínimo de venda
         function calculatePremioTotal() {
-            // Usa o operador nullish-coalescing (??) para pegar o valor ou 0
+            // ... (A sua função calculatePremioTotal() permanece igual)
             const quadra = parseFloat(document.getElementById('premio_quadra')?.value) || 0;
             const linhas_qtde = parseInt(document.getElementById('quantidade_de_linhas')?.value) || 0;
             const linha_valor = parseFloat(document.getElementById('premio_linha')?.value) || 0;
             const bingo = parseFloat(document.getElementById('premio_bingo')?.value) || 0;
             const segundobingo = parseFloat(document.getElementById('premio_segundobingo')?.value) || 0;
-            const acumulado = parseFloat(document.getElementById('premio_acumulado')?.value) || 0; // Incluído Acumulado no cálculo
-
+            const acumulado = parseFloat(document.getElementById('premio_acumulado')?.value) || 0; 
             const valor_unidade = parseFloat(document.getElementById('valor_de_venda')?.value) || 0;
             const unidade_venda = parseInt(document.getElementById('unidade_de_venda')?.value) || 1;
-
-            // 1. Cálculo do Prêmio Total
             const totalLinha = linhas_qtde * linha_valor;
-            const premioTotal = quadra + totalLinha + bingo + segundobingo + acumulado; // Adicionado acumulado
-            
-            // 2. Cálculo do Mínimo de Venda Necessário
+            const premioTotal = quadra + totalLinha + bingo + segundobingo + acumulado; 
             let minimoVenda = 0;
             if (valor_unidade > 0 && unidade_venda > 0) {
                  minimoVenda = premioTotal / (valor_unidade * unidade_venda);
             }
-            
-            // Atualiza os campos
             document.getElementById('premio_total').value = premioTotal.toFixed(2);
-            document.getElementById('minimo_de_venda').value = Math.ceil(minimoVenda); // Arredonda para cima para garantir cobertura
-            
-            // Chama o toggle para garantir que o campo bola tope se atualize
+            document.getElementById('minimo_de_venda').value = Math.ceil(minimoVenda); 
             toggleBolaTope();
         }
-        // NOVO: Função que dispara a confirmação e submete o formulário se confirmado
-        function confirmDelete(nick, id_cliente) {
-            const message = `ATENÇÃO: Confirma a exclusão de ${nick} (CLI${id_cliente})? Esta ação é IRREVERSÍVEL.`;
-            
-            // Usa o confirm padrão do navegador
-            if (window.confirm(message)) {
-                // Se confirmado, encontra o formulário (ID dinâmico) e o submete
-                // Checa primeiro o ID da consulta, depois o da lista
-                let form = document.getElementById(`form-excluir-${id_cliente}`);
-                if (!form) {
-                    form = document.getElementById(`form-excluir-list-${id_cliente}`);
-                }
-                
-                if (form) {
-                    form.submit();
-                }
-            }
-        }
+
         // Função que ativa/desativa o campo Bola Tope
         function toggleBolaTope() {
+            // ... (A sua função toggleBolaTope() permanece igual)
             const acumulado = parseFloat(document.getElementById('premio_acumulado')?.value) || 0;
             const bolaTopeInput = document.getElementById('bola_tope_acumulado');
             const bolaTopeLabel = document.getElementById('label_bola_tope');
@@ -423,10 +456,64 @@
             }
         }
         
-        // Função para simular o confirm para ambientes que bloqueiam window.confirm (se necessário)
-        function confirm(message) {
-            return window.confirm(message);
+        // --- LÓGICA DA MODAL DE EXCLUSÃO (NOVO) ---
+        
+        // Elementos da Modal
+        const deleteModal = document.getElementById('delete-modal');
+        const modalDeleteId = document.getElementById('modal-delete-id');
+        const modalDeleteDescricao = document.getElementById('modal-delete-descricao');
+        const btnConfirmDelete = document.getElementById('modal-btn-confirm-delete');
+        
+        let formIdParaExcluir = null; // Guarda o ID do formulário a ser submetido
+
+        /**
+         * Abre a modal e configura qual formulário deve ser submetido.
+         * @param {string} id - O ID do evento
+         * @param {string} descricao - A descrição do evento
+         * @param {string} view - 'listar' ou 'consulta', para encontrar o formulário correto
+         */
+        function openDeleteModal(id, descricao, view) {
+            if (!deleteModal) return;
+
+            // 1. Guarda o ID do formulário que deve ser submetido
+            formIdParaExcluir = `form-excluir-${view}-${id}`;
+
+            // 2. Preenche os dados na modal
+            modalDeleteId.textContent = id;
+            modalDeleteDescricao.textContent = descricao;
+            
+            // 3. Mostra a modal
+            deleteModal.style.display = 'flex';
         }
+
+        /**
+         * Fecha a modal e limpa o ID do formulário.
+         */
+        function closeDeleteModal() {
+            if (!deleteModal) return;
+            formIdParaExcluir = null;
+            deleteModal.style.display = 'none';
+        }
+
+        /**
+         * Event listener para o botão "Confirmar Exclusão" dentro da modal.
+         */
+        if (btnConfirmDelete) {
+            btnConfirmDelete.onclick = function() {
+                if (formIdParaExcluir) {
+                    const form = document.getElementById(formIdParaExcluir);
+                    if (form) {
+                        form.submit(); // Submete o formulário correto
+                    } else {
+                        console.error('Formulário de exclusão não encontrado:', formIdParaExcluir);
+                    }
+                }
+                closeDeleteModal(); // Fecha a modal
+            };
+        }
+        
+        // REMOVIDO: A função 'confirm(message)' antiga foi removida
+        // REMOVIDO: A função 'confirmDelete(nick, id_cliente)' (que era de clientes) foi removida
         
     </script>
 </body>

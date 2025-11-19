@@ -37,7 +37,7 @@
         .btn-warning:hover { background-color: #1DA851; }
         .btn-small { padding: 6px 12px; font-size: 0.9rem; }
 
-        .client-search-group { display: flex; gap: 8px; margin-bottom: 15px; }
+        .client-search-group { display: flex; gap: 8px; margin-bottom: 0; position: relative; } /* relative para a lista absoluta */
         .client-search-group input { flex-grow: 1; margin-bottom: 0; }
         .client-search-group .btn-small { width: auto; flex-shrink: 0; padding: 10px 15px; margin-bottom: 0; font-size: 0.9rem; }
         
@@ -65,6 +65,35 @@
         }
         .event-card:hover { border-color: #A7F3D0; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
 
+        /* --- CSS DA LISTA DE RESULTADOS DE BUSCA (NOVO) --- */
+        #search-results-list {
+            position: absolute;
+            top: 100%; /* Logo abaixo do input */
+            left: 0;
+            right: 0; /* Mesma largura do container pai */
+            background: white;
+            border: 1px solid #D1D5DB;
+            border-radius: 0 0 6px 6px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            z-index: 50;
+            max-height: 200px;
+            overflow-y: auto;
+            display: none; /* Começa oculto */
+        }
+        
+        .search-result-item {
+            padding: 10px;
+            border-bottom: 1px solid #F3F4F6;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .search-result-item:last-child { border-bottom: none; }
+        .search-result-item:hover { background-color: #F0FDF4; } /* Verde claro */
+        
+        .search-type-selector {
+            display: flex; gap: 15px; margin-bottom: 8px; font-size: 0.9rem; color: #4B5563;
+        }
+        .search-type-selector label { font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px; }
     </style>
 </head>
 <body>
@@ -77,24 +106,14 @@
         {% endif %}
         
         {% if success %}
+            <!-- Bloco de Sucesso (Mantido igual) -->
             <div class="alert alert-success text-center">
                 <h3 class="text-xl font-bold mb-2">Venda Registrada com Sucesso!</h3>
-                
-                <div id="receipt-content">
-                    {{ success | safe }}
-                </div>
+                <div id="receipt-content">{{ success | safe }}</div>
             </div>
-            
             <div class="flex justify-center mb-2 gap-3 flex-wrap">
-
-                <button onclick="copyReceiptText()" class="btn btn-primary shadow-lg">
-                    📋 Copiar Texto (Área de Transferência)
-                </button>
-
-                <button onclick="shareReceiptImage()" class="btn btn-warning shadow-lg">
-                    🖼️ Gerar Imagem e Compartilhar
-                </button>
-
+                <button onclick="copyReceiptText()" class="btn btn-primary shadow-lg">📋 Copiar Texto</button>
+                <button onclick="shareReceiptImage()" class="btn btn-warning shadow-lg">🖼️ Gerar Imagem</button>
             </div>
         {% endif %}
 
@@ -104,7 +123,6 @@
         
         <form method="GET" action="{{ url_for('nova_venda') }}" class="form-venda" id="main-form">
             
-            <!-- CAMPO OCULTO APENAS PARA ID DO EVENTO -->
             <input type="hidden" name="id_evento" id="input_id_evento" 
                    value="{% if selected_event %}{{ selected_event._id }}{% endif %}">
             
@@ -124,7 +142,6 @@
             {% if selected_event %}
                 <div class="alert alert-info mt-0 mb-1" style="margin-top: 1px;">
                     <h4 class="text-lg font-bold">{{ selected_event.descricao }}</h4>
-                  
                     <p>Data: <strong>{{ selected_event.data_evento }}</strong> | Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
                     <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
                     <p>Núm. Inícial: <strong>{{ selected_event.numero_inicial }}</strong> | Núm. Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
@@ -132,33 +149,47 @@
             {% endif %}
 
             {% if selected_event %}
-                <div class="form-group">
-                    <label for="id_cliente_busca">2. Nome do Cliente ou ID ( Buscar ):</label>
+                <div class="form-group relative">
+                    <label for="id_cliente_busca">2. Cliente ( Buscar ):</label>
+                    
+                    <!-- SELETOR DE TIPO DE BUSCA (NOVO) -->
+                    <div class="search-type-selector">
+                        <label><input type="radio" name="search_type" value="nick" checked onchange="clearSearch()"> Nick (Apelido)</label>
+                        <label><input type="radio" name="search_type" value="nome" onchange="clearSearch()"> Nome</label>
+                        <label><input type="radio" name="search_type" value="id" onchange="clearSearch()"> ID</label>
+                    </div>
+
                     <div class="client-search-group font-bold">
-                        <!-- CAMPO DE BUSCA DE CLIENTE -->
+                        <!-- INPUT DE BUSCA COM EVENTO DE DIGITAÇÃO -->
                         <input type="text" id="id_cliente_busca" name="id_cliente_busca" 
                                value="{{ cliente_busca | default('') }}" 
-                               placeholder="Busque por ID, Nome ou Nick..." 
-                               class="form-control">
+                               placeholder="Digite para buscar..." 
+                               class="form-control"
+                               autocomplete="off"
+                               onkeyup="handleSearchInput(this)">
                         
-                        <button type="submit" class="btn btn-primary btn-small">
-                            🔍 Buscar
-                        </button>
-                        
-                        <a href="{{ url_for('cadastro_cliente', view='novo', next='nova_venda') }}" class="btn btn-novo btn-small" style="text-decoration: none;">
+                        <!-- Link para novo cadastro (mantido) -->
+                        <a href="{{ url_for('cadastro_cliente', view='novo', next='nova_venda') }}" class="btn btn-novo btn-small" style="text-decoration: none; display: flex; align-items: center;">
                             ➕ Novo
                         </a>
+                        
+                        <!-- LISTA DE RESULTADOS FLUTUANTE (NOVO) -->
+                        <div id="search-results-list"></div>
                     </div>
                 </div>
 
+                <!-- Resultado da seleção (Cliente encontrado) -->
                 {% if cliente_encontrado %}
                     <div class="alert alert-success mt-1">
-                        Nick: <strong>{{ cliente_encontrado.nick | default(cliente_encontrado.nome_cliente) }}</strong> (ID: <strong>CLI{{ id_cliente_final }}</strong>)
-                        <!-- Campo hidden necessário para o POST final -->
-                        <input type="hidden" name="id_cliente_final" value="{{ id_cliente_final }}">
+                        Selecionado: <strong>{{ cliente_encontrado.nick }}</strong> ({{ cliente_encontrado.nome_cliente }}) - ID: <strong>CLI{{ id_cliente_final }}</strong>
+                        <input type="hidden" name="id_cliente_final" id="id_cliente_final_hidden" value="{{ id_cliente_final }}">
                     </div>
                 {% elif cliente_busca and not cliente_encontrado %}
+                    <!-- Este alerta aparece se o backend não achou nada via submit tradicional (fallback) -->
                     <div class="alert alert-warning mt-1 alert-info">Cliente '{{ cliente_busca }}' não encontrado.</div>
+                {% else %}
+                    <!-- Campo hidden vazio se nenhum cliente selecionado -->
+                    <input type="hidden" name="id_cliente_final" id="id_cliente_final_hidden" value="">
                 {% endif %}
 
                 <div class="form-group mt-1">
@@ -184,7 +215,6 @@
         {% if cliente_encontrado and quantidade > 0 and selected_event %}
             <hr class="my-4 border-gray-300">
             <form method="POST" action="{{ url_for('processar_venda') }}" class="flex justify-center" id="confirm-form">
-                <!-- Parâmetros de envio final da venda (serão preenchidos pelo JS) -->
                 <input type="hidden" name="id_cliente_final" id="post_id_cliente_final" value="{{ id_cliente_final }}">
                 <input type="hidden" name="id_evento" id="post_id_evento" value="{{ selected_event._id }}">
                 <input type="hidden" name="quantidade" id="post_quantidade" value="{{ quantidade }}">
@@ -193,21 +223,18 @@
                      onclick="return syncAndConfirm(event)">
                     ✅ Confirmar e Gravar Venda (<span id="btn-custo-text">R$ {{ "%.2f" | format(custo) }}</span>)
                 </button>
-
             </form>
         {% endif %}
 
         <div class="flex justify-center font-bold mt-4">
             <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
         </div>
-        
     </div>
     
-    <!-- MODAL DE SELEÇÃO DE EVENTOS -->
+    <!-- MODAL DE EVENTOS (Mantida igual) -->
     <div id="event-selector-modal" class="modal">
         <div class="modal-content w-full md:w-3/4 lg:w-1/2">
             <h3 class="text-xl font-bold mb-1 text-gray-700 border-b pb-1">Selecione o Evento Ativo</h3>
-
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-130 overflow-y-auto pr-2">
                 {% for evento in eventos %}
                     <div class="event-card shadow-md flex flex-col justify-between"
@@ -215,310 +242,283 @@
                         data-descricao="{{ evento.descricao }}"
                         data-valor="{{ '%.2f' | format(evento.valor_de_venda_float) }}"
                         data-unidade="{{ evento.unidade_de_venda }}"
-                        data-data-hora="{{ evento.data_evento }} às {{ evento.hora_evento }}"
-                        data-num-atual="{{ evento.numeracao_atual_display }}"
                         onclick="selectEvent(this)">
-
                         <div>
                             <p class="text-md font-bold text-primary">{{ evento.descricao }} (EVE{{ evento.id_evento }})</p>
-                            <p class="text-md text-gray-500">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
-                            
                             <div class="mt-2 text-md font-semibold">
                                 <p>💰 R$ {{ '%.2f' | format(evento.valor_de_venda_float) }} / Unidade</p>
-                                <p>🎟️ Kits: {{ evento.unidade_de_venda }} cartelas</p>
                             </div>
                         </div>
-
                         <div class="mt-3 pt-2 border-t border-dashed">
-                             <p class="text-sm text-gray-700">Próximo Bilhete: 
-                                <span class="font-bold text-lg text-red-600">{{ evento.numeracao_atual_display }}</span>
-                            </p>
-                            <button class="btn btn-primary btn-small w-full mt-2" 
-                                    onclick="selectEvent(this.parentElement.parentElement); return false;">
-                                Selecionar
-                            </button>
+                            <button class="btn btn-primary btn-small w-full mt-2">Selecionar</button>
                         </div>
                     </div>
                 {% else %}
-                    <p class="text-center text-gray-500 md:col-span-2">Nenhum evento ativo disponível para venda.</p>
+                    <p class="text-center text-gray-500 md:col-span-2">Nenhum evento ativo.</p>
                 {% endfor %}
             </div>
-
             <button onclick="closeEventSelector()" class="btn bg-gray-400 text-white hover:bg-gray-500 mt-4 w-full">Fechar</button>
         </div>
     </div>
-    <!-- FIM DA MODAL -->
-    
+
     <script>
-        // Variáveis globais/Jinja
+        // Variáveis globais
         let Venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}");
         let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
+        let searchTimeout = null; // Para o debounce
 
-       /**
-         * Limpa e converte a string de valor monetário (ex: "10,00" ou "1.000,00") para float.
-         * @param {string} valueString O valor como string.
-         * @returns {number} O valor como float.
-         */
+        // --- LÓGICA DE BUSCA DINÂMICA (NOVO) ---
+
+        function handleSearchInput(inputElement) {
+            const termo = inputElement.value.trim();
+            const resultsDiv = document.getElementById('search-results-list');
+            
+            // 1. Limpa o timeout anterior (debounce)
+            if (searchTimeout) clearTimeout(searchTimeout);
+
+            // 2. Se vazio ou muito curto, esconde a lista
+            if (termo.length < 2) {
+                resultsDiv.style.display = 'none';
+                resultsDiv.innerHTML = '';
+                return;
+            }
+
+            // 3. Define um novo timeout para buscar após 400ms de inatividade
+            searchTimeout = setTimeout(() => {
+                executarBusca(termo);
+            }, 400);
+        }
+        
+        function getSearchType() {
+            const radios = document.getElementsByName('search_type');
+            for (let radio of radios) {
+                if (radio.checked) return radio.value;
+            }
+            return 'nick'; // Fallback
+        }
+        
+        function clearSearch() {
+             document.getElementById('id_cliente_busca').value = '';
+             document.getElementById('search-results-list').style.display = 'none';
+        }
+
+        async function executarBusca(termo) {
+            const tipo = getSearchType();
+            const resultsDiv = document.getElementById('search-results-list');
+            
+            // Feedback de carregamento
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center">Buscando...</div>';
+
+            try {
+                const response = await fetch(`/buscar_clientes?termo=${encodeURIComponent(termo)}&tipo=${tipo}`);
+                const data = await response.json();
+
+                resultsDiv.innerHTML = ''; // Limpa
+
+                if (data.clientes && data.clientes.length > 0) {
+                    data.clientes.forEach(cli => {
+                        const div = document.createElement('div');
+                        div.className = 'search-result-item';
+                        // Conteúdo da linha
+                        div.innerHTML = `
+                            <div class="font-bold text-gray-800">${cli.nick || cli.nome}</div>
+                            <div class="text-sm text-gray-600">ID: ${cli.id} | ${cli.nome} | ${cli.cidade}</div>
+                        `;
+                        
+                        // Ao clicar, seleciona o cliente
+                        div.onclick = () => selecionarCliente(cli);
+                        
+                        resultsDiv.appendChild(div);
+                    });
+                } else {
+                    resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center">Nenhum cliente encontrado.</div>';
+                }
+            } catch (err) {
+                console.error(err);
+                resultsDiv.innerHTML = '<div class="p-2 text-red-500 text-center">Erro na busca.</div>';
+            }
+        }
+
+        function selecionarCliente(cliente) {
+            // 1. Preenche o input visual com o texto da busca (ou nick)
+            const inputBusca = document.getElementById('id_cliente_busca');
+            inputBusca.value = cliente.nick || cliente.nome; 
+            
+            // 2. Esconde a lista
+            document.getElementById('search-results-list').style.display = 'none';
+            
+            // 3. Dispara o SUBMIT do formulário (GET) para recarregar a página
+            //    Isso fará o backend renderizar a página com o cliente selecionado (alert verde, etc.)
+            //    Para isso, precisamos garantir que o valor enviado seja algo que o backend entenda.
+            //    Como o backend busca por ID se tiver "CLI" ou dígitos, vamos forçar o ID.
+            
+            inputBusca.value = `CLI${cliente.id}`; // Força o formato de ID para busca exata
+            document.getElementById('main-form').submit();
+        }
+
+        // --- Funções Existentes (Mantidas) ---
+
         function cleanAndParseFloat(valueString) {
             if (!valueString) return 0;
-            
             let cleaned = valueString.replace(/[^0-9,\.]/g, ''); 
-            
             if (cleaned.includes(',')) {
-                cleaned = cleaned.replace(/\./g, ''); // Remove separadores de milhar
-                cleaned = cleaned.replace(',', '.');  // Troca a vírgula decimal por ponto
+                cleaned = cleaned.replace(/\./g, ''); 
+                cleaned = cleaned.replace(',', '.'); 
             }
             return parseFloat(cleaned);
         }
 
-        /**
-         * Calcula e exibe o custo total da venda.
-         */
-         function updateTotalCost() {
+        function updateTotalCost() {
             const campoQuantidade = document.getElementById('quantidade');
             const elementoCustoTotal = document.getElementById('total-custo');
-            
-            // --- NOVOS ELEMENTOS ---
-            // 1. O span de texto dentro do botão de confirmação
             const spanBotaoCusto = document.getElementById('btn-custo-text');
-            // 2. O input oculto que envia a quantidade para o backend
             const inputPostQuantidade = document.getElementById('post_quantidade');
-            // ---------------------
 
             if (campoQuantidade && elementoCustoTotal) {
                 const quantidade = parseInt(campoQuantidade.value) || 0;
                 const total = quantidade * Venda_ValorUnitario;
+                const totalFormatado = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
                 
-                const totalFormatado = total.toLocaleString('pt-BR', { 
-                    style: 'currency', 
-                    currency: 'BRL' 
-                });
-                
-                // Atualiza o display principal
                 elementoCustoTotal.textContent = `Custo Total: ${totalFormatado}`;
-
-                // --- ATUALIZAÇÕES ADICIONAIS ---
-                
-                // 3. Atualiza o texto do botão de confirmação (se ele existir na tela)
-                if (spanBotaoCusto) {
-                    spanBotaoCusto.textContent = totalFormatado;
-                }
-                
-                // 4. Atualiza o valor do input oculto (se ele existir na tela)
-                // ESTA É A CORREÇÃO CRÍTICA
-                if (inputPostQuantidade) {
-                    inputPostQuantidade.value = quantidade;
-                }
-                // -----------------------------
+                if (spanBotaoCusto) spanBotaoCusto.textContent = totalFormatado;
+                if (inputPostQuantidade) inputPostQuantidade.value = quantidade;
             }
         }
         
-        /**
-         * Atualiza o display de "Total de Cartelas"
-         */
         function updateCartelasDisplay() {
             const campoQuantidade = document.getElementById('quantidade');
             const displayCartelas = document.getElementById('cartelas-display');
-            
             if (campoQuantidade && displayCartelas) {
                 const quantidade = parseInt(campoQuantidade.value) || 0;
                 displayCartelas.textContent = (quantidade * Venda_UnidadeCartelas);
             }
         }
 
-
-        // --- Modal Functions ---
+        function openEventSelector() { document.getElementById('event-selector-modal').style.display = 'flex'; }
+        function closeEventSelector() { document.getElementById('event-selector-modal').style.display = 'none'; }
         
-        function openEventSelector() {
-            document.getElementById('event-selector-modal').style.display = 'flex';
-        }
-
-        function closeEventSelector() {
-            document.getElementById('event-selector-modal').style.display = 'none';
-        }
-        
-        /**
-         * Seleciona um evento da modal e preenche os dados no formulário principal.
-         * @param {HTMLElement} cardElement O elemento HTML do cartão de evento.
-         */
         function selectEvent(cardElement) {
             const eventId = cardElement.dataset.id;
             const descricao = cardElement.dataset.descricao;
-            
-            // CORREÇÃO: Limpa o valor do data-valor antes de usar
             const valor = cleanAndParseFloat(cardElement.dataset.valor);
             const unidade = parseInt(cardElement.dataset.unidade) || 0;
-            
             const valorFormatado = valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             
-            // 1. Atualiza os campos ocultos de envio
             document.getElementById('input_id_evento').value = eventId;
-            
-            // 2. Atualiza o campo de exibição
             document.getElementById('evento_display').value = `${descricao} (${valorFormatado})`;
-
-            // 3. Configura variáveis globais para o novo evento
             Venda_ValorUnitario = valor;
             Venda_UnidadeCartelas = unidade;
-            
-            // 4. Fechar a modal
             closeEventSelector();
-            
-            // 5. Submete o formulário principal para recarregar com o evento selecionado
             document.getElementById('main-form').submit();
         }
         
-        // --- Outras Funções (Comprovante, etc. mantidas) ---
+        function syncAndConfirm(event) {
+            event.preventDefault(); 
+            const confirmou = window.confirm("Você tem certeza que deseja gravar esta venda?");
+            if (!confirmou) return false;
+
+            const button = document.getElementById('btn-confirmar-venda');
+            if (button.disabled) return false; 
+
+            button.disabled = true;
+            button.style.cursor = 'wait';
+            button.classList.add('opacity-50'); 
+            button.innerHTML = '⏳ Processando...';
+
+            const form = document.getElementById('confirm-form');
+            if (form) {
+                form.submit(); 
+            } else {
+                alert("Erro crítico: Formulário não encontrado.");
+                button.disabled = false; 
+                button.innerHTML = '❌ Erro!';
+            }
+            return false;
+        }
 
         function copyReceiptText() {
             const receiptDiv = document.getElementById('receipt-content');
             if (!receiptDiv) return;
-
+            
             const textToCopy = receiptDiv.innerText.trim(); 
+            
             const tempTextArea = document.createElement('textarea');
             tempTextArea.value = textToCopy;
-            tempTextArea.style.position = 'fixed'; 
-            tempTextArea.style.opacity = '0';
             document.body.appendChild(tempTextArea);
             tempTextArea.select();
             
             try {
-                const successful = document.execCommand('copy');
-                if (successful) {
-                    alert('Comprovante copiado para a área de transferência! Cole no WhatsApp do cliente.'); 
-                } else {
-                    alert('Falha ao copiar. Tente selecionar o texto manualmente.');
-                }
+                document.execCommand('copy');
+                // Chama o WhatsApp automaticamente após copiar
+                abrirWhatsApp(textToCopy);
             } catch (err) {
-                alert('Erro ao tentar copiar: ' + err);
+                alert('Erro ao copiar texto.');
             }
+            
             document.body.removeChild(tempTextArea);
         }
 
-        function shareReceiptImage() {
-            const receiptDiv = document.getElementById('receipt-content');
-            if (!receiptDiv) return;
+        // --- NOVA FUNÇÃO: ABRIR WHATSAPP ---
+        function abrirWhatsApp(textoParaEnviar) {
+           // DEBUG: Vamos ver o que o Python escreveu aqui
+           // Se cliente_encontrado for None, vai escrever 'VAZIO'
+           var debugRaw = "{{ cliente_encontrado.telefone if cliente_encontrado else 'VAZIO' }}";
+           console.log("1. Valor bruto vindo do Python:", debugRaw);
 
-            html2canvas(receiptDiv, { 
-                scale: 2, 
-                useCORS: true,
-                backgroundColor: '#FFFFFF', 
-            }).then(canvas => {
+           var rawTelefone = "{{ cliente_encontrado.telefone | default('') if cliente_encontrado else '' }}";
+           console.log("2. Variável rawTelefone:", rawTelefone);
+
+           var telefone = rawTelefone.replace(/\D/g, '');
+           console.log("3. Telefone limpo (apenas números):", telefone);
+         
+           // Se tiver número válido, adiciona código país
+           if (telefone && telefone.length > 0) {
+               if (telefone.length <= 11) {
+                   telefone = "55" + telefone;
+               }
+           } else {
+               telefone = "";
+               console.warn("AVISO: Telefone ficou vazio após limpeza.");
+           }
+ 
+           console.log("4. Telefone Final para URL:", telefone);
+
+           var mensagem = textoParaEnviar || "";
+           var mensagemCodificada = encodeURIComponent(mensagem);
+
+           var url = "https://wa.me/" + telefone + "?text=" + mensagemCodificada;
+            
+           console.log("5. Abrindo URL:", url);
+           window.open(url, '_blank');
+        }
+        
+        function shareReceiptImage() {
+            // ... (Código de imagem mantido)
+             const receiptDiv = document.getElementById('receipt-content');
+            if (!receiptDiv) return;
+            html2canvas(receiptDiv, { scale: 2, useCORS: true, backgroundColor: '#FFFFFF' }).then(canvas => {
                 const imgData = canvas.toDataURL('image/png');
-                const newWindow = window.open('about:blank', '_blank');
-                if (newWindow) {
-                    newWindow.document.write(`<img src="${imgData}" style="max-width:100%; display:block;" alt="Comprovante de Venda"/>`);
-                    newWindow.document.title = 'Comprovante Venda';
-                    newWindow.document.close();
-                    alert("Imagem gerada e aberta em uma nova janela. Use a função de 'Compartilhar' do seu navegador ou pressione e segure a imagem para enviar pelo WhatsApp.");
-                } else {
-                    alert("Pop-up bloqueado! Salve a imagem manualmente.");
-                }
-            }).catch(err => {
-                console.error("Erro ao gerar imagem:", err);
-                alert("Erro ao gerar imagem do comprovante. Tente novamente.");
+                const w = window.open('about:blank');
+                w.document.write(`<img src="${imgData}"/>`);
             });
         }
 
-        /**
-         * CORRIGIDO: Confirma a venda, desabilita o botão e SUBMETE O FORM MANUALMENTE
-         * para prevenir cliques duplos e garantir o envio.
-         */
-        function syncAndConfirm(event) {
-            
-            // 1. Impede o envio padrão do formulário IMEDIATAMENTE.
-            event.preventDefault(); 
-            
-            // 2. Pede a confirmação do usuário
-            const confirmou = window.confirm("Você tem certeza que deseja gravar esta venda?");
-            
-            if (!confirmou) {
-                // Se o usuário clicou "Cancelar", não fazemos NADA.
-                // O envio já foi prevenido.
-                return false;
-            }
-
-            // 3. Se o usuário clicou "OK", desabilita o botão
-            // Usamos o 'id' que adicionamos no HTML
-            const button = document.getElementById('btn-confirmar-venda');
-            
-            // Verifica se já não foi clicado (segurança extra)
-            if (button.disabled) {
-                return false; // Já está sendo processado
-            }
-
-            // 4. Desabilita e muda o visual imediatamente
-            button.disabled = true;
-            button.style.cursor = 'wait';
-            button.classList.add('opacity-50'); // Adiciona opacidade (Tailwind)
-            button.innerHTML = '⏳ Processando... Por favor, aguarde.';
-
-            // 5. Encontra o formulário e envia manualmente
-            // (O botão está dentro do form: <form ... id="confirm-form">)
-            const form = document.getElementById('confirm-form');
-            
-            if (form) {
-                form.submit(); // ESTA É A CORREÇÃO: Envia o formulário para o backend
-            } else {
-                // Fallback de erro (se o ID do form estiver errado)
-                alert("Erro crítico: Não foi possível encontrar o formulário 'confirm-form'. A venda não foi enviada.");
-                button.disabled = false; // Reabilita para tentar de novo
-                button.innerHTML = '❌ Erro! Tente Novamente';
-            }
-
-            // Como usamos preventDefault, o 'return' não importa mais.
-            return false;
-        }
-        /**
-         * NOVO: Listener para o "Page Show" (Cache de Voltar)
-         * Se o usuário enviar a venda e depois clicar em "Voltar" no navegador,
-         * o navegador pode mostrar a página antiga (do cache) com o botão
-         * ainda desabilitado. Este código re-habilita o botão.
-         */
         window.addEventListener('pageshow', (event) => {
             const button = document.getElementById('btn-confirmar-venda');
-            
-            // Se a página foi carregada do cache (persisted) e o botão existe
             if (event.persisted && button && button.disabled) {
-                
-                // 1. Re-habilita o botão
                 button.disabled = false;
                 button.style.cursor = 'pointer';
                 button.classList.remove('opacity-50');
-                
-                // 2. Restaura o texto original
-                // (Precisamos ler o custo atual do span)
-                const spanCusto = document.getElementById('btn-custo-text');
-                const custoText = spanCusto ? spanCusto.textContent : 'R$ 0,00';
-                
-                button.innerHTML = `✅ Confirmar e Gravar Venda (<span id="btn-custo-text">${custoText}</span>)`;
+                // Texto idealmente seria restaurado aqui
+                button.innerHTML = `✅ Confirmar`; 
             }
         });
 
         document.addEventListener('DOMContentLoaded', () => {
-            // Inicializa as variáveis globais com valores do Jinja na carga da página
-            const campoQuantidade = document.getElementById('quantidade');
-            
-            // O Jinja já inicializa Venda_ValorUnitario e Venda_UnidadeCartelas no topo do script.
-
-            if (campoQuantidade) {
-                 campoQuantidade.addEventListener('input', updateTotalCost);
-                 campoQuantidade.addEventListener('input', updateCartelasDisplay);
-            }
-
-            // Garante que os displays (custo e cartelas) estejam corretos no carregamento inicial
             updateTotalCost();
             updateCartelasDisplay();
         });
-
-        function ShowConfirm(message) {
-            if (window.confirm) {
-                return window.confirm(message);
-            } else {
-                return true; 
-            }
-        }
-        
     </script>
 </body>
 </html>
