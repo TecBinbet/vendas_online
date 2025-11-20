@@ -184,7 +184,7 @@
             
             <!-- CORREÇÃO: Verifica se g.parametros_globais E g.parametros_globais.tipo_cadastro_cliente existem -->
             {% set campos = g.parametros_globais.tipo_cadastro_cliente if (g.parametros_globais is defined and g.parametros_globais.tipo_cadastro_cliente is defined) else config_padrao %}
-  
+           
            <form method="POST" action="{{ url_for('gravar_cliente') }}" id="form-cadastro" class="space-y-4">
                 
                 {% if active_view == 'alterar' %}
@@ -591,6 +591,28 @@
                 closeDeleteModal(); 
             };
         }
+
+    document.addEventListener('DOMContentLoaded', (event) => {
+        // Verifica se existe o parâmetro 'focus' na URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const focusId = urlParams.get('focus');
+
+        if (focusId) {
+            const element = document.getElementById(focusId);
+            if (element) {
+                // Dá um pequeno delay para garantir que a aba/view esteja visível
+                setTimeout(() => {
+                    element.focus();
+                    // Opcional: Adiciona um efeito visual temporário (ex: borda vermelha piscando)
+                    element.classList.add('border-red-500', 'ring-2', 'ring-red-300');
+                    setTimeout(() => {
+                        element.classList.remove('border-red-500', 'ring-2', 'ring-red-300');
+                    }, 3000);
+                }, 100);
+            }
+        }
+    });
+
     </script>
 </body>
 </html>

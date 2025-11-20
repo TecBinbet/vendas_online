@@ -582,7 +582,7 @@ def before_request():
         "nome_cliente": True, "nick": True, "telefone": True,
         "cpf": False, "cidade": True, "chave_pix": True, "senha": True
     }
-    
+   
     # Verifica se os parâmetros no 'g' são da sala errada
     if g.parametros_globais.get('id_sala_param') != g.id_sala:
         g.parametros_globais = {} # Limpa se a sala mudou
@@ -1722,7 +1722,7 @@ def cadastro_cliente():
 @login_required
 def gravar_cliente():
     db = get_vendas_db()
-    if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
+    if db is None: return redirect(url_for('login'))
     
     db_status = g.db_status
     
@@ -1736,6 +1736,9 @@ def gravar_cliente():
         return redirect(url_for('cadastro_cliente', error="DB Offline. Gravação Crítica Falhou.", view=view_redirect, next=next_url, id_evento=id_evento_retorno))
     
     try:
+        # 1. Inicializa a variável de controle de foco
+        campo_com_erro = None
+
         default_config = {} 
         if hasattr(g, 'parametros_globais'):
              default_config = g.parametros_globais.get('tipo_cadastro_cliente', {})
@@ -1753,37 +1756,49 @@ def gravar_cliente():
         confirma_senha = format_title_case(request.form.get('confirma_senha'))
 
         if campos_config.get("nome_cliente") and not nome_cliente:
+            campo_com_erro = "nome_cliente"
             raise ValueError("O campo Nome Completo é obrigatório.")
         
+        # --- VALIDAÇÕES DE CAMPOS OBRIGATÓRIOS ---
         if campos_config.get("nick") and not nick:
+            campo_com_erro = "nick"
             raise ValueError("O campo Nick/Apelido é obrigatório.")
         
         if campos_config.get("cidade") and not cidade:
+            campo_com_erro = "cidade"
             raise ValueError("O campo Cidade é obrigatório.")
         
         if campos_config.get("chave_pix") and not chave_pix:
+            campo_com_erro = "chave_pix"
             raise ValueError("O campo Chave PIX é obrigatório.")
 
         if campos_config.get("nome_cliente") and nome_cliente and not nome_cliente[0].isalpha():
+            campo_com_erro = "nome_cliente"
             raise ValueError("O Nome do Cliente deve começar com uma letra (não números ou símbolos).")
             
         if campos_config.get("nick") and nick and not nick[0].isalpha():
+            campo_com_erro = "nick"
             raise ValueError("O Nick/Apelido deve começar com uma letra (não números ou símbolos).")
 
         cpf_limpo = clean_numeric_string(cpf_raw)
         if campos_config.get("cpf") == True: 
             if not cpf_raw or not validate_cpf(cpf_limpo):
+                campo_com_erro = "cpf"
                 raise ValueError("CPF é obrigatório e deve ser válido.")
         elif "cpf" in campos_config and cpf_raw and not validate_cpf(cpf_limpo):
+            campo_com_erro = "cpf"
             raise ValueError("O CPF inserido não é válido.")
 
         if "chave_pix" in campos_config and chave_pix != confirma_chave_pix:
+            campo_com_erro = "chave_pix"
             raise ValueError("As chaves PIX não conferem.")
         
         if "senha" in campos_config:
             if not id_cliente_edicao and campos_config.get("senha") and (not senha or senha != confirma_senha):
-                raise ValueError("Senha e Confirmação de Senha não conferem ou estão vazias.")
+               campo_com_erro = "senha" 
+               raise ValueError("Senha e Confirmação de Senha não conferem ou estão vazias.")
             elif id_cliente_edicao and senha and (senha != confirma_senha):
+                campo_com_erro = "senha"
                 raise ValueError("Senha e Confirmação de Senha não conferem.")
         
         senha_final_raw = None
@@ -1795,7 +1810,46 @@ def gravar_cliente():
                     senha_final_raw = nick 
                 elif senha == "": 
                      senha_final_raw = nick 
+
+        # --- NOVA VALIDAÇÃO DE DUPLICIDADE (ATIVADA) ---
+        query_duplicidade = []
+        
+        # 1. Verifica Nick (se ativo na config)
+        if "nick" in campos_config and nick:
+            query_duplicidade.append({'nick': {'$regex': f'^{re.escape(nick)}$', '$options': 'i'}})
             
+        # 2. Verifica Nome (se ativo na config) - DESCOMENTADO
+        #if "nome_cliente" in campos_config and nome_cliente:
+        #    query_duplicidade.append({'nome_cliente': {'$regex': f'^{re.escape(nome_cliente)}$', '$options': 'i'}})
+
+        if query_duplicidade:
+            final_query = {'$or': query_duplicidade}
+            
+            # Se for edição, exclui o próprio ID da verificação
+            if id_cliente_edicao:
+                final_query = {'$and': [
+                    {'id_cliente': {'$ne': int(id_cliente_edicao)}}, 
+                    final_query
+                ]}
+            
+            cliente_existente = db.clientes.find_one(final_query)
+            
+            if cliente_existente:
+                msg_erro = "Erro de Duplicidade: "
+                
+                # Prioridade de erro e foco
+                if "nick" in campos_config and cliente_existente.get('nick', '').lower() == nick.lower():
+                    msg_erro += f"O Nick '{nick}' já está em uso. "
+                    campo_com_erro = "nick" # Define o foco para o Nick
+                    
+                elif "nome_cliente" in campos_config and cliente_existente.get('nome_cliente', '').lower() == nome_cliente.lower():
+                    msg_erro += f"O Nome '{nome_cliente}' já está cadastrado."
+                    campo_com_erro = "nome_cliente" # Define o foco para o Nome
+                
+                raise ValueError(msg_erro)
+
+        # --- FIM DA NOVA VALIDAÇÃO ---         
+        
         dados_cliente = {
             "id_colaborador": session.get('id_colaborador', 'N/A'),
         }
@@ -1870,6 +1924,11 @@ def gravar_cliente():
             'next': next_url,
             'id_evento': id_evento_retorno
         }
+
+        # Adiciona o parâmetro de foco se houver um campo identificado
+        if campo_com_erro:
+            redirect_args['focus'] = campo_com_erro
+
         if id_cliente_edicao:
             redirect_args['id_cliente'] = id_cliente_edicao
             
@@ -2018,6 +2077,18 @@ def cadastro_evento():
 
     for evento in eventos_lista:
         if '_id' in evento: evento['_id'] = str(evento['_id'])
+        # --- INÍCIO DA ADIÇÃO ---
+        id_evento_atual = evento.get('id_evento')
+        nome_colecao_venda = f"vendas{id_evento_atual}"
+    
+        # Verifica se a coleção existe e conta os documentos
+        qtd_vendas = 0
+        # Nota: list_collection_names é mais seguro para checar existência
+        if nome_colecao_venda in db.list_collection_names():
+            qtd_vendas = db[nome_colecao_venda].count_documents({})
+    
+        evento['qtd_vendas'] = qtd_vendas
+        # --- FIM DA ADIÇÃO ---
         for key in all_numeric_fields:
             if key in evento:
                 evento[key] = safe_float(evento.get(key, 0.0))
@@ -2182,9 +2253,14 @@ def excluir_evento(id_evento):
 
     try:
         result = db.eventos.delete_one({'id_evento': id_evento})
-        
+        msg_extra = ""
         if result.deleted_count == 1:
-            success_msg = f"Evento ID: {id_evento} excluído com sucesso."
+            nome_colecao_venda = f"vendas{id_evento}"
+            if nome_colecao_venda in db.list_collection_names():
+                db[nome_colecao_venda].drop()
+                msg_extra = " e todas as vendas associadas foram removidas."
+            # -----------------------------------------------------
+            success_msg = f"Evento ID: {id_evento} excluído{msg_extra} com sucesso."
         else:
             success_msg = f"Evento ID: {id_evento} não encontrado para exclusão."
 
@@ -2193,6 +2269,7 @@ def excluir_evento(id_evento):
     except Exception as e:
         print(f"ERRO CRÍTICO na exclusão de evento ID {id_evento}: {e}")
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento.", view='listar'))
+
 
 # --- Rota de Consulta de Vendas (com cálculo de comissão) ---
 @app.route('/consulta_vendas', methods=['GET'])

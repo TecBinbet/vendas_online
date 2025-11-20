@@ -44,7 +44,7 @@
         .view-content { display: none; }
         .view-content.active-view-show { display: block !important; }
 
-        /* --- INÍCIO CSS DA MODAL DE EXCLUSÃO --- */
+        /* --- CSS DA MODAL DE EXCLUSÃO --- */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -74,9 +74,24 @@
         }
         .btn-danger { background-color: #EF4444; color: white; }
         .btn-danger:hover { background-color: #DC2626; }
+        
+        /* Botão danger crítico (quando há vendas) */
+        .btn-critical { background-color: #991B1B; color: white; border: 2px solid #7F1D1D; }
+        .btn-critical:hover { background-color: #7F1D1D; }
+
         .btn-cancel { background-color: #D1D5DB; color: #374151; }
         .btn-cancel:hover { background-color: #B2B8C2; }
-        /* --- FIM CSS DA MODAL DE EXCLUSÃO --- */
+        
+        .warning-box {
+            background-color: #FEF2F2;
+            border: 1px solid #EF4444;
+            color: #991B1B;
+            padding: 10px;
+            border-radius: 6px;
+            margin-top: 10px;
+            margin-bottom: 10px;
+            font-size: 0.95rem;
+        }
     </style>
 </head>
 <body>
@@ -84,7 +99,6 @@
     <div class="container">
         <h2 class="text-2xl mb-4 text-blue-800 text-center">Gestão de Eventos</h2>
 
-        <!-- Mensagens do Flask (erros/sucesso) -->
         {% if error %}
             <div class="alert-danger">{{ error }}</div>
         {% endif %}
@@ -92,7 +106,6 @@
             <div class="alert-success">{{ success | safe }}</div>
         {% endif %}
 
-        <!-- Navegação -->
         <div class="flex space-x-4 mb-4 border-b pb-4">
             <a href="{{ url_for('cadastro_evento', view='novo') }}" 
                class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
@@ -112,7 +125,6 @@
             Total de Eventos Cadastrados: <strong id="total-eventos">{{ total_eventos | default(0) }}</strong>.
         </div>
         
-        <!-- VISUALIZAÇÃO NOVO/ALTERAR -->
         {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
         <div id="view-novo" class="view-content {% if is_novo_alterar %}active-view-show{% endif %}">
             
@@ -132,7 +144,6 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     
-                    <!-- Linha 1: Dados Básicos e ID -->
                     <div class="form-group">
                         <label>ID Evento:</label>
                         <input type="text" 
@@ -140,7 +151,6 @@
                                disabled class="form-control bg-gray-100">
                     </div>
                     <div class="form-group">
-                        <!-- CORREÇÃO: type="date" para abrir o calendário -->
                         <label for="data_evento" class="required-label">Data do Evento:</label>
                         <input type="date" id="data_evento" name="data_evento" required class="form-control" 
                                value="{{ evento.get('data_evento', '') }}"
@@ -155,14 +165,12 @@
                                value="{{ evento.get('hora_evento', '20:00') }}">
                     </div>
 
-                    <!-- Linha 2: Descrição e Venda -->
                     <div class="form-group md:col-span-3">
                         <label for="descricao" class="required-label">Descrição do Evento:</label>
                         <input type="text" id="descricao" name="descricao" required class="form-control" 
                                value="{{ evento.get('descricao', '') }}">
                     </div>
 
-                    <!-- Linha 3: Controle de Venda -->
                     <div class="form-group">
                         <label for="unidade_de_venda" class="required-label">Unidade de Venda (1-6):</label>
                         <input type="number" id="unidade_de_venda" name="unidade_de_venda" required min="1" max="6" class="form-control"
@@ -170,12 +178,10 @@
                     </div>
                     <div class="form-group">
                         <label for="valor_de_venda" class="required-label">Valor da Unidade (R$):</label>
-                        <!-- CORREÇÃO: Valor monetário padronizado para 0.00 -->
                         <input type="number" id="valor_de_venda" name="valor_de_venda" required step="0.01" min="0" class="form-control"
                                value="{{ evento.get('valor_de_venda', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
 
-                    <!-- Linha 4: Controle de Cartelas -->
                     <div class="form-group">
                         <label for="numero_inicial" class="required-label">Número Inicial da Cartela:</label>
                         <input type="number" id="numero_inicial" name="numero_inicial" required min="1" class="form-control"
@@ -187,10 +193,8 @@
                                value="{{ evento.get('numero_maximo', 72000) }}">
                     </div>
 
-                    <!-- Linha 5: Prêmios (Linha 1) -->
                     <div class="form-group">
                         <label for="premio_quadra" class="required-label">Prêmio Quadra (R$):</label>
-                        <!-- CORREÇÃO: Se vazio, use 0.00 -->
                         <input type="number" id="premio_quadra" name="premio_quadra" required step="0.01" min="0" class="form-control"
                                value="{{ evento.get('premio_quadra', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
@@ -201,31 +205,25 @@
                     </div>
                     <div class="form-group">
                         <label for="premio_linha" class="required-label">Prêmio por Linha (R$):</label>
-                        <!-- CORREÇÃO: Se vazio, use 0.00 -->
                         <input type="number" id="premio_linha" name="premio_linha" required step="0.01" min="0" class="form-control"
                                value="{{ evento.get('premio_linha', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
 
-                    <!-- Linha 6: Prêmios (Linha 2) e Acumulado -->
                     <div class="form-group">
                         <label for="premio_bingo" class="required-label">Prêmio Bingo (R$):</label>
-                        <!-- CORREÇÃO: Se vazio, use 0.00 -->
                         <input type="number" id="premio_bingo" name="premio_bingo" required step="0.01" min="0" class="form-control"
                                value="{{ evento.get('premio_bingo', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
                         <label for="premio_segundobingo">Prêmio Segundo Bingo (R$):</label>
-                        <!-- CORREÇÃO: Se vazio, use 0.00 -->
                         <input type="number" id="premio_segundobingo" name="premio_segundobingo" step="0.01" min="0" class="form-control"
                                value="{{ evento.get('premio_segundobingo', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
                         <label for="minimo_de_venda">Mínimo de Venda Necessário (Qtde):</label>
-                        <!-- Este campo será calculado automaticamente -->
                         <input type="text" id="minimo_de_venda" name="minimo_de_venda" disabled class="form-control bg-gray-200"
                                value="{{ evento.get('minimo_de_venda', 0) }}">
                     </div>
-                    <!-- Linha 7: Total e Bola Tope -->
                     <div class="form-group">
                         <label for="premio_total">Prêmio TOTAL (R$):</label>
                         <input type="text" id="premio_total" name="premio_total" disabled class="form-control bg-gray-200 font-bold"
@@ -234,7 +232,6 @@
 
                     <div class="form-group">
                         <label for="premio_acumulado">Prêmio Acumulado (R$):</label>
-                        <!-- CORREÇÃO: Se vazio, use 0.00 -->
                         <input type="number" id="premio_acumulado" name="premio_acumulado" step="0.01" min="0" class="form-control"
                                value="{{ evento.get('premio_acumulado', 0.00) }}" oninput="toggleBolaTope(); calculatePremioTotal()">
                     </div>
@@ -283,7 +280,6 @@
             </form>
         </div>
 
-        <!-- VISUALIZAÇÃO CONSULTA -->
         <div id="view-consulta" class="view-content {% if active_view == 'consulta' %}active-view-show{% endif %}">
             <h3 class="text-xl font-semibold mb-4 text-accent">Consulta de Evento</h3>
             <form method="GET" action="{{ url_for('cadastro_evento') }}" class="mb-4 space-y-2">
@@ -304,20 +300,18 @@
                             <p><strong>Descrição:</strong> <span class="font-semibold text-primary">{{ evento.descricao }}</span></p>
                             <p><strong>Data/Hora:</strong> {{ evento.data_evento | default('N/A') }} às {{ evento.hora_evento | default('N/A') }}</p>
                             <p><strong>Prêmio Total:</strong> R$ {{ evento.premio_total | default(0.00) | round(2) }} | <strong>Status:</strong> {{ evento.status }}</p>
+                            <p class="text-xs text-gray-500 mt-1">Vendas Registradas: {{ evento.qtd_vendas | default(0) }}</p>
+
                             <div class="mt-2 flex space-x-3">
                                 <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                 
-                                <!-- === INÍCIO DA MUDANÇA (CONSULTA) === -->
                                 <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}" 
                                       id="form-excluir-consulta-{{ evento.id_evento }}"
                                       class="inline-block">
-                                    <!-- CORREÇÃO: Usar ' (apóstrofo) no onclick e " (aspas) nos parâmetros -->
                                     <button type="button" 
-                                            onclick='openDeleteModal("{{ evento.id_evento }}", {{ evento.descricao | tojson }}, "consulta")'
+                                            onclick='openDeleteModal("{{ evento.id_evento }}", {{ evento.descricao | tojson }}, "consulta", {{ evento.qtd_vendas | default(0) }})'
                                             class="action-link delete-link hover:text-red-600">Excluir</button>
                                 </form>
-                                <!-- === FIM DA MUDANÇA (CONSULTA) === -->
-
                             </div>
                         </div>
                     {% endfor %}
@@ -329,7 +323,6 @@
             </div>
         </div>
 
-        <!-- VISUALIZAÇÃO LISTAR -->
         <div id="view-listar" class="view-content {% if active_view == 'listar' %}active-view-show{% endif %}">
             <h3 class="text-xl font-semibold mb-4 text-gray-700">Lista de Eventos (Ordenada por Data)</h3>
             
@@ -341,6 +334,7 @@
                             <th class="py-2 px-4 border-b text-left">Descrição</th>
                             <th class="py-2 px-4 border-b text-left">Data/Hora</th>
                             <th class="py-2 px-4 border-b text-left">Prêmio Total</th>
+                            <th class="py-2 px-4 border-b text-left">Vendas</th>
                             <th class="py-2 px-4 border-b text-left">Status</th>
                             <th class="py-2 px-4 border-b text-left">Ações</th>
                         </tr>
@@ -353,25 +347,23 @@
                                 <td class="py-3 px-4 border-b text-sm">{{ evento.descricao }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ evento.data_evento | default('N/A') }} às {{ evento.hora_evento | default('N/A') }}</td>
                                 <td class="py-3 px-4 border-b text-sm font-semibold">R$ {{ evento.premio_total | default(0.00) | round(2) }}</td>
+                                <td class="py-3 px-4 border-b text-sm text-gray-600">{{ evento.qtd_vendas | default(0) }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ evento.status }}</td>
                                 <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
                                     <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                     
-                                    <!-- === INÍCIO DA MUDANÇA (LISTAR) === -->
                                     <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}"
                                           id="form-excluir-listar-{{ evento.id_evento }}"
                                           class="inline-block">
-                                        <!-- CORREÇÃO: Usar ' (apóstrofo) no onclick e " (aspas) nos parâmetros -->
                                         <button type="button" 
-                                                onclick='openDeleteModal("{{ evento.id_evento }}", {{ evento.descricao | tojson }}, "listar")'
+                                                onclick='openDeleteModal("{{ evento.id_evento }}", {{ evento.descricao | tojson }}, "listar", {{ evento.qtd_vendas | default(0) }})'
                                                 class="action-link delete-link hover:text-red-600">Excluir</button>
                                     </form>
-                                    <!-- === FIM DA MUDANÇA (LISTAR) === -->
                                 </td>
                             </tr>
                             {% endfor %}
                         {% else %}
-                            <tr><td colspan="6" class="py-8 text-center text-gray-500 font-bold">Nenhum evento cadastrado.</td></tr>
+                            <tr><td colspan="7" class="py-8 text-center text-gray-500 font-bold">Nenhum evento cadastrado.</td></tr>
                         {% endif %}
                     </tbody>
                 </table>
@@ -384,28 +376,40 @@
         
     </div>
 
-    <!-- === INÍCIO DA MODAL DE EXCLUSÃO (NOVO) === -->
     <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
-            <h3 class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
-            <p class="mb-4">Tem a certeza que deseja excluir este evento? Esta ação é irreversível.</p>
+            <h3 id="modal-title" class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
+            
+            <div id="modal-normal-msg">
+                <p class="mb-4">Tem a certeza que deseja excluir este evento? Esta ação é irreversível.</p>
+            </div>
+            
+            <div id="modal-critical-msg" style="display: none;">
+                <div class="warning-box">
+                    <strong class="block mb-1 text-lg">⚠️ ATENÇÃO: VENDAS ENCONTRADAS!</strong>
+                    Existem <span id="modal-qtd-vendas" class="font-black text-xl">0</span> vendas registradas para este evento.
+                </div>
+                <p class="mb-2 text-red-700 font-bold">
+                    Ao excluir este evento, TODAS as vendas e o arquivo de vendas associado serão APAGADOS PERMANENTEMENTE.
+                </p>
+                <p class="mb-4 text-sm text-gray-600">Não será possível recuperar esses dados.</p>
+            </div>
+
             <p class="mb-4"><strong>ID:</strong> <span id="modal-delete-id" class="font-bold">...</span></p>
             <p class="mb-4"><strong>Descrição:</strong> <span id="modal-delete-descricao" class="font-bold">...</span></p>
+            
             <div class="flex justify-end space-x-2 mt-6">
                 <button type="button" class="modal-btn btn-cancel" onclick="closeDeleteModal()">Cancelar</button>
                 <button type="button" id="modal-btn-confirm-delete" class="modal-btn btn-danger">Confirmar Exclusão</button>
             </div>
         </div>
     </div>
-    <!-- === FIM DA MODAL DE EXCLUSÃO === -->
-    
     <script>
         document.addEventListener('DOMContentLoaded', (event) => {
             calculatePremioTotal();
             toggleBolaTope();
         });
         
-        // CORREÇÃO: Função para evitar submissão do formulário ao pressionar Enter.
         function preventDefaultOnEnter(event) {
             if (event.key === 'Enter') {
                 event.preventDefault();
@@ -413,9 +417,7 @@
             }
         }
 
-        // Função que calcula o prêmio total e o mínimo de venda
         function calculatePremioTotal() {
-            // ... (A sua função calculatePremioTotal() permanece igual)
             const quadra = parseFloat(document.getElementById('premio_quadra')?.value) || 0;
             const linhas_qtde = parseInt(document.getElementById('quantidade_de_linhas')?.value) || 0;
             const linha_valor = parseFloat(document.getElementById('premio_linha')?.value) || 0;
@@ -435,9 +437,7 @@
             toggleBolaTope();
         }
 
-        // Função que ativa/desativa o campo Bola Tope
         function toggleBolaTope() {
-            // ... (A sua função toggleBolaTope() permanece igual)
             const acumulado = parseFloat(document.getElementById('premio_acumulado')?.value) || 0;
             const bolaTopeInput = document.getElementById('bola_tope_acumulado');
             const bolaTopeLabel = document.getElementById('label_bola_tope');
@@ -450,70 +450,87 @@
             } else {
                 bolaTopeInput.disabled = true;
                 bolaTopeInput.removeAttribute('required');
-                bolaTopeInput.value = ''; // Limpa o valor
+                bolaTopeInput.value = ''; 
                 bolaTopeLabel.classList.add('text-gray-400');
                 bolaTopeLabel.classList.remove('required-label');
             }
         }
         
-        // --- LÓGICA DA MODAL DE EXCLUSÃO (NOVO) ---
+        // --- LÓGICA DA MODAL DE EXCLUSÃO (ATUALIZADA) ---
         
-        // Elementos da Modal
         const deleteModal = document.getElementById('delete-modal');
         const modalDeleteId = document.getElementById('modal-delete-id');
         const modalDeleteDescricao = document.getElementById('modal-delete-descricao');
         const btnConfirmDelete = document.getElementById('modal-btn-confirm-delete');
         
-        let formIdParaExcluir = null; // Guarda o ID do formulário a ser submetido
+        // Novos elementos da modal crítica
+        const modalNormalMsg = document.getElementById('modal-normal-msg');
+        const modalCriticalMsg = document.getElementById('modal-critical-msg');
+        const modalQtdVendas = document.getElementById('modal-qtd-vendas');
+        const modalTitle = document.getElementById('modal-title');
+        
+        let formIdParaExcluir = null; 
 
         /**
-         * Abre a modal e configura qual formulário deve ser submetido.
+         * Abre a modal e configura avisos baseados na quantidade de vendas.
          * @param {string} id - O ID do evento
          * @param {string} descricao - A descrição do evento
-         * @param {string} view - 'listar' ou 'consulta', para encontrar o formulário correto
+         * @param {string} view - 'listar' ou 'consulta'
+         * @param {int} qtdVendas - Quantidade de vendas existentes (0 se nulo)
          */
-        function openDeleteModal(id, descricao, view) {
+        function openDeleteModal(id, descricao, view, qtdVendas) {
             if (!deleteModal) return;
 
-            // 1. Guarda o ID do formulário que deve ser submetido
             formIdParaExcluir = `form-excluir-${view}-${id}`;
-
-            // 2. Preenche os dados na modal
             modalDeleteId.textContent = id;
             modalDeleteDescricao.textContent = descricao;
             
-            // 3. Mostra a modal
+            const quantidade = parseInt(qtdVendas) || 0;
+
+            if (quantidade > 0) {
+                // MODO CRÍTICO: TEM VENDAS
+                modalNormalMsg.style.display = 'none';
+                modalCriticalMsg.style.display = 'block';
+                modalQtdVendas.textContent = quantidade;
+                
+                // Estilo visual de perigo extremo
+                modalTitle.textContent = "⚠️ EXCLUSÃO CRÍTICA";
+                btnConfirmDelete.textContent = "CONFIRMAR E APAGAR VENDAS";
+                btnConfirmDelete.classList.remove('btn-danger');
+                btnConfirmDelete.classList.add('btn-critical');
+            } else {
+                // MODO NORMAL: SEM VENDAS
+                modalNormalMsg.style.display = 'block';
+                modalCriticalMsg.style.display = 'none';
+                
+                modalTitle.textContent = "Confirmar Exclusão";
+                btnConfirmDelete.textContent = "Confirmar Exclusão";
+                btnConfirmDelete.classList.remove('btn-critical');
+                btnConfirmDelete.classList.add('btn-danger');
+            }
+            
             deleteModal.style.display = 'flex';
         }
 
-        /**
-         * Fecha a modal e limpa o ID do formulário.
-         */
         function closeDeleteModal() {
             if (!deleteModal) return;
             formIdParaExcluir = null;
             deleteModal.style.display = 'none';
         }
 
-        /**
-         * Event listener para o botão "Confirmar Exclusão" dentro da modal.
-         */
         if (btnConfirmDelete) {
             btnConfirmDelete.onclick = function() {
                 if (formIdParaExcluir) {
                     const form = document.getElementById(formIdParaExcluir);
                     if (form) {
-                        form.submit(); // Submete o formulário correto
+                        form.submit(); 
                     } else {
                         console.error('Formulário de exclusão não encontrado:', formIdParaExcluir);
                     }
                 }
-                closeDeleteModal(); // Fecha a modal
+                closeDeleteModal(); 
             };
         }
-        
-        // REMOVIDO: A função 'confirm(message)' antiga foi removida
-        // REMOVIDO: A função 'confirmDelete(nick, id_cliente)' (que era de clientes) foi removida
         
     </script>
 </body>

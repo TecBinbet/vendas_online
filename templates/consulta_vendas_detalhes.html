@@ -117,7 +117,7 @@
                                 '{{ venda.numero_inicial2 | default(0) }}',
                                 '{{ venda.numero_final2 | default(0) }}',
                                 '{{ venda.telefone_cliente | default('') }}'
-                            )">,
+                            )">
                             <td class="font-bold">
                                 {{ venda.numero_inicial }} a {{ venda.numero_final }}
                                 {% if venda.numero_inicial2 > 0 %}
@@ -179,7 +179,7 @@
                     onmouseout="this.style.backgroundColor='#D97706'">
                 Gerar PDF (Período: <span id="modal-pdf-periodo2">...</span>)
             </button>          
-            {% endif %}            
+            {% endif %}           
             <button class="modal-btn btn-cancel mt-2" onclick="closeReprintModal()">
                 Cancelar
             </button>
@@ -240,17 +240,20 @@
             }
 
             // Lógica dos PDFs
-            spanPdf1.textContent = `${tempNumInicial1} a ${tempNumFinal1}`;
-            btnPdf1.onclick = () => handleGerarPdf(tempNumInicial1, tempNumFinal1);
-            btnPdf1.style.display = 'block'; 
-
-            if (tempNumInicial2 > 0 && tempNumFinal2 > 0) {
-                spanPdf2.textContent = `${tempNumInicial2} a ${tempNumFinal2}`;
-                btnPdf2.onclick = () => handleGerarPdf(tempNumInicial2, tempNumFinal2);
-                btnPdf2.style.display = 'block'; 
-            } else {
-                btnPdf2.style.display = 'none'; 
+            if (btnPdf1 && spanPdf1) {
+                spanPdf1.textContent = `${tempNumInicial1} a ${tempNumFinal1}`;
+                btnPdf1.onclick = () => handleGerarPdf(tempNumInicial1, tempNumFinal1);
+                btnPdf1.style.display = 'block'; 
             }
+            if (btnPdf2 && spanPdf2) {
+                if (tempNumInicial2 > 0 && tempNumFinal2 > 0) {
+                    spanPdf2.textContent = `${tempNumInicial2} a ${tempNumFinal2}`;
+                    btnPdf2.onclick = () => handleGerarPdf(tempNumInicial2, tempNumFinal2);
+                    btnPdf2.style.display = 'block'; 
+                } else {
+                    btnPdf2.style.display = 'none'; 
+                }
+           }
             
             modal.style.display = 'flex';
         }
@@ -309,16 +312,14 @@
         }
 
         // Atualizei a função para receber o texto
-           function abrirWhatsApp(textoParaEnviar) {
+        function abrirWhatsApp(textoParaEnviar) {
            // Garante que é uma string vazia se for null/undefined
            var rawTelefone = tempTelefone || ""; 
            var telefone = rawTelefone.replace(/\D/g, '');
          
            // Lógica do 55 (Brasil)
            if (telefone && telefone.length > 0) {
-               // Se o número tiver 10 ou 11 dígitos (ex: 11999998888), adiciona 55
-               // Se já tiver 12 ou 13 (ex: 5511...), não adiciona
-               if (telefone.length <= 11) {
+                if (telefone.length <= 11) {
                    telefone = "55" + telefone;
                }
            } else {
