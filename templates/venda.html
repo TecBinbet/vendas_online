@@ -474,6 +474,9 @@
          
            // Se tiver número válido, adiciona código país
            if (telefone && telefone.length > 0) {
+               if (telefone.length <= 9) {
+                   telefone = "11" + telefone;
+               }
                if (telefone.length <= 11) {
                    telefone = "55" + telefone;
                }

@@ -65,59 +65,109 @@ class PDFCartelas(FPDF):
     """Classe FPDF customizada para gerar cartelas de Bingo."""
     
     def header(self):
-        self.set_font('Helvetica', 'B', 12) 
-        self.cell(0, 10, 'Cartelas de Bingo', border=0, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C') 
-        self.ln(5)
+        # Verifica se foram passados dados personalizados, senão usa padrão
+        titulo = getattr(self, 'nome_sala', 'Cartelas de Bingo')
+        subtitulo = getattr(self, 'infos_evento', '')
+
+        self.set_font('Helvetica', 'B', 14) 
+        # Imprime Nome da Sala
+        self.cell(0, 6, titulo, border=0, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C') 
+        
+        # Imprime Detalhes do Evento (se houver)
+        if subtitulo:
+            self.set_font('Helvetica', 'B', 10)
+            self.cell(0, 5, subtitulo, border=0, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C') 
+        
+        self.ln(2) # Pequeno espaço após o cabeçalho
 
     def footer(self):
-        self.set_y(-15)
-        self.set_font('Helvetica', 'I', 10) 
+        self.set_y(-10) # Rodapé mais curto para caber 5 linhas de cartela
+        self.set_font('Helvetica', 'I', 8) 
         self.cell(0, 10, 'Pagina ' + str(self.page_no()) + '/{nb}', border=0, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C') 
         
     def desenhar_cartela(self, numero_cartela, dados_cartela_2d, pos_x, pos_y):
         """
-        Desenha uma única cartela 5x5 na posição (x, y) da página.
-        - 'dados_cartela_2d' deve ser uma lista 2D (5 listas de 5 números/strings)
+        Desenha uma cartela de 25 números (5x5) na posição (x, y).
+        Layout ajustado para caber 6 por página.
         """
-        
-        # --- Título da Cartela (Ex: "Cartela N° 0001") ---
+        # --- Título da Cartela ---
         self.set_xy(pos_x, pos_y)
-        self.set_font('Helvetica', 'B', 12) 
+        self.set_font('Helvetica', 'B', 10) 
         largura_total_cartela = 70 
-        self.cell(largura_total_cartela, 8, f"Cartela N° {numero_cartela:04d}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C') 
+        # Altura do título
+        self.cell(largura_total_cartela, 6, f"Cartela N {numero_cartela:04d}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C') 
         
         # --- Cabeçalho B-I-N-G-O ---
         self.set_x(pos_x) 
-        self.set_font('Helvetica', 'B', 16) 
-        self.set_fill_color(220, 220, 220) 
+        self.set_font('Helvetica', 'B', 14) 
+        self.set_fill_color(230, 230, 230) 
         
         cell_width = 14 
-        cell_height_header = 10 
+        cell_height_header = 8 
         
-        self.cell(cell_width, cell_height_header, "B", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True) 
-        self.cell(cell_width, cell_height_header, "I", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True) 
-        self.cell(cell_width, cell_height_header, "N", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True) 
-        self.cell(cell_width, cell_height_header, "G", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C', fill=True) 
-        self.cell(cell_width, cell_height_header, "O", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C', fill=True) 
+        cabecalho = ["B", "I", "N", "G", "O"]
+        for letra in cabecalho:
+             new_x = XPos.LMARGIN if letra == "O" else XPos.RIGHT
+             new_y = YPos.NEXT if letra == "O" else YPos.TOP
+             self.cell(cell_width, cell_height_header, letra, border=1, new_x=new_x, new_y=new_y, align='C', fill=True)
         
-        # --- Números da Cartela ---
-        self.set_font('Helvetica', 'B', 14) 
-        cell_height_num = 12 
+        # --- Números da Cartela (5 Linhas) ---
+        self.set_font('Helvetica', 'B', 12) 
+        cell_height_num = 10 
         
         for i in range(5): 
             self.set_x(pos_x) 
             for j in range(5): 
                 numero = str(dados_cartela_2d[i][j])
                 
-                # Customização para o "FREE"
+                # Destaque para o FREE (se houver)
                 if numero.upper() == "FREE":
-                    self.set_font('Helvetica', 'B', 12) 
-                    self.cell(cell_width, cell_height_num, "FREE", border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C') 
-                    self.set_font('Helvetica', 'B', 14) 
+                    self.set_font('Helvetica', 'B', 10) # Fonte menor para caber
                 else:
-                    self.cell(cell_width, cell_height_num, numero, border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C') 
+                    self.set_font('Helvetica', 'B', 12)
+
+                self.cell(cell_width, cell_height_num, numero, border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C') 
+            
+            self.ln(cell_height_num)
+
+    def desenhar_cartela_15(self, numero_cartela, dados_cartela_2d, pos_x, pos_y):
+        """
+        Desenha uma cartela de 15 números (3x5) na posição (x, y).
+        Otimizada para economizar espaço vertical.
+        """
+        # --- Título da Cartela ---
+        self.set_xy(pos_x, pos_y)
+        self.set_font('Helvetica', 'B', 9) # Fonte levemente menor
+        largura_total_cartela = 70 
+        # Altura reduzida do título da cartela para 5mm
+        self.cell(largura_total_cartela, 5, f"Cartela N {numero_cartela:04d}", border=1, new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C') 
+        
+        # --- Cabeçalho B-I-N-G-O ---
+        self.set_x(pos_x) 
+        self.set_font('Helvetica', 'B', 12) 
+        self.set_fill_color(230, 230, 230) 
+        
+        cell_width = 14 
+        cell_height_header = 6 # Altura reduzida do cabeçalho BINGO
+        
+        cabecalho = ["B", "I", "N", "G", "O"]
+        for letra in cabecalho:
+             new_x = XPos.LMARGIN if letra == "O" else XPos.RIGHT
+             new_y = YPos.NEXT if letra == "O" else YPos.TOP
+             self.cell(cell_width, cell_height_header, letra, border=1, new_x=new_x, new_y=new_y, align='C', fill=True)
+        
+        # --- Números da Cartela (3 Linhas) ---
+        self.set_font('Helvetica', 'B', 11) 
+        cell_height_num = 9 # Altura reduzida das células de número
+        
+        for i in range(3): 
+            self.set_x(pos_x) 
+            for j in range(5): 
+                numero = str(dados_cartela_2d[i][j])
+                self.cell(cell_width, cell_height_num, numero, border=1, new_x=XPos.RIGHT, new_y=YPos.TOP, align='C') 
             
             self.ln(cell_height_num) 
+
 
 # --- FIM DA CLASSE PDFCartelas ---
 
@@ -470,7 +520,8 @@ def carregar_linha_cartela(numero_cartela, tipo_cartela):
 
 def buscar_dados_cartela_2d(numero_cartela, tipo_cartela):
     """
-    Busca os dados no arquivo e os formata em uma lista 2D (5x5).
+    Busca os dados no arquivo e os formata em uma lista 2D.
+    Suporta tipos 25 (5x5) e 15 (3x5).
     """
     numeros_lista = carregar_linha_cartela(numero_cartela, tipo_cartela)
 
@@ -478,28 +529,32 @@ def buscar_dados_cartela_2d(numero_cartela, tipo_cartela):
         return None
     
     if tipo_cartela == 25:
-        if len(numeros_lista) < 25:
-             print(f"ERRO: Cartela {numero_cartela} do tipo 25 tem menos de 25 números.")
-             return None
-             
+        if len(numeros_lista) < 25: return None
         cartela_2d = []
-        
         for i in range(5): 
             linha = []
             for j in range(5): 
                 indice = (j * 5) + i
                 linha.append(numeros_lista[indice]) 
-
             cartela_2d.append(linha)
-
-        if cartela_2d[2][2] != "FREE":
-            cartela_2d[2][2] = "FREE"
-            
+        
+        #if cartela_2d[2][2] != "FREE": cartela_2d[2][2] = "FREE"
         return cartela_2d
         
     elif tipo_cartela == 15:
-        # Lógica de formatação 3x5 para cartela de 15 números (Não implementada)
-        return None 
+        # Lógica para cartela de 15 números (3 linhas x 5 colunas)
+        if len(numeros_lista) < 15: return None
+        
+        cartela_2d = []
+        for i in range(3): # 3 Linhas
+            linha = []
+            for j in range(5): # 5 Colunas
+                # A fórmula do índice depende de como seu TXT é gerado.
+                # Assumindo ordem: Coluna 1 completa, depois Coluna 2... (Padrão Bingo)
+                indice = (j * 3) + i
+                linha.append(numeros_lista[indice])
+            cartela_2d.append(linha)
+        return cartela_2d
     
     return None
 
@@ -744,16 +799,18 @@ def dashboard_cliente():
     return render_template('dashboard_cliente.html', nick_cliente=nick_cliente, g=g)
 
 # --- ROTAS DE VENDAS E CONSULTA (Todas atualizadas para usar get_vendas_db()) ---
-
 @app.route('/consulta_status_eventos', methods=['GET'])
 @login_required
 def consulta_status_eventos():
     db = get_vendas_db()
-    if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
+    if db is None: return redirect(url_for('login'))
     
     from flask import request 
     error = session.pop('error_message', None)
     success = session.pop('success_message', None)
+    
+    # Pega o nível da sessão para passar ao template
+    nivel_usuario = session.get('nivel', 0) 
     
     eventos_status = []
     view_mode = request.args.get('mode', 'detailed') 
@@ -777,6 +834,7 @@ def consulta_status_eventos():
         for evento in eventos_cursor:
             id_evento_int = evento.get('id_evento')
             
+            # --- Busca dados de vendas ---
             colecao_vendas = f"vendas{id_evento_int}"
             vendas_data = None
             if colecao_vendas in db.list_collection_names():
@@ -786,10 +844,18 @@ def consulta_status_eventos():
                 vendas_data = vendas_data_list[0] if vendas_data_list else None
             
             total_unidades = vendas_data.get('total_unidades', 0) if vendas_data else 0
-            total_valor = vendas_data.get('total_valor', 0) if vendas_data else 0
+            
+            # Valores Financeiros (Float)
+            valor_vendas_float = safe_float(vendas_data.get('total_valor', 0) if vendas_data else 0)
+            premio_total_float = safe_float(evento.get('premio_total', 0))
+            
+            # Cálculo do Saldo (Lucro Bruto)
+            saldo_float = valor_vendas_float - premio_total_float
+
             controle = db.controle_venda.find_one({'id_evento': id_evento_int})
             num_atual = controle.get('inicial_proxima_venda', evento.get('numero_inicial', 1)) if controle else evento.get('numero_inicial', 1)
             
+            # Formatação de Data
             data_ativado = evento.get('data_ativado')
             data_ativado_formatada = 'N/A'
             if isinstance(data_ativado, str):
@@ -808,7 +874,13 @@ def consulta_status_eventos():
                 'valor_venda_unit': format_currency(evento.get('valor_de_venda')),
                 'data_ativacao': data_ativado_formatada,
                 'total_vendido': total_unidades,
-                'valor_total_vendido': format_currency(total_valor),
+                'valor_total_vendido': format_currency(valor_vendas_float),
+                
+                # --- NOVOS CAMPOS FINANCEIROS ---
+                'premio_total': format_currency(premio_total_float),
+                'saldo': format_currency(saldo_float),
+                'saldo_is_positivo': (saldo_float >= 0),
+                
                 'numeracao_atual': num_atual,
                 'is_ativo': evento.get('status').lower() == 'ativo' if evento.get('status') else False, 
                 'limite_maximo': evento.get('numero_maximo')
@@ -817,9 +889,10 @@ def consulta_status_eventos():
 
     except Exception as e:
         print(f"ERRO CRÍTICO ao buscar status de eventos: {e}")
-        return render_template('consulta_status_eventos.html', error=f"Erro interno ao carregar status: {e}", eventos_status=[], g=g, success=success, mode=view_mode)
+        return render_template('consulta_status_eventos.html', error=f"Erro interno ao carregar status: {e}", eventos_status=[], g=g, success=success, mode=view_mode, nivel=nivel_usuario)
 
-    return render_template('consulta_status_eventos.html', eventos_status=eventos_status, g=g, mode=view_mode, error=error, success=success)
+    # Passamos 'nivel=nivel_usuario' para o template
+    return render_template('consulta_status_eventos.html', eventos_status=eventos_status, g=g, mode=view_mode, error=error, success=success, nivel=nivel_usuario)
 
 
 @app.route('/evento/mudar_status', methods=['POST'])
@@ -2849,46 +2922,211 @@ def gerar_lista_vendas():
 @login_required
 def gerar_cartelas_pdf_25():
     """
-    Gera um PDF contendo cartelas de bingo de 25 números.
-    Utiliza leitura otimizada de arquivo por linha.
+    Gera PDF de cartelas de 25 números.
+    Layout: 6 cartelas por página (2 colunas x 3 linhas).
+    Cabeçalho: Nome da Sala + Descrição/Data do Evento.
     """
     db = get_vendas_db() 
-    if db is None: # <-- CORREÇÃO PYMONGO
-        return "Erro de Conexão: Não foi possível acessar o BD de Vendas para gerar o PDF.", 500
+    if db is None: 
+        return "Erro de Conexão: DB Offline.", 500
     
     TIPO_CARTELA = 25 
 
     try:
-        numero_inicial_pdf = int(request.args.get('numero_inicial_pdf'))
-        numero_final_pdf = int(request.args.get('numero_final_pdf'))
-        id_evento = int(request.args.get('id_evento', 0))
-        
-        nome_cliente = request.args.get('nome_cliente', 'cliente_sem_nome')
-        id_cliente = int(request.args.get('id_cliente', 0))
+        # Parâmetros da URL
+        try:
+            numero_inicial_pdf = int(request.args.get('numero_inicial_pdf'))
+            numero_final_pdf = int(request.args.get('numero_final_pdf'))
+            id_evento = int(request.args.get('id_evento', 0))
+            nome_cliente = request.args.get('nome_cliente', 'cliente')
+        except (ValueError, TypeError):
+             return "Erro: Parâmetros inválidos na URL."
         
         if numero_inicial_pdf > numero_final_pdf:
-             return "Erro: O número inicial não pode ser maior que o final."
-             
-        total_cartelas = (numero_final_pdf - numero_inicial_pdf) + 1
-        if total_cartelas > 2000:
-             return f"Erro: Limite de 2000 cartelas por geração excedido (tentou gerar {total_cartelas})."
+             return "Erro: Número inicial maior que final."
+
+        # --- Lógica de Cabeçalho Personalizado ---
+        evento = db.eventos.find_one({'id_evento': id_evento})
+        if not evento:
+            return "Erro: Evento não encontrado."
+
+        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
+        descricao_evento = evento.get('descricao', '')
         
+        # Formata data
+        data_str = evento.get('data_evento', '')
+        hora_str = evento.get('hora_evento', '')
+        if '-' in str(data_str):
+            try:
+                dt = datetime.strptime(str(data_str), '%Y-%m-%d')
+                data_str = dt.strftime('%d/%m/%Y')
+            except: pass
+            
+        infos_evento = f"{descricao_evento} - {data_str} as {hora_str}"
+
+        # Verifica arquivo TXT
         caminho_check = os.path.join(CARTELAS_FOLDER, f'cartelas.{TIPO_CARTELA}')
         if not os.path.exists(caminho_check):
-             print(f"ERRO CRÍTICO: Arquivo de cartelas não encontrado em: {caminho_check}")
-             return f"Erro Crítico: Arquivo de cartelas '{caminho_check}' não encontrado. Verifique o caminho e a sincronização do Git."
+             return f"Erro: Arquivo 'cartelas.25' não encontrado no servidor em {caminho_check}."
         
+        # Configura PDF
         pdf = PDFCartelas(orientation='P', unit='mm', format='A4') 
+        
+        # Injeta textos para o header()
+        pdf.nome_sala = nome_sala
+        pdf.infos_evento = infos_evento
+        
         pdf.alias_nb_pages()
         
-        margem = 15
+        # --- CONFIGURAÇÃO DE LAYOUT (6 por página) ---
+        margem_x = 15
+        margem_top_inicial = 25 # Espaço para o cabeçalho da página
         largura_cartela = 70
-        altura_cartela_total = 8 + 10 + (5*12)
         
-        posicoes = [
-            (margem, 25), (margem + largura_cartela + 10, 25),
-            (margem, 25 + altura_cartela_total + 10), (margem + largura_cartela + 10, 25 + altura_cartela_total + 10)
-        ]
+        # Altura da Cartela 25 nums:
+        # Título(6) + Header(8) + 5*Num(10) = 64mm
+        altura_cartela_total = 64 
+        
+        espaco_horizontal = 10
+        espaco_vertical = 12 
+        
+        # Gera as coordenadas para 6 cartelas: (X, Y)
+        # 2 Colunas x 3 Linhas
+        posicoes = []
+        for linha in range(3): # Linhas 0, 1, 2
+            y = margem_top_inicial + (linha * (altura_cartela_total + espaco_vertical))
+            
+            # Coluna 1
+            posicoes.append((margem_x, y))
+            # Coluna 2
+            posicoes.append((margem_x + largura_cartela + espaco_horizontal, y))
+            
+        cartela_idx_na_pagina = 0
+
+        for num_cartela in range(numero_inicial_pdf, numero_final_pdf + 1):
+            
+            if cartela_idx_na_pagina == 0:
+                pdf.add_page()
+            
+            dados_cartela = buscar_dados_cartela_2d(num_cartela, TIPO_CARTELA)
+            
+            if not dados_cartela:
+                 print(f"Aviso: Dados da cartela {num_cartela} (tipo 25) não encontrados.")
+            else:
+                if cartela_idx_na_pagina < len(posicoes):
+                    pos_x, pos_y = posicoes[cartela_idx_na_pagina]
+                    pdf.desenhar_cartela(num_cartela, dados_cartela, pos_x, pos_y)
+            
+            cartela_idx_na_pagina += 1
+            
+            if cartela_idx_na_pagina >= len(posicoes):
+                cartela_idx_na_pagina = 0
+        
+        pdf_output = bytes(pdf.output()) 
+        
+        nick_limpo = clean_for_filename(nome_cliente)
+        nome_arquivo = f'{nick_limpo}_eve{id_evento}_25nums_{numero_inicial_pdf}_{numero_final_pdf}.pdf'
+        
+        response = make_response(pdf_output)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
+        
+        return response
+
+    except Exception as e:
+        print(f"ERRO CRÍTICO ao gerar PDF 25: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"Erro interno: {e}"
+
+
+# Rota para cartelas de 15 números (PLACEHOLDER)
+@app.route('/gerar_cartelas_pdf_15')
+@login_required
+def gerar_cartelas_pdf_15():
+    """
+    Gera PDF de cartelas de 15 números.
+    Layout: 10 cartelas por página (2 colunas x 5 linhas).
+    Cabeçalho: Nome da Sala + Descrição/Data do Evento.
+    """
+    db = get_vendas_db() 
+    if db is None: 
+        return "Erro de Conexão: DB Offline.", 500
+    
+    TIPO_CARTELA = 15 
+
+    try:
+        # Parâmetros da URL
+        try:
+            numero_inicial_pdf = int(request.args.get('numero_inicial_pdf'))
+            numero_final_pdf = int(request.args.get('numero_final_pdf'))
+            id_evento = int(request.args.get('id_evento', 0))
+            nome_cliente = request.args.get('nome_cliente', 'cliente')
+        except (ValueError, TypeError):
+             return "Erro: Parâmetros inválidos na URL."
+        
+        if numero_inicial_pdf > numero_final_pdf:
+             return "Erro: Número inicial maior que final."
+        
+        # Busca dados do evento para o cabeçalho
+        evento = db.eventos.find_one({'id_evento': id_evento})
+        if not evento:
+            return "Erro: Evento não encontrado."
+
+        # Prepara textos do cabeçalho
+        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
+        descricao_evento = evento.get('descricao', '')
+        
+        # Formata data e hora
+        data_str = evento.get('data_evento', '')
+        hora_str = evento.get('hora_evento', '')
+        # Se data vier no formato YYYY-MM-DD, converte para DD/MM/YYYY
+        if '-' in str(data_str):
+            try:
+                dt = datetime.strptime(str(data_str), '%Y-%m-%d')
+                data_str = dt.strftime('%d/%m/%Y')
+            except: pass
+            
+        infos_evento = f"{descricao_evento} - {data_str} as {hora_str}"
+
+        # Verifica arquivo TXT
+        caminho_check = os.path.join(CARTELAS_FOLDER, f'cartelas.{TIPO_CARTELA}')
+        if not os.path.exists(caminho_check):
+             return f"Erro: Arquivo 'cartelas.15' não encontrado no servidor em {caminho_check}."
+        
+        # Configura PDF
+        pdf = PDFCartelas(orientation='P', unit='mm', format='A4') 
+        
+        # Injeta os textos personalizados na instância do PDF para o header() usar
+        pdf.nome_sala = nome_sala
+        pdf.infos_evento = infos_evento
+        
+        pdf.alias_nb_pages()
+        
+        # --- CONFIGURAÇÃO DE LAYOUT (10 por página) ---
+        margem_x = 15
+        margem_top_inicial = 25 # Espaço reservado para o cabeçalho customizado
+        largura_cartela = 70
+        
+        # Altura calculada na classe PDFCartelas:
+        # Título(5) + Header(6) + 3*Num(9) = 38mm altura total da cartela
+        altura_cartela_total = 38 
+        
+        espaco_horizontal = 10
+        espaco_vertical = 6 # Espaço entre linhas de cartelas
+        
+        # Gera as coordenadas para 10 cartelas: (X, Y)
+        # 2 Colunas x 5 Linhas
+        posicoes = []
+        for linha in range(5): # 0 a 4
+            y = margem_top_inicial + (linha * (altura_cartela_total + espaco_vertical))
+            
+            # Coluna 1
+            posicoes.append((margem_x, y))
+            # Coluna 2
+            posicoes.append((margem_x + largura_cartela + espaco_horizontal, y))
+            
+        # posicoes agora tem 10 tuplas [(x,y)...]
         
         cartela_idx_na_pagina = 0
 
@@ -2899,23 +3137,22 @@ def gerar_cartelas_pdf_25():
             
             dados_cartela = buscar_dados_cartela_2d(num_cartela, TIPO_CARTELA)
             
-            if not dados_cartela or len(dados_cartela) != 5:
-                 print(f"AVISO: Pulei a cartela {num_cartela}, dados não encontrados ou mal formatados.")
-                 continue
-                 
-            pos_x, pos_y = posicoes[cartela_idx_na_pagina]
-            pdf.desenhar_cartela(num_cartela, dados_cartela, pos_x, pos_y)
+            if not dados_cartela:
+                 print(f"Aviso: Dados da cartela {num_cartela} (tipo 15) não encontrados.")
+            else:
+                if cartela_idx_na_pagina < len(posicoes):
+                    pos_x, pos_y = posicoes[cartela_idx_na_pagina]
+                    pdf.desenhar_cartela_15(num_cartela, dados_cartela, pos_x, pos_y)
             
             cartela_idx_na_pagina += 1
             
+            # Se preencheu as 10 posições, zera para criar nova página
             if cartela_idx_na_pagina >= len(posicoes):
                 cartela_idx_na_pagina = 0
         
         pdf_output = bytes(pdf.output()) 
-        
         nick_limpo = clean_for_filename(nome_cliente)
-        
-        nome_arquivo = f'{nick_limpo}_eve{id_evento}_{numero_inicial_pdf}_a_{numero_final_pdf}.pdf'
+        nome_arquivo = f'{nick_limpo}_eve{id_evento}_15nums_{numero_inicial_pdf}_{numero_final_pdf}.pdf'
         
         response = make_response(pdf_output)
         response.headers['Content-Type'] = 'application/pdf'
@@ -2924,31 +3161,10 @@ def gerar_cartelas_pdf_25():
         return response
 
     except Exception as e:
-        print(f"ERRO CRÍTICO ao gerar PDF de cartelas: {e}")
+        print(f"ERRO CRÍTICO ao gerar PDF 15: {e}")
         import traceback
         traceback.print_exc()
-        return f"Erro interno ao gerar PDF: {e}"
-
-
-# Rota para cartelas de 15 números (PLACEHOLDER)
-@app.route('/gerar_cartelas_pdf_15')
-@login_required
-def gerar_cartelas_pdf_15():
-    """
-    [PLACEHOLDER] Rota para gerar cartelas de 15 números.
-    """
-    db = get_vendas_db() 
-    if db is None: # <-- CORREÇÃO PYMONGO
-        return "Erro de Conexão: Não foi possível acessar o BD de Vendas para gerar o PDF.", 500
-
-    if session.get('nivel', 0) < 3:
-        return "", 204
-        
-    caminho_check = os.path.join(CARTELAS_FOLDER, 'cartelas.15')
-    if not os.path.exists(caminho_check):
-         print(f"AVISO: Arquivo de cartelas 'cartelas.15' não encontrado em: {caminho_check}")
-
-    return "", 204
+        return f"Erro interno: {e}"
 
 
 if __name__ == '__main__':

@@ -260,14 +260,11 @@
             modal.style.display = 'none';
         }
 
-        // Função atualizada para tentar COMPARTILHAR o arquivo em vez de apenas baixar
-        async function handleGerarPdf(numInicial, numFinal) {
+        function handleGerarPdf(numInicial, numFinal) {
             if (!numInicial || !numFinal || !tempIdEvento) {
                 alert("Erro: Dados incompletos para gerar PDF.");
                 return;
             }
-            
-            // Monta a URL como antes
             const baseUrl = "{{ url_for('gerar_cartelas_pdf_' ~ info_tipo_cartela | default(15)) }}";            
             const params = new URLSearchParams({
                 numero_inicial_pdf: numInicial,
@@ -276,47 +273,8 @@
                 id_cliente: tempIdCliente,
                 nome_cliente: tempNomeCliente
             });
-            
-            const urlCompleta = `${baseUrl}?${params.toString()}`;
-            
-            // Fecha a modal para limpar a tela
+            window.open(`${baseUrl}?${params.toString()}`, '_blank');
             closeReprintModal();
-
-            // Altera o texto do botão temporariamente para dar feedback
-            showToast("Gerando PDF para envio...");
-
-            try {
-                // 1. Verifica se o navegador suporta compartilhamento de arquivos
-                if (navigator.canShare && navigator.share) {
-                    
-                    // 2. Baixa o PDF para a memória do navegador (Blob) sem salvar no disco ainda
-                    const response = await fetch(urlCompleta);
-                    const blob = await response.blob();
-                    
-                    // 3. Cria um arquivo virtual
-                    const file = new File([blob], `cartelas_${tempIdEvento}.pdf`, { type: "application/pdf" });
-                    
-                    // 4. Verifica se pode compartilhar este arquivo específico
-                    if (navigator.canShare({ files: [file] })) {
-                        await navigator.share({
-                            files: [file],
-                            title: 'Cartelas de Bingo',
-                            text: `Olá ${tempNomeCliente}, aqui estão suas cartelas!`
-                        });
-                        // Se chegou aqui, o usuário abriu o menu de compartilhamento
-                    } else {
-                        // Se o navegador tem share mas não suporta arquivos, faz o download normal
-                        throw new Error("Compartilhamento de arquivos não suportado.");
-                    }
-                } else {
-                    // Se não suporta navigator.share (ex: alguns Desktops antigos), faz download normal
-                    throw new Error("API de compartilhamento não suportada.");
-                }
-            } catch (err) {
-                console.log("Fallback para download normal:", err);
-                // Se der qualquer erro no compartilhamento, abre a janela de download padrão
-                window.open(urlCompleta, '_blank');
-            }
         }
 
         function showToast(message) {
