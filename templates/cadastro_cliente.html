@@ -229,7 +229,7 @@
 
                     {% if "telefone" in campos %}
                     <div class="form-group">
-                        <label for="telefone" class="{% if campos.get('telefone') %}required-label{% endif %}">Telefone:</label>
+                        <label for="Telefone" class="{% if campos.get('telefone') %}required-label{% endif %}">WhatsApp (Telefone):</label>
                         <input type="tel" id="telefone" name="telefone" class="form-control"
                                   value="{{ cliente.get('telefone', '') }}"
                                   {% if campos.get('telefone') %}required{% endif %}>

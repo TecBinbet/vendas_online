@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Galeria de Resultados</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/animate.css/4.1.1/animate.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #F3F4F6; }
+        
+        /* Estilos para os Cards de Evento */
+        .event-card {
+            background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
+            border-left: 5px solid #059669;
+            transition: all 0.3s ease;
+        }
+        .event-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+
+        /* Estilos para a Tela de Apresentação */
+        .presentation-container {
+            background: radial-gradient(circle at center, #1e1b4b 0%, #0f172a 100%);
+            min-height: 80vh;
+            border-radius: 1rem;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .winner-card {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 15px;
+            transition: transform 0.3s;
+        }
+        .winner-card:hover {
+            transform: scale(1.02);
+            background: rgba(255, 255, 255, 0.15);
+            border-color: #ffd700;
+        }
+
+        .trophy-icon { font-size: 3rem; margin-bottom: 0.5rem; filter: drop-shadow(0 0 10px rgba(255, 215, 0, 0.5)); }
+        
+        /* Cores de Prêmios */
+        .prize-bingo { color: #FFD700; text-shadow: 0 0 10px rgba(255, 215, 0, 0.5); }
+        .prize-linha { color: #E2E8F0; text-shadow: 0 0 10px rgba(226, 232, 240, 0.5); }
+        .prize-quadra { color: #CD7F32; text-shadow: 0 0 10px rgba(205, 127, 50, 0.5); }
+
+        .confetti {
+            position: absolute;
+            width: 10px; height: 10px;
+            background-color: #f2d74e;
+            animation: confetti 5s infinite;
+        }
+        @keyframes confetti {
+            0% { transform: translateY(-10vh) rotate(0deg); opacity: 1; }
+            100% { transform: translateY(100vh) rotate(720deg); opacity: 0; }
+        }
+    </style>
+</head>
+<body class="p-4 md:p-8">
+
+    <div class="max-w-6xl mx-auto">
+        
+        <!-- CABEÇALHO -->
+        <div class="flex justify-between items-center mb-2">
+            <h2 class="text-2xl font-bold mb-2 text-blue-800 flex items-center gap-2">
+                🏆 Galeria de Resultados
+            </h2>
+            <a href="{{ url_for('menu_operacoes') }}" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition">
+                ← Voltar ao Menu
+            </a>
+        </div>
+
+        {% if error %}
+            <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-2 mb-3 rounded shadow-sm" role="alert">
+                <p>{{ error }}</p>
+            </div>
+        {% endif %}
+
+        <!-- ESTADO 1: LISTA DE EVENTOS FINALIZADOS -->
+        {% if not selected_event %}
+            <div class="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                <h3 class="text-xl font-semibold text-gray-700 mb-4 border-b pb-2">Selecione um Evento Finalizado</h3>
+                
+                {% if eventos_finalizados %}
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {% for evento in eventos_finalizados %}
+                            <a href="{{ url_for('consulta_resultados', id_evento=evento.id_evento) }}" class="block">
+                                <div class="event-card p-5 rounded-lg h-full flex flex-col justify-between">
+                                    <div>
+                                        <div class="flex justify-between items-start mb-2">
+                                            <span class="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">EVE{{ evento.id_evento }}</span>
+                                            <span class="text-sm text-gray-500">{{ evento.data_formatada }}</span>
+                                        </div>
+                                        <h4 class="text-lg font-bold text-gray-800 mb-1">{{ evento.descricao }}</h4>
+                                        <p class="text-sm text-gray-600">Premiação Total: <span class="font-semibold text-green-600">{{ evento.premio_total_fmt }}</span></p>
+                                    </div>
+                                    <div class="mt-4 text-right">
+                                        <span class="text-green-600 text-sm font-bold hover:underline">Ver Ganhadores →</span>
+                                    </div>
+                                </div>
+                            </a>
+                        {% endfor %}
+                    </div>
+                {% else %}
+                    <div class="text-center py-12 text-gray-500 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+                        <p class="text-xl">📭 Nenhum evento finalizado encontrado.</p>
+                        <p class="text-sm mt-2">Os eventos aparecerão aqui assim que forem marcados como "Finalizado".</p>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+
+        <!-- ESTADO 2: TELA DE APRESENTAÇÃO (RESULTADOS) -->
+        {% if selected_event %}
+            <div class="presentation-container p-8 shadow-2xl animate__animated animate__fadeIn">
+                <!-- Efeito de Fundo (Decorativo) -->
+                <div class="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none opacity-20">
+                    <div class="absolute top-10 left-10 w-32 h-32 bg-purple-500 rounded-full blur-3xl"></div>
+                    <div class="absolute bottom-10 right-10 w-40 h-40 bg-blue-500 rounded-full blur-3xl"></div>
+                </div>
+
+                <!-- Botão Voltar (Dentro da Apresentação) -->
+                <a href="{{ url_for('consulta_resultados') }}" class="absolute top-4 left-4 text-white/50 hover:text-white transition z-10">
+                    ← Escolher outro evento
+                </a>
+
+                <!-- Cabeçalho do Evento -->
+                <div class="text-center mb-2 mt-2 relative z-10">
+                    <span class="uppercase tracking-widest text-xs font-bold text-yellow-400 mb-2 block">Resultados Oficiais</span>
+                    <h1 class="text-4xl md:text-2xl font-semibold text-transparent bg-clip-text bg-gradient-to-r from-yellow-200 via-yellow-400 to-yellow-200 drop-shadow-lg">
+                        {{ selected_event.descricao }}
+                    </h1>
+                    <p class="text-blue-200 mt-2 text-lg">Realizado em {{ selected_event.data_formatada }}</p>
+                </div>
+
+                <!-- Grid de Ganhadores -->
+                {% if resultados %}
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 relative z-10 max-w-2xl mx-auto">
+                        
+                        {% for res in resultados %}
+                            <div class="winner-card p-1 text-center animate__animated animate__zoomIn" style="animation-delay: {{ loop.index * 100 }}ms;">
+                                <h3 class="text-lg  mb-1 
+                                    {% if 'BINGO' in res.descricao_premio|upper %}prize-bingo
+                                    {% elif 'LINHA' in res.descricao_premio|upper %}prize-bingo  #prize-linha
+                                    {% elif 'QUADRA' in res.descricao_premio|upper %}prize-bingo #prize-quadra
+                                    {% else %}prize-bingo{% endif %}">
+                                    {{ res.descricao_premio }}
+                                </h3>
+                                
+                                <div class="my-2 border-t border-white/10 w-1/2 mx-auto"></div>
+
+                                <div class="space-y-2">
+                                    {% if res.ganhadores and res.ganhadores|length > 0 %}
+                                        {% for ganhador in res.ganhadores %}
+                                            <p class="text-lg font-medium text-white">{{ ganhador }}</p>
+                                            {% if res.cartela %}
+                                                <p class="text-xl text-blue-300">Cartela: {{ res.cartela }}</p>
+                                            {% endif %}
+                                        {% endfor %}
+                                    {% else %}
+                                        <p class="text-white/50 italic">Não informado</p>
+                                    {% endif %}
+                                </div>
+
+                                {% if res.valor_premio %}
+                                    <div class="mt-2 bg-black/20 rounded-full py-1 px-3 inline-block">
+                                        <span class="text-2xl text-green-400 font-semibold">R$ {{ res.valor_premio }}</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+                        {% endfor %}
+
+                    </div>
+                {% else %}
+                    <div class="text-center text-white/50 py-20 relative z-10">
+                        <p class="text-2xl mb-2">Ainda não há resultados cadastrados para este evento.</p>
+                        <p class="text-sm">Aguarde a apuração oficial ou verifique o cadastro na tabela 'resultados'.</p>
+                    </div>
+                {% endif %}
+            </div>
+        {% endif %}
+
+    </div>
+
+</body>
+</html>

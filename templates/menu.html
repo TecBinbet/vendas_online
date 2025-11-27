@@ -16,7 +16,7 @@
              <span class="emoji">📊</span>
              <span class="menu-text">Consultar Vendas</span>
         </a>
-        <a href="#" class="menu-item">🏆 Consulta de Resultados</a>
+        <a href="{{ url_for('consulta_resultados') }}" class="menu-item">🏆 Consulta de Resultados</a>
         <a href="{{ url_for('cadastro_cliente', view='novo', next='menu_operacoes') }}" class="menu-item">👥 Cadastro de Clientes</a>
         
         {% if nivel >= 3 %} 

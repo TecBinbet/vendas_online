@@ -1400,6 +1400,16 @@ def processar_venda():
     nick_colaborador = session.get('nick', 'Colaborador') 
     nome_colecao_venda = f"vendas{str(id_evento_int_para_controle).strip()}"
 
+# --- Busca Chave PIX do Colaborador para o Comprovante ---
+    chave_pix_colaborador = "Consulte o Colaborador"
+    try:
+        if colaborador_id != 'N/A':
+            colab_doc_pix = db.colaboradores.find_one({'id_colaborador': int(colaborador_id)})
+            if colab_doc_pix and colab_doc_pix.get('chave_pix'):
+                chave_pix_colaborador = colab_doc_pix.get('chave_pix')
+    except Exception as e:
+        print(f"Erro ao buscar PIX do colaborador: {e}")
+
     id_venda_formatado = None
     numero_inicial_atual = None
     numero_final_atual = None
@@ -1541,11 +1551,7 @@ def processar_venda():
         data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
 
         http_apk = g.parametros_globais.get('http_apk', '')
-        if tipo_de_cartela == 15:
-            link_final_limpo = f"{http_apk}?idrodada={id_evento_int_para_controle}{link_periodos_completos}"
-        else:
-            link_final_limpo = http_apk
-
+        link_final_limpo = f"{http_apk}?idcliente={id_cliente_final}"
         
         success_msg = (
             f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
@@ -1557,14 +1563,17 @@ def processar_venda():
             f"<strong>Data: {data_evento_formatada} às {hora_evento_str}</strong><br>"
             f"Colaborador:{colaborador_id}-{nick_colaborador}<br>"
             f"----------------------------<br>"
-            f"<strong> > Períodos Anteriores <<strong><br>"
+            f"<strong> > Períodos Anteriores <</strong><br>"
             f"{periodos_anteriores_html}"
             f"----------------------------<br>"
             f"{periodo_atual_html}"
             f"----------------------------<br>"
-            f"Total Unidades: <strong>{total_unidades_cliente}<strong><br>"
-            f"Total Cartelas: <strong>{total_cartelas_cliente}<strong><br>"
+            f"Total Unidades: <strong>{total_unidades_cliente}</strong><br>"
+            f"Total Cartelas: <strong>{total_cartelas_cliente}</strong><br>"
             f"  VALOR TOTAL: <span style='font-size: 1.2rem; color: #B91C1C;'>R$ {total_valor_cliente:.2f}</span><br>"
+            f"<br>"
+            f"   🔑   CHAVE PIX   💸<br>"
+            f"   <strong>{chave_pix_colaborador}</strong><br>"
             f"<br>"
             f"CLIQUE NO <strong>LINK</strong> ABAIXO PARA<br>"
             f"    ACESSAR SUAS CARTELAS 📱<br>"
@@ -2605,6 +2614,181 @@ def consulta_vendas_detalhes():
                            info_tipo_cartela=info_tipo_cartela,
                            info_telefone_cliente=info_telefone_cliente)
 
+# --- ROTA PARA GALERIA DE RESULTADOS (Consulta Pública/Interna) ---
+@app.route('/consulta_resultados', methods=['GET'])
+@login_required
+def consulta_resultados():
+    """
+    Exibe a galeria de eventos finalizados e seus ganhadores.
+    Baseado no template consulta_resultados.html e na estrutura de documento único em 'resultados'.
+    """
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+
+    id_evento_param = request.args.get('id_evento')
+    error = None
+    
+    # Função local para formatar moeda (Ajustada para aceitar "100,00")
+    def format_moeda(valor):
+        try:
+            if valor is None:
+                return "0,00"
+                
+            # Se for string, trata a pontuação brasileira
+            if isinstance(valor, str):
+                # Remove símbolos de moeda e espaços
+                valor_limpo = valor.replace('R$', '').strip()
+                
+                # Se tiver vírgula, assume que é decimal (ex: "100,00" ou "1.000,00")
+                if ',' in valor_limpo:
+                    # Remove pontos de milhar (1.000,00 -> 1000,00)
+                    valor_limpo = valor_limpo.replace('.', '')
+                    # Troca vírgula por ponto (1000,00 -> 1000.00)
+                    valor_limpo = valor_limpo.replace(',', '.')
+                
+                val = float(valor_limpo)
+            else:
+                # Se já for número (float, Decimal128), usa o safe_float do app.py
+                val = safe_float(valor)
+
+            return f"{val:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+        except Exception as e:
+            # print(f"Erro ao formatar moeda '{valor}': {e}") # Debug opcional
+            return "0,00"
+
+    # --- CENÁRIO 1: LISTAGEM DE EVENTOS FINALIZADOS (Se nenhum ID for passado) ---
+    if not id_evento_param:
+        eventos_finalizados = []
+        try:
+            # Filtra apenas eventos com status 'finalizado'
+            query = {'status': {'$regex': '^finalizado$', '$options': 'i'}}
+            cursor = db.eventos.find(query).sort('data_evento', pymongo.DESCENDING)
+
+            for evt in cursor:
+                # Tratamento de Data
+                data_fmt = "N/A"
+                if evt.get('data_evento'):
+                    try:
+                        raw_date = evt['data_evento']
+                        if isinstance(raw_date, datetime):
+                            data_fmt = raw_date.strftime("%d/%m/%Y")
+                        elif isinstance(raw_date, str):
+                            if '-' in raw_date:
+                                dt = datetime.strptime(raw_date, '%Y-%m-%d')
+                                data_fmt = dt.strftime("%d/%m/%Y")
+                            else:
+                                data_fmt = raw_date
+                    except:
+                        data_fmt = str(evt.get('data_evento'))
+
+                eventos_finalizados.append({
+                    'id_evento': evt.get('id_evento'),
+                    'descricao': evt.get('descricao', 'Sem Descrição'),
+                    'data_formatada': data_fmt,
+                    'premio_total_fmt': f"R$ {format_moeda(evt.get('premio_total', 0))}"
+                })
+
+        except Exception as e:
+            print(f"Erro em consulta_resultados (lista): {e}")
+            error = "Erro ao buscar lista de eventos."
+
+        return render_template('consulta_resultados.html', 
+                               eventos_finalizados=eventos_finalizados,
+                               selected_event=None,
+                               error=error,
+                               g=g)
+
+    # --- CENÁRIO 2: EXIBIÇÃO DOS RESULTADOS (Se ID for passado) ---
+    else:
+        selected_event = None
+        resultados = []
+        # Campos extras da estrutura nova (opcional, para debug ou futura exibição)
+        bolas_sorteadas = [] 
+        total_bolas = 0
+
+        try:
+            id_evento_int = int(id_evento_param)
+            
+            # 1. Busca Dados Básicos do Evento (Coleção 'eventos')
+            evento_doc = db.eventos.find_one({'id_evento': id_evento_int})
+            
+            if evento_doc:
+                data_fmt = str(evento_doc.get('data_evento', ''))
+                try:
+                    if isinstance(evento_doc.get('data_evento'), datetime):
+                        data_fmt = evento_doc['data_evento'].strftime("%d/%m/%Y")
+                    elif isinstance(data_fmt, str) and '-' in data_fmt:
+                         data_fmt = datetime.strptime(data_fmt, '%Y-%m-%d').strftime("%d/%m/%Y")
+                except: pass
+
+                selected_event = {
+                    'id_evento': evento_doc.get('id_evento'),
+                    'descricao': evento_doc.get('descricao'),
+                    'data_formatada': data_fmt
+                }
+
+                # 2. Busca Resultados na coleção 'resultados'
+                # NOVA ESTRUTURA: Um único documento contendo array 'ganhadores'
+                if 'resultados' in db.list_collection_names():
+                    resultado_doc = db.resultados.find_one({'id_evento': id_evento_int})
+                    
+                    if resultado_doc:
+                        # Extrai dados gerais do sorteio
+                        total_bolas = resultado_doc.get('total_de_bolas', 0)
+                        
+                        # Processa o ARRAY de ganhadores
+                        # Assume-se que 'ganhadores' é uma lista de objetos
+                        raw_ganhadores = resultado_doc.get('ganhadores', [])
+                        
+                        if isinstance(raw_ganhadores, list):
+                            for item in raw_ganhadores:
+                                if not isinstance(item, dict): continue
+
+                                # Mapeia os campos do objeto interno para o template
+                                # Tenta chaves comuns caso variem (descricao/premio, valor/valor_premio)
+                                descricao = item.get('descricao') or item.get('premio') or item.get('descricao_premio') or 'Prêmio'
+                                
+                                # --- CORREÇÃO AQUI: Adicionado 'valor_rateio' à busca ---
+                                valor = item.get('valor_rateio') or item.get('valor') or item.get('valor_premio') or 0
+                                
+                                # Lista de Nomes
+                                lista_nomes = item.get('ganhadores') or item.get('nome') or []
+                                if isinstance(lista_nomes, str): lista_nomes = [lista_nomes]
+                                
+                                # Cartelas (pode ser int, str ou list)
+                                cartelas_raw = item.get('cartela') or item.get('cartelas') or []
+                                if isinstance(cartelas_raw, (int, str)):
+                                    cartelas_fmt = str(cartelas_raw)
+                                elif isinstance(cartelas_raw, list):
+                                    cartelas_fmt = ", ".join(str(c) for c in cartelas_raw)
+                                else:
+                                    cartelas_fmt = ""
+
+                                resultados.append({
+                                    'descricao_premio': descricao,
+                                    'ganhadores': lista_nomes,
+                                    'cartela': cartelas_fmt,
+                                    'valor_premio': format_moeda(valor) # Usa a função ajustada
+                                })
+                        else:
+                            print("Aviso: Campo 'ganhadores' não é uma lista.")
+
+            else:
+                error = "Evento não encontrado."
+
+        except ValueError:
+            error = "ID de evento inválido."
+        except Exception as e:
+            print(f"Erro em consulta_resultados (detalhe): {e}")
+            error = f"Erro ao processar apuração: {e}"
+
+        return render_template('consulta_resultados.html', 
+                               eventos_finalizados=[], 
+                               selected_event=selected_event,
+                               resultados=resultados,
+                               error=error,
+                               g=g)
+
 
 # --- ROTA DE REIMPRESSÃO (TXT) ---
 @app.route('/reimprimir_comprovante_txt', methods=['POST'])
@@ -2638,8 +2822,7 @@ def reimprimir_comprovante_txt():
         nome_colecao_venda = f"vendas{id_evento_int}"
         
         receipt_html = "" 
-        link_periodos = "" 
-        
+        link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
         if tipo_reimpressao == 'unica':
             venda = db[nome_colecao_venda].find_one({'id_venda': id_venda_str})
             if not venda:
@@ -2647,12 +2830,10 @@ def reimprimir_comprovante_txt():
             
             periodo_principal = f"   > {venda['numero_inicial']} a {venda['numero_final']}<br>"
             periodo_adicional = ""
-            
-            link_periodos = f"&periodo={venda['numero_inicial']},{venda['numero_final']}"
-            
+                       
             if venda.get('numero_inicial2', 0) > 0:
                 periodo_adicional = f"    > {venda['numero_inicial2']} a {venda['numero_final2']}<br>"
-                link_periodos += f"&periodo={venda['numero_inicial2']},{venda['numero_final2']}"
+                #link_periodos += f"&periodo={venda['numero_inicial2']},{venda['numero_final2']}"
 
             receipt_html = (
                 f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
@@ -2680,6 +2861,17 @@ def reimprimir_comprovante_txt():
             if not vendas_cliente:
                 return jsonify({'status': 'error', 'message': 'Nenhuma venda encontrada para este cliente no evento.'})
 
+# --- Busca Chave PIX do Colaborador para o Comprovante ---           
+            idColaborador = vendas_cliente[0]['id_colaborador']
+            chave_pix_colaborador = "Consulte o Colaborador"
+            try:
+                if idColaborador!= 'N/A':
+                     colab_doc_pix = db.colaboradores.find_one({'id_colaborador': int(idColaborador)})
+                     if colab_doc_pix and colab_doc_pix.get('chave_pix'):
+                         chave_pix_colaborador = colab_doc_pix.get('chave_pix')
+            except Exception as e:
+                 print(f"Erro ao buscar PIX do colaborador: {e}")
+
             nome_cliente = vendas_cliente[0]['nome_cliente']
             
             total_unidades = 0
@@ -2693,11 +2885,9 @@ def reimprimir_comprovante_txt():
                 total_valor += safe_float(venda['valor_total'])
                 
                 periodos_html_list.append(f"   > {venda['numero_inicial']} a {venda['numero_final']}<br>")
-                link_periodos += f"&periodo={venda['numero_inicial']},{venda['numero_final']}"
                 
                 if venda.get('numero_inicial2', 0) > 0:
                     periodos_html_list.append(f"    > {venda['numero_inicial2']} a {venda['numero_final2']}<br>")
-                    link_periodos += f"&periodo={venda['numero_inicial2']},{venda['numero_final2']}"
 
             todos_periodos_html = "".join(periodos_html_list)
 
@@ -2717,6 +2907,9 @@ def reimprimir_comprovante_txt():
                 f"{todos_periodos_html}"
                 f"  VALOR TOTAL: R$ {total_valor:.2f}<br>"
                 f"<br>" 
+                f"   🔑   CHAVE PIX   💸<br>"
+                f"   <strong>{chave_pix_colaborador}</strong><br>"
+                f"<br>"
                 f"<br>"                
                 f">CLIQUE NO <strong>LINK</strong> ABAIXO PARA<br>"
                 f"    ACESSAR SUAS CARTELAS 📱<br>"
@@ -2725,7 +2918,6 @@ def reimprimir_comprovante_txt():
         else:
             return jsonify({'status': 'error', 'message': 'Tipo de reimpressão inválido.'})
         
-        link_final_limpo = f"{http_apk}?idrodada={id_evento_int}{link_periodos}"
         receipt_html += f"<br><strong> {link_final_limpo} </strong>"
 
         def clean_html_to_txt(html_str):
