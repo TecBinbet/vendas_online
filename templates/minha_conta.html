@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minha Conta</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#059669',
+                        'secondary': '#10B981',
+                        'accent': '#F59E0B',
+                        'info': '#3B82F6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F3F4F6; }
+        .container { max-width: 600px; margin: 5px auto; padding: 5px; }
+        
+        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        
+        /* Modal Styles */
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-content {
+            background-color: #FFF; padding: 2rem; border-radius: 8px;
+            width: 90%; max-width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        .modal-btn {
+            padding: 0.6rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 10px;
+        }
+        .btn-cancel { background-color: #D1D5DB; color: #374151; }
+    </style>
+</head>
+<body>
+
+    <div class="bg-primary text-white p-2 shadow mb-2">
+        <div class="container mx-auto flex justify-between items-center max-w-2xl">
+            <h1 class="text-xl font-bold">Minha Conta</h1>
+            <a href="{{ url_for('menu_operacoes') }}" class="text-sm bg-white text-primary px-3 py-1 rounded font-bold hover:bg-gray-100">Voltar</a>
+        </div>
+    </div>
+
+    <div class="container">
+
+        <div class="card">
+            <h2 class="text-gray-500 text-sm font-bold uppercase mb-2">Gerenciamento de Vendas</h2>
+            
+            <div class="mb-4">
+                <label class="block text-gray-700 font-bold mb-2">Colaborador Ativo:</label>
+                
+                {% if nivel > 1 %}
+                    <select id="select-colaborador" class="w-full p-3 border border-gray-300 rounded-lg bg-gray-50 focus:ring-2 focus:ring-primary outline-none text-lg">
+                        <option value="{{ id_logado }}" selected>Eu ({{ nick_logado }})</option>
+                        <option disabled>----------------</option>
+                        {% for colab in colaboradores %}
+                            {% if colab.id_colaborador != id_logado %}
+                                <option value="{{ colab.id_colaborador }}">{{ colab.nick }}</option>
+                            {% endif %}
+                        {% endfor %}
+                    </select>
+                    <p class="text-xs text-gray-400 mt-1">Como administrador, você pode gerar links para outros vendedores.</p>
+                {% else %}
+                    <div class="w-full p-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 font-bold text-lg">
+                        {{ nick_logado }}
+                        <input type="hidden" id="select-colaborador" value="{{ id_logado }}">
+                        </div>
+                {% endif %}
+            </div>
+
+            <button onclick="acionarGeracaoLink()" 
+                    class="w-full bg-accent hover:bg-yellow-500 text-white font-bold py-3 rounded-lg shadow-lg flex items-center justify-center space-x-2 transition transform hover:scale-105">
+                <span class="text-2xl">🔗</span>
+                <span class="text-lg">Gerar Link de Venda</span>
+            </button>
+        </div>
+
+        <div class="card opacity-50">
+            <h2 class="text-gray-500 text-sm font-bold uppercase mb-2">Eventos Disponíveis</h2>
+            <div class="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center text-gray-400">
+                Em breve: Seleção de eventos e regras de consulta aqui.
+            </div>
+        </div>
+
+    </div>
+
+    <input type="hidden" id="base-http-apk" value="{{ g.parametros_globais.http_vendas }}">
+    <input type="hidden" id="current-id-sala" value="{{ g.id_sala }}">
+
+    <div id="qr-modal" class="modal-overlay" onclick="closeQrModal()">
+        <div class="modal-content flex flex-col items-center" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-1 text-primary">Link de Venda</h3>
+            <p class="text-sm text-gray-600 mb-2">Vincular vendas ao colaborador:</p>
+            <p class="text-xl font-bold text-gray-800 mb-4" id="qr-colab-nick">...</p>
+            
+            <div id="qrcode-container" class="border p-2 rounded mb-4"></div>
+            
+            <p id="qr-link-text" class="text-xs text-gray-300 break-all text-center mb-2 px-2 bg-gray-100 rounded py-1 w-full"></p>
+
+            <button type="button" id="btn-copy-link" onclick="copiarLinkQRCode()"
+                    class="mb-2 px-4 py-3 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold w-full text-center shadow">
+                📋 Copiar Link
+            </button>
+
+            <button type="button" class="modal-btn btn-cancel" onclick="closeQrModal()">Fechar</button>
+        </div>
+    </div>
+
+    <script>
+        // --- CONFIGURAÇÃO E ELEMENTOS ---
+        const qrModal = document.getElementById('qr-modal');
+        const qrContainer = document.getElementById('qrcode-container');
+        const qrColabNick = document.getElementById('qr-colab-nick');
+        const qrLinkText = document.getElementById('qr-link-text');
+        const btnCopyLink = document.getElementById('btn-copy-link');
+        
+        const baseHttpApkInput = document.getElementById('base-http-apk');
+        const idSalaInput = document.getElementById('current-id-sala');
+        const selectColaborador = document.getElementById('select-colaborador');
+
+        // --- AÇÃO DO BOTÃO PRINCIPAL ---
+        function acionarGeracaoLink() {
+            // Pega o ID do colaborador (do select ou do input hidden)
+            const idColaborador = selectColaborador.value;
+            
+            // Pega o Texto/Nick para exibir na modal
+            let nickColaborador = "";
+            if (selectColaborador.tagName === 'SELECT') {
+                // Se for select, pega o texto da option selecionada
+                nickColaborador = selectColaborador.options[selectColaborador.selectedIndex].text;
+            } else {
+                // Se for input hidden (Nível 1), pega o texto da div visual (opcional, ou passa via template)
+                // Vamos simplificar e pegar o valor do template jinja renderizado no input se precisar, 
+                // mas aqui vou usar uma lógica genérica:
+                nickColaborador = "{{ nick_logado }}"; 
+            }
+
+            gerarQRCode(idColaborador, nickColaborador);
+        }
+
+        // --- FUNÇÃO GERADORA (Adaptada) ---
+        function gerarQRCode(idColaborador, nick) {
+            qrContainer.innerHTML = '';
+            
+            // URL Base
+            let baseUrl = baseHttpApkInput ? baseHttpApkInput.value : '';
+            if (baseUrl.endsWith('/')) { baseUrl = baseUrl.slice(0, -1); }
+
+            // ID Sala
+            const idSala = idSalaInput ? idSalaInput.value : '000';
+
+            // Monta URL: http://site.com?id_sala=XXX&ref=YYY
+            // Nota: idcliente vai vazio pois é um link genérico de cadastro/venda
+            const finalUrl = `${baseUrl}?id_sala=${idSala}&ref=${idColaborador}`;
+
+            // Atualiza UI da Modal
+            qrColabNick.textContent = nick;
+            qrLinkText.textContent = finalUrl;
+            btnCopyLink.textContent = "📋 Copiar Link";
+
+            // Gera QR
+            new QRCode(qrContainer, {
+                text: finalUrl,
+                width: 200, height: 200,
+                colorDark : "#000000", colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+
+            qrModal.style.display = 'flex';
+        }
+
+        function closeQrModal() {
+            qrModal.style.display = 'none';
+        }
+
+        // --- FUNÇÃO DE COPIAR (Robustez Fallback) ---
+        function copiarLinkQRCode() {
+            const linkText = qrLinkText.textContent;
+            if (!linkText) return;
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(linkText)
+                    .then(() => feedbackBotaoCopiado())
+                    .catch(() => copiaFallback(linkText));
+            } else {
+                copiaFallback(linkText);
+            }
+        }
+
+        function copiaFallback(texto) {
+            const textArea = document.createElement("textarea");
+            textArea.value = texto;
+            textArea.style.top = "0"; textArea.style.left = "0"; textArea.style.position = "fixed";
+            document.body.appendChild(textArea);
+            textArea.focus(); textArea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) feedbackBotaoCopiado();
+                else alert('Erro ao copiar manual.');
+            } catch (err) {
+                console.error('Erro:', err);
+            }
+            document.body.removeChild(textArea);
+        }
+
+        function feedbackBotaoCopiado() {
+            const originalText = "📋 Copiar Link"; 
+            btnCopyLink.textContent = "Copiado! ✅";
+            setTimeout(() => { btnCopyLink.textContent = originalText; }, 2000);
+        }
+    </script>
+</body>
+</html>

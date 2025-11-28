@@ -637,7 +637,7 @@ def before_request():
         "nome_cliente": True, "nick": True, "telefone": True,
         "cpf": False, "cidade": True, "chave_pix": True, "senha": True
     }
-   
+
     # Verifica se os parâmetros no 'g' são da sala errada
     if g.parametros_globais.get('id_sala_param') != g.id_sala:
         g.parametros_globais = {} # Limpa se a sala mudou
@@ -657,6 +657,7 @@ def before_request():
                     'url_site': params_doc.get('url_site', '#'), 
                     'nome_sala': params_doc.get('nome_sala', 'SALA PADRÃO').strip(),
                     'http_apk': params_doc.get('http_apk', 'http://localhost:5000'), 
+                    'http_vendas': params_doc.get('http_vendas', 'http://localhost:5000'),
                     'id_sala_param': g.id_sala, # Armazena a sala atual nos parâmetros cacheados
                     'tipo_cadastro_cliente': params_doc.get('tipo_cadastro_cliente', default_config_cadastro), 
                     'comissao_padrao': params_doc.get('comissao_padrao', 20), 
@@ -1557,6 +1558,7 @@ def processar_venda():
         data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
 
         http_apk = g.parametros_globais.get('http_apk', '')
+
         link_final_limpo = f"{http_apk}?idcliente={id_cliente_final}"
         
         success_msg = (
@@ -2774,6 +2776,36 @@ def consulta_vendas_detalhes():
                            info_colaborador=info_colaborador,
                            info_tipo_cartela=info_tipo_cartela,
                            info_telefone_cliente=info_telefone_cliente)
+
+# Minha Conta
+@app.route('/minha_conta', methods=['GET'])
+@login_required
+def minha_conta():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+
+    nivel_usuario = session.get('nivel', 1)
+    id_colaborador_logado = session.get('id_colaborador')
+    nick_logado = session.get('nick')
+
+    colaboradores_para_selecao = []
+
+    # Se for Gerente ou Admin (Nível > 1), busca lista para o dropdown
+    if nivel_usuario > 1:
+        try:
+            # Busca ID e Nick de todos, exceto talvez 'Tecbin' se quiser filtrar
+            cursor = db.colaboradores.find({}, {'id_colaborador': 1, 'nick': 1}).sort('nick', 1)
+            colaboradores_para_selecao = list(cursor)
+        except Exception as e:
+            print(f"Erro ao buscar colaboradores: {e}")
+
+    return render_template('minha_conta.html', 
+                           nivel=nivel_usuario, 
+                           colaboradores=colaboradores_para_selecao,
+                           id_logado=id_colaborador_logado,
+                           nick_logado=nick_logado,
+                           g=g)
+
 
 # --- ROTA PARA GALERIA DE RESULTADOS (Consulta Pública/Interna) ---
 @app.route('/consulta_resultados', methods=['GET'])
