@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auto Cadastro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#059669',
+                        'secondary': '#10B981',
+                        'accent': '#F59E0B',
+                        'danger': '#EF4444',
+                        'info': '#3B82F6',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F7F7F7; display: flex; justify-content: center; align-items: center; min-height: 100vh; padding: 20px; }
+        .container { width: 100%; max-width: 600px; background-color: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1); padding: 30px; }
+        
+        .form-group label { font-weight: 600; display: block; margin-bottom: 5px; color: #374151; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px; }
+        .form-control:focus { outline: none; border-color: #059669; ring: 2px solid #059669; }
+        .required-label::after { content: ' *'; color: #EF4444; }
+
+        .btn-submit { padding: 12px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; color: white; border: none; width: 100%; display: block; text-align: center; text-decoration: none;}
+        .btn-save { background-color: #059669; } 
+        .btn-save:hover { background-color: #047857; }
+
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #FCA5A5; }
+        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; }
+
+        .password-group { position: relative; }
+        .password-toggle {
+            position: absolute; right: 10px; top: 35px;
+            padding: 5px 10px; background: #e9ecef; border: 1px solid #ced4da;
+            border-radius: 3px; cursor: pointer; font-size: 0.8rem; color: #007bff; z-index: 10;
+        }
+        .password-group input { padding-right: 70px; }
+
+/* --- CSS DO SPINNER --- */
+        .spinner-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(255, 255, 255, 0.85); /* Fundo branco semi-transparente */
+            z-index: 9999; /* Fica acima de tudo */
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+        }
+
+        .spinner-hidden {
+            display: none;
+        }
+
+        .spinner-animation {
+            width: 50px;
+            height: 50px;
+            border: 5px solid #e5e7eb; /* Cinza claro */
+            border-top: 5px solid #059669; /* Verde Primary */
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 15px;
+        }
+
+        .spinner-text {
+            color: #059669;
+            font-weight: 600;
+            font-size: 1.1rem;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="text-center mb-6">
+            <h2 class="text-2xl font-bold text-primary">Bem-vindo(a)!</h2>
+            <p class="text-gray-500">Preencha os dados abaixo para criar sua conta.</p>
+        </div>
+
+        {% if error %}
+            <div class="alert-danger">{{ error }}</div>
+        {% endif %}
+        
+        {% if success %}
+            <div class="alert-success">{{ success | safe }}</div>
+            <div class="mt-6">
+                 <a href="{{ url_for('login_page', id_sala=id_sala) }}" class="btn-submit btn-save">Ir para Login</a>
+            </div>
+        {% else %}
+
+        {% set config_padrao = {'nome_cliente': True, 'nick': True, 'telefone': True, 'cpf': False, 'cidade': True, 'chave_pix': True, 'senha': True} %}
+        {% set campos = g.parametros_globais.tipo_cadastro_cliente if (g.parametros_globais is defined and g.parametros_globais.tipo_cadastro_cliente is defined) else config_padrao %}
+
+        <!-- O action continua enviando na URL por segurança, mas o input hidden abaixo é o principal -->
+        <form method="POST" action="{{ url_for('salvar_auto_cadastro', id_sala=id_sala) }}" id="form-cadastro" class="space-y-4">
+            
+            <!-- CORREÇÃO CRÍTICA: Campos Ocultos para garantir o contexto -->
+            <input type="hidden" name="id_sala" value="{{ id_sala }}">
+            <input type="hidden" name="ref_colaborador" value="{{ ref_colaborador }}">
+
+            <div class="grid grid-cols-1 gap-2">
+
+                {% if "nome_cliente" in campos %}
+                <div class="form-group">
+                    <label for="nome_cliente" class="{% if campos.get('nome_cliente') %}required-label{% endif %}">Nome Completo:</label>
+                    <input type="text" id="nome_cliente" name="nome_cliente" class="form-control" 
+                           value="{{ request.form.get('nome_cliente', '') }}"
+                           {% if campos.get('nome_cliente') %}required{% endif %}>
+                </div>
+                {% endif %}
+                
+                {% if "nick" in campos %}
+                <div class="form-group">
+                     <label for="nick" class="{% if campos.get('nick') %}required-label{% endif %}">Nick/Apelido:</label>
+                     <input type="text" id="nick" name="nick" class="form-control"
+                           value="{{ request.form.get('nick', '') }}"
+                           {% if campos.get('nick') %}required{% endif %}>
+                </div>
+                {% endif %}
+
+                {% if "telefone" in campos %}
+                <div class="form-group">
+                    <label for="telefone" class="{% if campos.get('telefone') %}required-label{% endif %}">WhatsApp (Telefone):</label>
+                    <input type="tel" id="telefone" name="telefone" class="form-control"
+                          value="{{ request.form.get('telefone', '') }}"
+                          {% if campos.get('telefone') %}required{% endif %}>
+                </div>
+                {% endif %}
+                
+                {% if "cpf" in campos %}
+                <div class="form-group">
+                    <label for="cpf" class="{% if campos.get('cpf') %}required-label{% endif %}">CPF:</label>
+                    <input type="text" id="cpf" name="cpf" class="form-control" placeholder="Apenas números"
+                          value="{{ request.form.get('cpf', '') }}"
+                          {% if campos.get('cpf') %}required{% endif %}>
+                </div>
+                {% endif %}
+
+                {% if "cidade" in campos %}
+                <div class="form-group">
+                    <label for="cidade" class="{% if campos.get('cidade') %}required-label{% endif %}">Cidade:</label>
+                    <input type="text" id="cidade" name="cidade" class="form-control"
+                          value="{{ request.form.get('cidade', '') }}"
+                          {% if campos.get('cidade') %}required{% endif %}>
+                </div>
+                {% endif %}
+
+                {% if "chave_pix" in campos %}
+                <div class="form-group">
+                   <label for="chave_pix" class="{% if campos.get('chave_pix') %}required-label{% endif %}">Chave PIX:</label>
+                   <input type="text" id="chave_pix" name="chave_pix" class="form-control" autocomplete="off"
+                       value="{{ request.form.get('chave_pix', '') }}"
+                       {% if campos.get('chave_pix') %}required{% endif %}>
+                </div>
+                
+                <div class="form-group">
+                    <label for="confirma_chave_pix" class="{% if campos.get('chave_pix') %}required-label{% endif %}">Confirmar Chave PIX:</label>
+                   <input type="text" id="confirma_chave_pix" name="confirma_chave_pix" class="form-control" autocomplete="off"
+                       value="{{ request.form.get('confirma_chave_pix', '') }}"
+                       {% if campos.get('chave_pix') %}required{% endif %}>
+                </div>
+                {% endif %}
+
+                <div class="form-group password-group">
+                    <label for="senha" class="required-label">Senha:</label>
+                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('senha')">👁️</button>
+                    <input type="password" id="senha" name="senha" class="form-control" autocomplete="new-password" placeholder="Digite a senha" required>
+                </div>
+
+                <div class="form-group password-group">
+                    <label for="confirma_senha" class="required-label">Confirmar Senha:</label>
+                    <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirma_senha')">👁️</button>
+                    <input type="password" id="confirma_senha" name="confirma_senha" class="form-control" autocomplete="new-password" placeholder="Repita a senha" required>
+                </div> 
+                
+            </div>
+            
+            <div class="mt-6">
+                <button type="submit" class="btn-submit btn-save shadow-lg">
+                    Realizar Cadastro
+                </button>
+            </div>
+        </form>
+        {% endif %}
+        
+        <div class="mt-6 text-center border-t pt-4">
+            <p class="text-sm text-gray-500">Já possui cadastro? <a href="{{ url_for('login_page', id_sala=id_sala) }}" class="text-primary font-bold hover:underline">Faça Login</a></p>
+        </div>
+    </div>
+    <div id="loading-spinner" class="spinner-overlay spinner-hidden">
+        <div class="spinner-animation"></div>
+        <div class="spinner-text">Processando cadastro...</div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const form = document.getElementById('form-cadastro');
+            const spinner = document.getElementById('loading-spinner');
+
+            if (form) {
+                form.addEventListener('submit', function(event) {
+                    // Verifica se o formulário é válido (campos required preenchidos)
+                    // Se não for válido, o navegador bloqueia e não mostramos o spinner
+                    if (form.checkValidity()) {
+                        // Remove a classe que esconde o spinner
+                        spinner.classList.remove('spinner-hidden');
+                        
+                        // Opcional: Desabilita o botão para evitar clique duplo
+                        const btn = form.querySelector('button[type="submit"]');
+                        if (btn) {
+                            btn.disabled = true;
+                            btn.innerHTML = 'Aguarde...';
+                        }
+                    }
+                });
+            }
+        });
+
+        // Função existente de senha
+        function togglePasswordVisibility(fieldId) {
+            const passwordInput = document.getElementById(fieldId);
+            const toggleButton = passwordInput.previousElementSibling; 
+            
+            if (passwordInput.type === 'password') {
+                passwordInput.type = 'text';
+                toggleButton.textContent = '🙈';
+            } else {
+                passwordInput.type = 'password';
+                toggleButton.textContent = '👁️';
+            }
+        }
+    </script>
+</body>
+</html>

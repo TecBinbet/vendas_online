@@ -690,9 +690,13 @@ def login_page():
     # Esta rota apenas renderiza o formulário de login (GET)
     
     id_sala_param = request.args.get('id_sala')
+    ref_param = request.args.get('ref') # <--- Captura o código do colaborador
     error = request.args.get('error')
-    
-    #print(f"[LOG] login_page (GET): Renderizando formulário. id_sala_param da URL: {id_sala_param}, Erro: {error}") 
+
+ # LÓGICA DE REDIRECIONAMENTO AUTOMÁTICO
+    # Se o link tiver 'ref', enviamos direto para o auto cadastro
+    if ref_param:
+        return redirect(url_for('auto_cadastro_page', id_sala=id_sala_param, ref=ref_param))  
     
     return render_template('index.html', 
                            db_error=None, 
@@ -758,6 +762,8 @@ def login():
             
             print(f"[LOG] login (POST): Autenticação BEM-SUCEDIDA para {tipo_usuario} {nome_usuario}.") 
             session['logged_in'] = True
+            print(f"🚨 tipo_usuario    : {tipo_usuario}")
+ 
             if tipo_usuario == 'colaborador':
                 session['id_colaborador'] = usuario.get('id_colaborador') or str(usuario['_id'])
                 session['nivel'] = usuario.get('nivel', 1) 
@@ -1695,7 +1701,6 @@ def buscar_clientes():
         print(f"Erro na busca dinâmica: {e}")
         return jsonify({'clientes': [], 'error': str(e)})
 
-
 @app.route('/cadastro_cliente', methods=['GET'])
 @login_required
 def cadastro_cliente():
@@ -1798,7 +1803,6 @@ def cadastro_cliente():
     }
     
     return render_template('cadastro_cliente.html', **context)
-
 
 @app.route('/gravar_cliente', methods=['POST'])
 @login_required
@@ -2052,6 +2056,163 @@ def excluir_cliente(id_cliente):
     except Exception as e:
         print(f"ERRO CRÍTICO na exclusão de cliente ID {id_cliente}: {e}")
         return redirect(url_for('cadastro_cliente', error=f"Erro interno ao excluir cliente.", view='listar'))
+
+
+# ... (Seu código existente ...)
+
+# --- ROTAS DE AUTO CADASTRO (PÚBLICAS) ---
+# Cole este bloco no final do seu app.py para registrar as rotas
+@app.route('/cadastre-se', methods=['GET'])
+def auto_cadastro_page():
+    """
+    Exibe a tela pública de cadastro para o cliente.
+    Recebe id_sala e ref (colaborador) da URL.
+    """
+    id_sala = request.args.get('id_sala')
+    ref_colaborador = request.args.get('ref', '')
+    
+    # Se g.db_status estiver False, conexão falhou
+    if not g.db_status:
+        return render_template('auto_cadastro.html', 
+                             error="Sistema temporariamente indisponível (DB).",
+                             id_sala=id_sala,
+                             ref_colaborador=ref_colaborador)
+
+    return render_template('auto_cadastro.html', 
+                           id_sala=id_sala, 
+                           ref_colaborador=ref_colaborador)
+
+
+@app.route('/salvar_auto_cadastro', methods=['POST'])
+def salvar_auto_cadastro():
+    """
+    Processa o formulário de auto cadastro.
+    """
+    # Garante que o ID da sala esteja disponível para a conexão com o banco
+    id_sala = request.form.get('id_sala') or request.args.get('id_sala')
+    g.id_sala = id_sala
+    
+    db = get_vendas_db()
+    ref_colaborador = request.form.get('ref_colaborador', 'N/A')
+
+    if db is None:
+        return render_template('auto_cadastro.html', 
+                               error="Erro de conexão ao tentar salvar (DB Offline). Tente novamente.",
+                               id_sala=id_sala,
+                               ref_colaborador=ref_colaborador)
+
+    try:
+        # 1. Configurações
+        default_config = {
+            "nome_cliente": True, "nick": True, "telefone": True,
+            "cpf": False, "cidade": True, "chave_pix": True, "senha": True
+        }
+        # Tenta pegar config do g, se falhar usa default
+        campos_config = getattr(g, 'parametros_globais', {}).get('tipo_cadastro_cliente', default_config)
+
+        # 2. Coleta de Dados (com tratamento seguro para None)
+        nome_cliente = format_title_case(request.form.get('nome_cliente'))
+        nick = format_title_case(request.form.get('nick'))
+        telefone = clean_numeric_string(request.form.get('telefone'))
+        cpf_raw = request.form.get('cpf')
+        cidade = format_title_case(request.form.get('cidade'))
+        chave_pix = request.form.get('chave_pix', '').strip()
+        confirma_chave_pix = request.form.get('confirma_chave_pix', '').strip()
+        
+        # Correção: Garante que senha seja string vazia se for None, para evitar erro no if
+        senha = request.form.get('senha', '') 
+        confirma_senha = request.form.get('confirma_senha', '')
+
+        # 3. Validações
+        if campos_config.get("nome_cliente") and not nome_cliente:
+            raise ValueError("O campo Nome Completo é obrigatório.")
+        if campos_config.get("nick") and not nick:
+            raise ValueError("O campo Nick/Apelido é obrigatório.")
+        if campos_config.get("telefone") and not telefone:
+            raise ValueError("O campo WhatsApp/Telefone é obrigatório.")
+        if campos_config.get("cidade") and not cidade:
+            raise ValueError("O campo Cidade é obrigatório.")
+        
+        if campos_config.get("chave_pix"):
+            if not chave_pix:
+                raise ValueError("O campo Chave PIX é obrigatório.")
+            if chave_pix != confirma_chave_pix:
+                raise ValueError("As chaves PIX não conferem.")
+            
+        if not senha:
+            raise ValueError("A Senha é obrigatória.")
+        if senha != confirma_senha:
+             raise ValueError("As senhas não conferem.")
+
+        cpf_limpo = clean_numeric_string(cpf_raw)
+        if campos_config.get("cpf") == True:
+            if not cpf_raw or not validate_cpf(cpf_limpo):
+                raise ValueError("CPF é obrigatório e deve ser válido.")
+        elif "cpf" in campos_config and cpf_raw and not validate_cpf(cpf_limpo):
+            raise ValueError("O CPF inserido não é válido.")
+
+        # 4. Verificação de Duplicidade
+        if campos_config.get("nick") and nick:
+            if db.clientes.find_one({'nick': {'$regex': f'^{re.escape(nick)}$', '$options': 'i'}}):
+                raise ValueError(f"O Nick '{nick}' já está em uso. Escolha outro.")
+        
+        if cpf_limpo and db.clientes.find_one({'cpf': cpf_limpo}):
+             raise ValueError("CPF já cadastrado.")
+
+        # 5. Tratamento ID Colaborador
+        id_colab_val = 'AUTO'
+        if ref_colaborador and ref_colaborador != 'N/A':
+            try:
+                id_colab_val = int(ref_colaborador)
+            except:
+                id_colab_val = ref_colaborador
+
+        # 6. Geração de ID e Hash de Senha (CORREÇÃO CRÍTICA AQUI)
+        novo_id = get_next_cliente_sequence()
+        if not novo_id: 
+            raise Exception("Falha interna ao gerar ID do cliente (Sequence Error).")
+
+        hashed_password = None
+        if senha:
+            senha_formatada = senha.capitalize()
+            hashed_password = bcrypt.hashpw(senha_formatada.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        dados_cliente = {
+            "id_cliente": novo_id,
+            "id_colaborador": id_colab_val,
+            "data_cadastro": datetime.utcnow(),
+            "data_ultimo_compra": None,
+            "origem": "auto_cadastro"
+        }
+        
+        if nome_cliente: dados_cliente["nome_cliente"] = nome_cliente
+        if nick: dados_cliente["nick"] = nick
+        if telefone: dados_cliente["telefone"] = telefone
+        if cpf_limpo: dados_cliente["cpf"] = cpf_limpo
+        if cidade: dados_cliente["cidade"] = cidade
+        if chave_pix: dados_cliente["chave_pix"] = chave_pix
+        if hashed_password: dados_cliente["senha"] = hashed_password
+
+        db.clientes.insert_one(dados_cliente)
+
+        success_msg = f"Cadastro realizado com sucesso! Seu ID é <strong>CLI{novo_id}</strong>.<br>Clique no botão abaixo para fazer login."
+        return render_template('auto_cadastro.html', success=success_msg, id_sala=id_sala)
+
+    except ValueError as e:
+        return render_template('auto_cadastro.html', 
+                               error=str(e),
+                               id_sala=id_sala,
+                               ref_colaborador=ref_colaborador)
+    except Exception as e:
+        # Log do erro no console para debug real
+        print(f"ERRO CRÍTICO NO AUTO CADASTRO: {e}")
+        import traceback
+        traceback.print_exc() # Imprime onde foi o erro exatamente
+        
+        return render_template('auto_cadastro.html', 
+                               error=f"Erro interno no servidor: {e}",
+                               id_sala=id_sala,
+                               ref_colaborador=ref_colaborador)
 
 
 # --- ROTAS DE CADASTRO DE EVENTO (NOVO CRUD) ---

@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cadastro de Colaboradores</title>
@@ -274,17 +275,13 @@
 
                                 <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                 
-                                <!-- === INÍCIO DA MUDANÇA (CONSULTA) === -->
                                 <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
                                       id="form-excluir-consulta-{{ colaborador.id_colaborador }}"
                                       class="inline-block">
-                                    <!-- 1. ONSUBMIT REMOVIDO -->
-                                    <!-- 2. Alterado para type="button" e chama a modal (usando ' no onclick) -->
                                     <button type="button" 
                                             onclick='openDeleteModal("{{ colaborador.id_colaborador }}", {{ colaborador.nick | tojson }}, "consulta")'
                                             class="action-link delete-link hover:text-red-600">Excluir</button>
                                 </form>
-                                <!-- === FIM DA MUDANÇA (CONSULTA) === -->
 
                               {% endif %}
 
@@ -300,7 +297,7 @@
         </div>
 
         <div id="view-listar" class="view-content {% if active_view == 'listar' %}active-view-show{% endif %}">
-            <h3 class="text-xl font-semibold mb-4 text-gray-700">Lista de Colaboradores (Ordenada por Nick)</h3>
+            <h3 class="text-lg  mb-2 text-gray-700">Lista de Colaboradores (Ordenada por Nick)</h3>
             
             <div class="overflow-x-auto shadow-md rounded-lg">
                 <table class="min-w-full bg-white border border-gray-200">
@@ -321,26 +318,27 @@
                                 <td class="py-3 px-4 border-b text-sm">{{ colaborador.nome_colaborador }} ({{ colaborador.nick }})</td>
                                 <td class="py-3 px-4 border-b text-sm font-semibold">{{ colaborador.nivel }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ colaborador.telefone }}</td>
+                                
                                 <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
-
-                                  {% if colaborador.nome_colaborador != 'Tecbin' %}
-
-                                    <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
-                                    
-                                    <!-- === INÍCIO DA MUDANÇA (LISTAR) === -->
-                                    <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
-                                          id="form-excluir-listar-{{ colaborador.id_colaborador }}"
-                                          class="inline-block">
-                                        <!-- 1. ONSUBMIT REMOVIDO -->
-                                        <!-- 2. Alterado para type="button" e chama a modal (usando ' no onclick) -->
+                                    {% if colaborador.nome_colaborador != 'Tecbin' %}
+                                        
                                         <button type="button" 
-                                                onclick='openDeleteModal("{{ colaborador.id_colaborador }}", {{ colaborador.nick | tojson }}, "listar")'
-                                                class="action-link delete-link hover:text-red-600">Excluir</button>
-                                    </form>
-                                    <!-- === FIM DA MUDANÇA (LISTAR) === -->
+                                                onclick='confirmarGeracaoQR("{{ colaborador.id_colaborador }}", {{ colaborador.nick | tojson }})'
+                                                class="action-link text-purple-600 hover:text-purple-800"
+                                                title="Gerar QR Code de Cadastro">
+                                            📱 QR
+                                        </button>
 
-                                  {% endif %}
-
+                                        <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+                                        
+                                        <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
+                                              id="form-excluir-listar-{{ colaborador.id_colaborador }}"
+                                              class="inline-block">
+                                            <button type="button" 
+                                                    onclick='openDeleteModal("{{ colaborador.id_colaborador }}", {{ colaborador.nick | tojson }}, "listar")'
+                                                    class="action-link delete-link hover:text-red-600">Excluir</button>
+                                        </form>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -358,7 +356,6 @@
         
     </div>
     
-    <!-- === INÍCIO DA MODAL DE EXCLUSÃO (NOVO) === -->
     <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
             <h3 class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
@@ -371,115 +368,191 @@
             </div>
         </div>
     </div>
-    <!-- === FIM DA MODAL DE EXCLUSÃO === -->
+
+    <input type="hidden" id="base-http-apk" value="{{ g.parametros_globais.http_apk }}">
+    <input type="hidden" id="current-id-sala" value="{{ g.id_sala }}">
+
+    <div id="qr-modal" class="modal-overlay" onclick="closeQrModal()">
+        <div class="modal-content flex flex-col items-center" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-2 text-primary">Link de Cadastro</h3>
+            <p class="text-sm text-gray-600 mb-4">Escaneie para se cadastrar vinculado a: <br><strong id="qr-colab-nick">...</strong></p>
+            
+            <div id="qrcode-container" class="border p-2 rounded mb-4"></div>
+            
+            <p id="qr-link-text" class="text-xs text-gray-500 break-all text-center mb-4 px-2 bg-gray-100 rounded py-1"></p>
+
+            <button type="button" id="btn-copy-link" onclick="copiarLinkQRCode()"
+                    class="mb-3 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-bold w-full text-center shadow">
+                📋 Copiar Link
+            </button>
+
+            <button type="button" class="modal-btn btn-cancel w-full" onclick="closeQrModal()">Fechar</button>
+        </div>
+    </div>
 
     <script>
-        // NOVO: Função para manipular a tecla Enter e mover o foco
-        function handleEnterKey(event) {
+        // Função para manipular a tecla Enter
+function handleEnterKey(event) {
             if (event.key === 'Enter') {
-                event.preventDefault(); // Impede o submit padrão do formulário
-                
+                event.preventDefault(); 
                 const form = event.target.form;
                 if (!form) return true;
-
-                const elements = Array.from(form.elements); // Converte para Array
+                const elements = Array.from(form.elements); 
                 const index = elements.indexOf(event.target);
-                
-                // Procura o próximo elemento que pode receber foco
                 for (let i = index + 1; i < elements.length; i++) {
                     const element = elements[i];
-                    
-                    // Pula elementos desabilitados, botões de toggle de senha e campos ocultos
                     if (element.type !== 'hidden' && !element.disabled && 
                         !element.classList.contains('password-toggle') && element.name) {
-                        
-                        element.focus();
-                        return false; // Sucesso ao mover o foco
+                        element.focus(); return false; 
                     }
                 }
-                
-                // Se chegou ao fim, tenta focar no botão de submit
                 const submitButton = form.querySelector('button[type="submit"]');
-                if (submitButton) {
-                    submitButton.focus();
-                }
-                
-                return false; // Sempre retorna false para impedir o submit
+                if (submitButton) submitButton.focus();
+                return false; 
             }
-            return true; // Deixa outras teclas funcionarem normalmente
+            return true; 
         }
-        // Função para alternar a visibilidade da senha
+
         function togglePasswordVisibility(fieldId) {
             const passwordInput = document.getElementById(fieldId);
             const toggleButton = passwordInput.previousElementSibling; 
-            
             if (passwordInput.type === 'password') {
-                passwordInput.type = 'text';
-                toggleButton.textContent = '🙈';
+                passwordInput.type = 'text'; toggleButton.textContent = '🙈';
             } else {
-                passwordInput.type = 'password';
-                toggleButton.textContent = '👁️';
+                passwordInput.type = 'password'; toggleButton.textContent = '👁️';
             }
         }
-        
-        // --- LÓGICA DA MODAL DE EXCLUSÃO (NOVO) ---
-        
-        // Elementos da Modal
+
+        // --- LÓGICA DA MODAL DE EXCLUSÃO ---
         const deleteModal = document.getElementById('delete-modal');
         const modalDeleteId = document.getElementById('modal-delete-id');
         const modalDeleteNick = document.getElementById('modal-delete-nick');
         const btnConfirmDelete = document.getElementById('modal-btn-confirm-delete');
-        
-        let formIdParaExcluir = null; // Guarda o ID do formulário a ser submetido
+        let formIdParaExcluir = null; 
 
-        /**
-         * Abre a modal e configura qual formulário deve ser submetido.
-         * @param {string} id - O ID do colaborador
-         * @param {string} nick - O Nick do colaborador
-         * @param {string} view - 'listar' ou 'consulta', para encontrar o formulário correto
-         */
         function openDeleteModal(id, nick, view) {
             if (!deleteModal) return;
-
-            // 1. Guarda o ID do formulário que deve ser submetido
             formIdParaExcluir = `form-excluir-${view}-${id}`;
-
-            // 2. Preenche os dados na modal
             modalDeleteId.textContent = id;
-            modalDeleteNick.textContent = nick; // Mostra o Nick
-            
-            // 3. Mostra a modal
+            modalDeleteNick.textContent = nick; 
             deleteModal.style.display = 'flex';
         }
 
-        /**
-         * Fecha a modal e limpa o ID do formulário.
-         */
         function closeDeleteModal() {
             if (!deleteModal) return;
             formIdParaExcluir = null;
             deleteModal.style.display = 'none';
         }
 
-        /**
-         * Event listener para o botão "Confirmar Exclusão" dentro da modal.
-         */
         if (btnConfirmDelete) {
             btnConfirmDelete.onclick = function() {
                 if (formIdParaExcluir) {
                     const form = document.getElementById(formIdParaExcluir);
-                    if (form) {
-                        form.submit(); // Submete o formulário correto
-                    } else {
-                        console.error('Formulário de exclusão não encontrado:', formIdParaExcluir);
-                    }
+                    if (form) form.submit(); 
                 }
-                closeDeleteModal(); // Fecha a modal
+                closeDeleteModal(); 
             };
         }
         
-        // REMOVIDO: A função 'ShowConfirm(message)' (que usava window.confirm) foi removida.
-        
+        // --- LÓGICA DO QR CODE ---
+        const qrModal = document.getElementById('qr-modal');
+        const qrContainer = document.getElementById('qrcode-container');
+        const qrColabNick = document.getElementById('qr-colab-nick');
+        const qrLinkText = document.getElementById('qr-link-text');
+        const baseHttpApkInput = document.getElementById('base-http-apk');
+        const btnCopyLink = document.getElementById('btn-copy-link');
+
+        function confirmarGeracaoQR(idColaborador, nick) {
+             if (confirm(`Deseja gerar o QR Code de cadastro para o colaborador "${nick}"?`)) {
+                 gerarQRCode(idColaborador, nick);
+             }
+        }
+
+        function gerarQRCode(idColaborador, nick) {
+            qrContainer.innerHTML = '';
+            
+            let baseUrl = baseHttpApkInput ? baseHttpApkInput.value : '';
+            if (baseUrl.endsWith('/')) { baseUrl = baseUrl.slice(0, -1); }
+
+            const idSalaInput = document.getElementById('current-id-sala');
+            // Se por acaso não achar, usa '000' como segurança, mas o ideal é vir do backend
+            const idSala = idSalaInput ? idSalaInput.value : '000';
+
+            // Ex: http://site.com?id_sala=001&ref=10
+            const finalUrl = `${baseUrl}?id_sala=${idSala}&ref=${idColaborador}`;
+
+            qrColabNick.textContent = nick;
+            qrLinkText.textContent = finalUrl;
+            
+            btnCopyLink.textContent = "📋 Copiar Link"; // Reseta texto do botão
+
+            new QRCode(qrContainer, {
+                text: finalUrl,
+                width: 200, height: 200,
+                colorDark : "#000000", colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+            qrModal.style.display = 'flex';
+        }
+
+        function closeQrModal() {
+            qrModal.style.display = 'none';
+        }   
+
+        // --- NOVA LÓGICA DE CÓPIA (COM FALLBACK PARA HTTP) ---
+        function copiarLinkQRCode() {
+            const linkText = qrLinkText.textContent;
+            if (!linkText) return;
+
+            // Tenta usar API moderna (Funciona em HTTPS e Localhost)
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(linkText)
+                    .then(() => feedbackBotaoCopiado())
+                    .catch(() => copiaFallback(linkText)); // Se falhar, tenta o método antigo
+            } else {
+                // Se não for HTTPS, usa direto o método antigo
+                copiaFallback(linkText);
+            }
+        }
+
+        function copiaFallback(texto) {
+            // Cria um campo de texto temporário invisível
+            const textArea = document.createElement("textarea");
+            textArea.value = texto;
+            
+            // Garante que não vai mexer na tela
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    feedbackBotaoCopiado();
+                } else {
+                    alert('Erro ao copiar. Por favor, copie manualmente.');
+                }
+            } catch (err) {
+                console.error('Erro Fallback:', err);
+                alert('Erro ao copiar. Por favor, copie manualmente.');
+            }
+
+            document.body.removeChild(textArea);
+        }
+
+        function feedbackBotaoCopiado() {
+            const originalText = "📋 Copiar Link"; 
+            btnCopyLink.textContent = "Copiado! ✅";
+            
+            // Volta o texto original após 2 segundos
+            setTimeout(() => {
+                btnCopyLink.textContent = originalText;
+            }, 2000);
+        }
     </script>
 </body>
 </html>
