@@ -194,8 +194,8 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="premio_quadra" class="required-label">Prêmio Quadra (R$):</label>
-                        <input type="number" id="premio_quadra" name="premio_quadra" required step="0.01" min="0" class="form-control"
+                        <label for="premio_quadra" class="label">Prêmio Quadra (R$):</label>
+                        <input type="number" id="premio_quadra" name="premio_quadra" step="0.01" min="0" class="form-control"
                                value="{{ evento.get('premio_quadra', 0.00) }}" oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
@@ -210,6 +210,12 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="premio_faltaum" class="label">Prêmio Falta Um (R$):</label>
+                        <input type="number" id="premio_faltaum" name="premio_faltaum" step="0.01" min="0" class="form-control"
+                               value="{{ evento.get('premio_faltaum', 0.00) }}" oninput="calculatePremioTotal()">
+                    </div>
+
+                    <div class="form-group">
                         <label for="premio_bingo" class="required-label">Prêmio Bingo (R$):</label>
                         <input type="number" id="premio_bingo" name="premio_bingo" required step="0.01" min="0" class="form-control"
                                value="{{ evento.get('premio_bingo', 0.00) }}" oninput="calculatePremioTotal()">
@@ -221,19 +227,19 @@
                     </div>
                     <div class="form-group">
                         <label for="minimo_de_venda">Mínimo de Venda Necessário (Qtde):</label>
-                        <input type="text" id="minimo_de_venda" name="minimo_de_venda" disabled class="form-control bg-gray-200"
+                        <input type="text" id="minimo_de_venda" name="minimo_de_venda" disabled class="form-control bg-green-200  font-bold"
                                value="{{ evento.get('minimo_de_venda', 0) }}">
                     </div>
                     <div class="form-group">
                         <label for="premio_total">Prêmio TOTAL (R$):</label>
-                        <input type="text" id="premio_total" name="premio_total" disabled class="form-control bg-gray-200 font-bold"
+                        <input type="text" id="premio_total" name="premio_total" disabled class="form-control bg-red-200 font-bold"
                                value="{{ evento.get('premio_total', 0.00) }}">
                     </div>
 
                     <div class="form-group">
                         <label for="premio_acumulado">Prêmio Acumulado (R$):</label>
                         <input type="number" id="premio_acumulado" name="premio_acumulado" step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_acumulado', 0.00) }}" oninput="toggleBolaTope(); calculatePremioTotal()">
+                               value="{{ evento.get('premio_acumulado', 0.00) }}" oninput="toggleBolaTope()">
                     </div>
                     
                     <div class="form-group">
@@ -421,16 +427,17 @@
             const quadra = parseFloat(document.getElementById('premio_quadra')?.value) || 0;
             const linhas_qtde = parseInt(document.getElementById('quantidade_de_linhas')?.value) || 0;
             const linha_valor = parseFloat(document.getElementById('premio_linha')?.value) || 0;
+            const faltaum = parseFloat(document.getElementById('premio_faltaum')?.value) || 0;
             const bingo = parseFloat(document.getElementById('premio_bingo')?.value) || 0;
             const segundobingo = parseFloat(document.getElementById('premio_segundobingo')?.value) || 0;
             const acumulado = parseFloat(document.getElementById('premio_acumulado')?.value) || 0; 
             const valor_unidade = parseFloat(document.getElementById('valor_de_venda')?.value) || 0;
             const unidade_venda = parseInt(document.getElementById('unidade_de_venda')?.value) || 1;
             const totalLinha = linhas_qtde * linha_valor;
-            const premioTotal = quadra + totalLinha + bingo + segundobingo + acumulado; 
+            const premioTotal = quadra + totalLinha + bingo + segundobingo + faltaum ; 
             let minimoVenda = 0;
             if (valor_unidade > 0 && unidade_venda > 0) {
-                 minimoVenda = premioTotal / (valor_unidade * unidade_venda);
+                 minimoVenda = premioTotal / valor_unidade ;
             }
             document.getElementById('premio_total').value = premioTotal.toFixed(2);
             document.getElementById('minimo_de_venda').value = Math.ceil(minimoVenda); 

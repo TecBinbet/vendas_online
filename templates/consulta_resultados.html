@@ -95,13 +95,13 @@
                                     <div>
                                         <div class="flex justify-between items-start mb-2">
                                             <span class="bg-gray-800 text-white text-xs font-bold px-2 py-1 rounded">EVE{{ evento.id_evento }}</span>
-                                            <span class="text-sm text-gray-500">{{ evento.data_formatada }}</span>
+                                            <span class="font-semibold text-lg text-gray-500">{{ evento.data_formatada }} às {{ evento.hora_evento }} </span>
                                         </div>
                                         <h4 class="text-lg font-bold text-gray-800 mb-1">{{ evento.descricao }}</h4>
-                                        <p class="text-sm text-gray-600">Premiação Total: <span class="font-semibold text-green-600">{{ evento.premio_total_fmt }}</span></p>
+                                        <p class="text-lg text-gray-600">Premiação Total: <span class="font-semibold text-green-600">{{ evento.premio_total_fmt }}</span></p>
                                     </div>
                                     <div class="mt-4 text-right">
-                                        <span class="text-green-600 text-sm font-bold hover:underline">Ver Ganhadores →</span>
+                                        <span class="font-semibold text-blue-600 text-xl hover:underline">Ver Ganhadores →</span>
                                     </div>
                                 </div>
                             </a>
@@ -126,7 +126,7 @@
                 </div>
 
                 <!-- Botão Voltar (Dentro da Apresentação) -->
-                <a href="{{ url_for('consulta_resultados') }}" class="absolute top-4 left-4 text-white/50 hover:text-white transition z-10">
+                <a href="{{ url_for('consulta_resultados') }}" class=" font-bold absolute top-4 left-4 text-white/70 hover:text-white transition z-10">
                     ← Escolher outro evento
                 </a>
 

@@ -1255,7 +1255,7 @@ def nova_venda():
     id_cliente_busca = request.args.get('id_cliente_busca', '').strip()
     quantidade_param = request.args.get('quantidade') 
     
-    quantidade = int(quantidade_param) if quantidade_param and str(quantidade_param).isdigit() else 1
+    quantidade = int(quantidade_param) if quantidade_param and str(quantidade_param).isdigit() else 0
     
     eventos_ativos_cursor = db.eventos.find({'status': 'ativo'}).sort('data_evento', pymongo.ASCENDING)
     
@@ -1594,7 +1594,7 @@ def processar_venda():
         session['success_message'] = success_msg 
         redirect_kwargs = {
             'id_evento': id_evento_string,
-            'quantidade': 1,
+            'quantidade': 0,
             'id_cliente_busca': f"CLI{id_cliente_final}"
         }
         return redirect(url_for('nova_venda', **redirect_kwargs))
@@ -2380,6 +2380,7 @@ def gravar_evento():
         valor_de_venda = clean_float_input('valor_de_venda')
         premio_quadra = clean_float_input('premio_quadra')
         premio_linha = clean_float_input('premio_linha')
+        premio_faltaum = clean_float_input('premio_faltaum')
         premio_bingo = clean_float_input('premio_bingo')
         premio_segundobingo = clean_float_input('premio_segundobingo', default_value='0')
         premio_acumulado = clean_float_input('premio_acumulado', default_value='0')
@@ -2411,7 +2412,7 @@ def gravar_evento():
         data_hora_evento_str = f"{data_evento_str} {hora_evento}" 
         data_hora_evento_dt = datetime.strptime(data_hora_evento_str, '%Y-%m-%d %H:%M')
         
-        premio_total = premio_quadra + (premio_linha * quantidade_de_linhas) + premio_bingo + premio_segundobingo + premio_acumulado
+        premio_total = premio_quadra + (premio_linha * quantidade_de_linhas) + premio_bingo + premio_segundobingo + premio_faltaum
         
         dados_evento = {
             "data_evento": data_evento_str_gravar, 
@@ -2427,6 +2428,7 @@ def gravar_evento():
             "quantidade_de_linhas": quantidade_de_linhas,
             "premio_linha": Decimal128(str(premio_linha)),
             "premio_bingo": Decimal128(str(premio_bingo)),
+            "premio_faltaum": Decimal128(str(premio_faltaum)),
             "premio_segundobingo": Decimal128(str(premio_segundobingo)),
             "premio_total": Decimal128(str(premio_total)), 
             "premio_acumulado": Decimal128(str(premio_acumulado)),
@@ -2877,6 +2879,7 @@ def consulta_resultados():
                 eventos_finalizados.append({
                     'id_evento': evt.get('id_evento'),
                     'descricao': evt.get('descricao', 'Sem Descrição'),
+                    'hora_evento': evt.get('hora_evento'),
                     'data_formatada': data_fmt,
                     'premio_total_fmt': f"R$ {format_moeda(evt.get('premio_total', 0))}"
                 })
@@ -2917,11 +2920,13 @@ def consulta_resultados():
                 selected_event = {
                     'id_evento': evento_doc.get('id_evento'),
                     'descricao': evento_doc.get('descricao'),
+                    'hora_evento': evento_doc.get('hora_evento'),
                     'data_formatada': data_fmt
                 }
 
                 # 2. Busca Resultados na coleção 'resultados'
                 # NOVA ESTRUTURA: Um único documento contendo array 'ganhadores'
+                print(f"id_evento:   {id_evento_int}")
                 if 'resultados' in db.list_collection_names():
                     resultado_doc = db.resultados.find_one({'id_evento': id_evento_int})
                     
@@ -3201,13 +3206,14 @@ def gerar_lista_vendas():
     redirect_url = url_for('consulta_vendas', 
                            id_evento=id_evento_param, 
                            id_colaborador='ALL')
-    
+
     if not id_evento_param:
         session['error_message'] = "Erro: ID do Evento não fornecido."
         return redirect(url_for('consulta_vendas'))
 
     try:
         evento_oid = try_object_id(id_evento_param)
+        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
         
         selected_event = db.eventos.find_one(
             {'_id': evento_oid},
@@ -3215,11 +3221,13 @@ def gerar_lista_vendas():
                 'id_evento': 1, 'unidade_de_venda': 1, 'numero_maximo': 1,
                 'tipo_de_cartela': 1, 'valor_de_venda': 1, 'descricao': 1, 
                 'premio_quadra': 1, 'quantidade_de_linhas': 1, 'premio_linha': 1, 
-                'premio_bingo': 1, 'premio_segundobingo': 1, 'premio_acumulado': 1, 
-                'bola_tope_acumulado': 1
+                'premio_faltaum': 1,'premio_bingo': 1, 'premio_segundobingo': 1,
+                'premio_acumulado': 1,'bola_tope_acumulado': 1
             }
         )
-        
+
+        #   
+
         if not selected_event:
             session['error_message'] = "Erro: Evento não encontrado."
             return redirect(redirect_url)
@@ -3240,11 +3248,13 @@ def gerar_lista_vendas():
             f"{safe_float(selected_event.get('premio_quadra', 0))}!"
             f"{selected_event.get('quantidade_de_linhas', 1)}!"
             f"{safe_float(selected_event.get('premio_linha', 0))}!"
+            f"{safe_float(selected_event.get('premio_faltaum', 0))}!"
             f"{safe_float(selected_event.get('premio_bingo', 0))}!"
             f"{safe_float(selected_event.get('premio_segundobingo', 0))}!"
             f"{safe_float(selected_event.get('premio_acumulado', 0))}!"
-            f"{selected_event.get('bola_tope_acumulado', 0)}\r\n" # <-- CRLF
-        )
+            f"{selected_event.get('bola_tope_acumulado', 0)}!" 
+            f"{nome_sala}\r\n")  # <--- ADICIONADO AQUI NO FINAL        
+
         io_buffer.write(header_line)
 
         vendas_cursor = db[nome_colecao_venda].find(

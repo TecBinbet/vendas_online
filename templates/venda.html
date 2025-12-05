@@ -195,7 +195,7 @@
                 <div class="form-group mt-1">
                     <label for="quantidade">3. Quantidade de Unidades:</label>
                     <input type="number" id="quantidade" name="quantidade" 
-                           value="{{ quantidade | default(1) }}" min="1" required 
+                           value="{{ quantidade | default(0) }}" min="1" required 
                            class="form-control" 
                            oninput="updateTotalCost(); updateCartelasDisplay();">
                     <small class="form-text text-muted font-bold">Total de cartelas: 
@@ -212,20 +212,25 @@
             {% endif %}
         </form>
 
-        {% if cliente_encontrado and quantidade > 0 and selected_event %}
-            <hr class="my-4 border-gray-300">
-            <form method="POST" action="{{ url_for('processar_venda') }}" class="flex justify-center" id="confirm-form">
-                <input type="hidden" name="id_cliente_final" id="post_id_cliente_final" value="{{ id_cliente_final }}">
-                <input type="hidden" name="id_evento" id="post_id_evento" value="{{ selected_event._id }}">
-                <input type="hidden" name="quantidade" id="post_quantidade" value="{{ quantidade }}">
-                
-                <button type="submit" id="btn-confirmar-venda" class="btn btn-primary btn-lg shadow-xl hover:shadow-2xl transition duration-300" 
-                     onclick="return syncAndConfirm(event)">
-                    ✅ Confirmar e Gravar Venda (<span id="btn-custo-text">R$ {{ "%.2f" | format(custo) }}</span>)
-                </button>
-            </form>
-        {% endif %}
+{% if cliente_encontrado and selected_event %}
+    
+    <div id="confirm-sales-container" style="display: {{ 'block' if quantidade and quantidade > 0 else 'none' }};">
+        <hr class="my-4 border-gray-300">
+        
+        <form method="POST" action="{{ url_for('processar_venda') }}" class="flex justify-center" id="confirm-form">
+            <input type="hidden" name="id_cliente_final" id="post_id_cliente_final" value="{{ id_cliente_final }}">
+            <input type="hidden" name="id_evento" id="post_id_evento" value="{{ selected_event._id }}">
+            
+            <input type="hidden" name="quantidade" id="post_quantidade" value="{{ quantidade }}">
+            
+            <button type="submit" id="btn-confirmar-venda" class="btn btn-primary btn-lg shadow-xl hover:shadow-2xl transition duration-300" 
+                 onclick="return syncAndConfirm(event)">
+                ✅ Confirmar e Gravar Venda (<span id="btn-custo-text">R$ {{ "%.2f" | format(custo) }}</span>)
+            </button>
+        </form>
+    </div>
 
+{% endif %}
         <div class="flex justify-center font-bold mt-4">
             <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
         </div>
@@ -373,16 +378,35 @@
             const campoQuantidade = document.getElementById('quantidade');
             const elementoCustoTotal = document.getElementById('total-custo');
             const spanBotaoCusto = document.getElementById('btn-custo-text');
+            
+            // Elementos para controle dinâmico
             const inputPostQuantidade = document.getElementById('post_quantidade');
+            const containerConfirmacao = document.getElementById('confirm-sales-container');
 
-            if (campoQuantidade && elementoCustoTotal) {
-                const quantidade = parseInt(campoQuantidade.value) || 0;
+            if (campoQuantidade) {
+                // Pega o valor digitado. Se for vazio ou inválido, considera 0.
+                const valorDigitado = campoQuantidade.value;
+                const quantidade = parseInt(valorDigitado) || 0;
+                
+                // 1. Atualiza visualização de custos
                 const total = quantidade * Venda_ValorUnitario;
                 const totalFormatado = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
                 
-                elementoCustoTotal.textContent = `Custo Total: ${totalFormatado}`;
+                if (elementoCustoTotal) elementoCustoTotal.textContent = `Custo Total: ${totalFormatado}`;
                 if (spanBotaoCusto) spanBotaoCusto.textContent = totalFormatado;
+
+                // 2. Atualiza o input hidden para envio correto
                 if (inputPostQuantidade) inputPostQuantidade.value = quantidade;
+
+                // 3. LÓGICA DE OCULTAR/MOSTRAR (Ouvindo a digitação)
+                if (containerConfirmacao) {
+                    // Verifica se é maior que 0 E se o campo não está vazio
+                    if (quantidade > 0 && valorDigitado !== '') {
+                        containerConfirmacao.style.display = 'block'; // Mostra
+                    } else {
+                        containerConfirmacao.style.display = 'none'; // Oculta
+                    }
+                }
             }
         }
         
