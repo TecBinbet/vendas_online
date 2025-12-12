@@ -1054,7 +1054,7 @@ def cadastro_colaborador():
 @login_required
 def gravar_colaborador():
     db = get_vendas_db()
-    if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
+    if db is None: return redirect(url_for('login'))
 
     if session.get('nivel', 0) < 3:
         return redirect(url_for('menu_operacoes', error="Acesso Negado. Nível 3 Requerido para Gravação."))
@@ -1062,9 +1062,10 @@ def gravar_colaborador():
     id_colaborador_edicao = request.form.get('id_colaborador_edicao') 
 
     try:
+        # CORREÇÃO 1: 'True' e 'False' devem ser com letra maiúscula em Python
         default_colab_config = {
-            "nome_colaborador": True, "nick": True, "telefone": False,
-            "cpf": True, "cidade": False, "chave_pix": True, "senha": True,
+            "nome_colaborador": True, "nick": True, "telefone": True,
+            "cpf": False, "cidade": False, "chave_pix": True, "senha": True,
             "nivel": True, "comissao": True 
         }
         campos_config = g.parametros_globais.get('tipo_cadastro_colaborador', default_colab_config)
@@ -1111,23 +1112,39 @@ def gravar_colaborador():
                 raise ValueError("Senha e Confirmação de Senha não conferem ou estão vazias.")
             elif id_colaborador_edicao and senha and (senha != confirma_senha):
                 raise ValueError("Senha e Confirmação de Senha não conferem.")
-                
+        
+        # CORREÇÃO 3: Lógica do CPF (Opcional vs Obrigatório)
         cpf_limpo = clean_numeric_string(cpf_raw)
-        if campos_config.get("cpf") == True: 
+        
+        # Se estiver configurado como True (Obrigatório)
+        if campos_config.get("cpf") is True: 
             if not cpf_raw or not validate_cpf(cpf_limpo):
                 raise ValueError("CPF é obrigatório e deve ser válido.")
-        elif "cpf" in campos_config and cpf_raw and not validate_cpf(cpf_limpo):
-            raise ValueError("O CPF inserido não é válido.")
         
-        query_exist = {}
+        # Se for Opcional (False), mas o usuário digitou algo, validamos se é um CPF real
+        elif cpf_raw: 
+            if not validate_cpf(cpf_limpo):
+                raise ValueError("O CPF inserido não é válido.")
+        
+        query_exclusao = {}
         if id_colaborador_edicao:
-            query_exist['id_colaborador'] = {'$ne': int(id_colaborador_edicao)} 
-        
-        if "nick" in campos_config and nick and db.colaboradores.find_one({'$and': [query_exist, {'nick': nick}]}):
-             raise ValueError("Nick já está em uso, por outro colaborador.")
+            query_exclusao['id_colaborador'] = {'$ne': int(id_colaborador_edicao)}
 
-        if "cpf" in campos_config and cpf_limpo and db.colaboradores.find_one({'$and': [query_exist, {'cpf': cpf_limpo}] }):
-             raise ValueError("CPF já cadastrado para outro colaborador.")
+        # Validação do Nick (Duplicidade)
+        if "nick" in campos_config and nick:
+            query_nick = {'nick': nick}
+            query_nick.update(query_exclusao)
+            
+            if db.colaboradores.find_one(query_nick):
+                 raise ValueError("Nick já está em uso por outro colaborador.")
+
+        # CORREÇÃO 2: Removido o bloco com erro de digitação (i#f)
+        # Se você quiser validar duplicidade de CPF apenas se ele foi preenchido:
+        if cpf_limpo:
+            query_cpf = {'cpf': cpf_limpo}
+            query_cpf.update(query_exclusao)
+            if db.colaboradores.find_one(query_cpf):
+                 raise ValueError("CPF já cadastrado para outro colaborador.")
 
         dados_colaborador = {
             "nivel": nivel, 
@@ -1144,12 +1161,14 @@ def gravar_colaborador():
             dados_colaborador["cidade"] = cidade
         if "chave_pix" in campos_config:
             dados_colaborador["chave_pix"] = chave_pix
+        
+        # Salva o CPF apenas se foi preenchido ou se a config exige
         if "cpf" in campos_config:
             dados_colaborador["cpf"] = cpf_limpo
         
         if "senha" in campos_config and senha:
-            senha = format_title_case(request.form.get('senha'))
-            hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt())
+            senha_limpa = format_title_case(senha)
+            hashed_password = bcrypt.hashpw(senha_limpa.encode('utf-8'), bcrypt.gensalt())
             dados_colaborador['senha'] = hashed_password.decode('utf-8')
         
         if id_colaborador_edicao:
@@ -1190,6 +1209,10 @@ def gravar_colaborador():
         
     except Exception as e:
         print(f"ERRO CRÍTICO na gravação/atualização de colaborador: {e}")
+        # Log detalhado para você ver no terminal onde foi o erro
+        import traceback
+        traceback.print_exc()
+        
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_colaborador_edicao else 'novo'
         redirect_args = {
@@ -1594,8 +1617,8 @@ def processar_venda():
         session['success_message'] = success_msg 
         redirect_kwargs = {
             'id_evento': id_evento_string,
-            'quantidade': 0,
-            'id_cliente_busca': f"CLI{id_cliente_final}"
+            'quantidade': '',
+            'id_cliente_busca':  '' # f"CLI{id_cliente_final}"
         }
         return redirect(url_for('nova_venda', **redirect_kwargs))
 
@@ -2249,19 +2272,42 @@ def cadastro_evento():
     ]
     all_numeric_fields = numeric_float_fields + numeric_int_fields
 
+    # --- BLOCO 1: RECUPERAÇÃO DE ERRO DE FORMULÁRIO ---
     if form_data_erro:
         evento_edicao = form_data_erro
         
+        # Define a view baseada se existe ID no formulário
         if 'id_evento_edicao' in form_data_erro and form_data_erro['id_evento_edicao']:
              active_view = 'alterar'
              id_evento_edicao = form_data_erro['id_evento_edicao']
         else:
              active_view = 'novo'
         
-        for key in all_numeric_fields:
-            if key in evento_edicao:
-                evento_edicao[key] = safe_float(evento_edicao.get(key, 0.0))
+        # CORREÇÃO DE ALINHAMENTO:
+        # Estas conversões devem acontecer sempre que houver erro no form,
+        # independente se é novo ou alterar. Por isso, recue para alinhar com o 'if/else' acima.
+        
+        # 1. Trata campos de MOEDA (Float)
+        for key in numeric_float_fields:
+             if key in evento_edicao: 
+                  evento_edicao[key] = safe_float(evento_edicao.get(key, 0.0))
+
+        # 2. Trata campos de QUANTIDADE (Int)
+        for key in numeric_int_fields:
+             if key in evento_edicao:
+                  valor = evento_edicao.get(key, 0)
+                  
+                  # Se for Decimal128 do Mongo, extrai o valor
+                  if isinstance(valor, Decimal128):
+                      valor = valor.to_decimal()
+                  
+                  try:
+                      # Converte para float primeiro (pra aceitar '10.0') e depois para int
+                      evento_edicao[key] = int(float(str(valor)))
+                  except (ValueError, TypeError):
+                      evento_edicao[key] = 0
              
+    # --- BLOCO 2: CARREGAR DADOS PARA EDIÇÃO (SE NÃO HOUVER ERRO DE FORM) ---
     elif active_view == 'alterar' and id_evento_edicao and db_status:
         try:
             id_evento_int = int(id_evento_edicao)
@@ -2278,11 +2324,20 @@ def cadastro_evento():
                     except ValueError:
                         pass 
                 
-                for key in all_numeric_fields:
-                    if key in evento_edicao: 
+                # Aplica a correção de inteiros/floats na leitura do banco também
+                for key in numeric_float_fields:
+                    if key in evento_edicao:
                         evento_edicao[key] = safe_float(evento_edicao.get(key, 0.0))
+                
+                for key in numeric_int_fields:
+                    if key in evento_edicao:
+                        valor = evento_edicao.get(key, 0)
+                        if isinstance(valor, Decimal128): valor = valor.to_decimal()
+                        try: evento_edicao[key] = int(float(str(valor)))
+                        except: evento_edicao[key] = 0
 
             else:
+                 # CORREÇÃO DE ALINHAMENTO: O else deve estar alinhado com o if evento_edicao
                  error = f"Evento ID {id_evento_int} não encontrado para edição."
                  active_view = 'listar'
                  
@@ -2290,6 +2345,7 @@ def cadastro_evento():
             error = "ID de Evento inválido para edição."
             active_view = 'listar'
             
+    # --- BLOCO 3: LISTAGEM E CONSULTA ---
     if db_status:
         try:
             total_eventos = db.eventos.count_documents({})
@@ -2320,20 +2376,19 @@ def cadastro_evento():
             print(f"Erro ao buscar dados no MongoDB em cadastro_evento: {e}")
             error = f"Erro crítico ao carregar dados do DB: {e}"
 
+    # Processamento final da lista para exibição
     for evento in eventos_lista:
         if '_id' in evento: evento['_id'] = str(evento['_id'])
-        # --- INÍCIO DA ADIÇÃO ---
+        
+        # Contagem de vendas
         id_evento_atual = evento.get('id_evento')
         nome_colecao_venda = f"vendas{id_evento_atual}"
-    
-        # Verifica se a coleção existe e conta os documentos
         qtd_vendas = 0
-        # Nota: list_collection_names é mais seguro para checar existência
         if nome_colecao_venda in db.list_collection_names():
             qtd_vendas = db[nome_colecao_venda].count_documents({})
-    
         evento['qtd_vendas'] = qtd_vendas
-        # --- FIM DA ADIÇÃO ---
+        
+        # Garante floats na lista para exibição correta de moeda
         for key in all_numeric_fields:
             if key in evento:
                 evento[key] = safe_float(evento.get(key, 0.0))
@@ -2433,7 +2488,7 @@ def gravar_evento():
             "premio_total": Decimal128(str(premio_total)), 
             "premio_acumulado": Decimal128(str(premio_acumulado)),
             "bola_tope_acumulado": bola_tope_acumulado,
-            "minimo_de_venda": Decimal128(str(minimo_de_venda)),
+            "minimo_de_venda": minimo_de_venda,
             "id_colaborador": session.get('id_colaborador', 'N/A'),
         }
         

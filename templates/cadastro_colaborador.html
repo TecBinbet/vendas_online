@@ -103,10 +103,50 @@
         .btn-cancel { background-color: #D1D5DB; color: #374151; }
         .btn-cancel:hover { background-color: #B2B8C2; }
         /* --- FIM CSS DA MODAL DE EXCLUSÃO --- */
+
+/* --- ESTILO DO LOADING (NOVO) --- */
+        #loading-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(255, 255, 255, 0.85); /* Fundo branco semi-transparente */
+            z-index: 9999; /* Fica acima de tudo */
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            backdrop-filter: blur(4px); /* Efeito de desfoque */
+        }
+        .hidden { display: none !important; }
+        
+        .spinner {
+            width: 60px;
+            height: 60px;
+            border: 6px solid #E5E7EB; /* Cinza claro */
+            border-top-color: #059669; /* Verde Primary (sua cor tema) */
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+        
+        .loading-text {
+            margin-top: 15px;
+            color: #059669;
+            font-weight: 800;
+            font-size: 1.1rem;
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
 
+    <div id="loading-overlay" class="hidden">
+        <div class="spinner"></div>
+        <p class="loading-text">Salvando dados, aguarde...</p>
+    </div>
+
+    <div class="container">
     <div class="container">
         <h2 class="text-2xl mb-2 text-blue-800 text-center">Gestão de Colaboradores</h2>
 
@@ -145,7 +185,7 @@
                 {% if active_view == 'alterar' %}Alteração de Colaborador (ID: {{ colab.get('id_colaborador', 'N/A') }}){% else %}Cadastro de Novo Colaborador{% endif %}
             </h3>
 
-            <form method="POST" action="{{ url_for('gravar_colaborador') }}" id="form-cadastro" class="space-y-4" onkeydown="return handleEnterKey(event)">
+           <form method="POST" action="{{ url_for('gravar_colaborador') }}" id="form-cadastro" class="space-y-4" onkeydown="return handleEnterKey(event)" onsubmit="ativarLoading()">
                 
                 {% if active_view == 'alterar' %}
                     <input type="hidden" name="id_colaborador_edicao" value="{{ colab.get('id_colaborador', '') }}">
@@ -179,8 +219,8 @@
                     </div>
                     
                     <div class="form-group">
-                        <label for="cpf" class="required-label">CPF:</label>
-                        <input type="text" id="cpf" name="cpf" required class="form-control" placeholder="Apenas números"
+                        <label for="cpf" class="label">CPF:</label>
+                        <input type="text" id="cpf" name="cpf" class="form-control" placeholder="Apenas números"
                                value="{{ colab.get('cpf', '') }}">
                     </div>
 
@@ -392,6 +432,17 @@
     </div>
 
     <script>
+
+ // --- FUNÇÃO PARA ATIVAR O LOADING ---
+        function ativarLoading() {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.classList.remove('hidden');
+            }
+            // Retorna true para permitir que o formulário continue o envio
+            return true;
+        }
+
         // Função para manipular a tecla Enter
 function handleEnterKey(event) {
             if (event.key === 'Enter') {
@@ -449,12 +500,14 @@ function handleEnterKey(event) {
             btnConfirmDelete.onclick = function() {
                 if (formIdParaExcluir) {
                     const form = document.getElementById(formIdParaExcluir);
-                    if (form) form.submit(); 
+                    if (form) {
+                        ativarLoading(); // <--- Adicione aqui também
+                        form.submit(); 
+                    }
                 }
                 closeDeleteModal(); 
             };
-        }
-        
+        }        
         // --- LÓGICA DO QR CODE ---
         const qrModal = document.getElementById('qr-modal');
         const qrContainer = document.getElementById('qrcode-container');

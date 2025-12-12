@@ -386,7 +386,7 @@
             if (campoQuantidade) {
                 // Pega o valor digitado. Se for vazio ou inválido, considera 0.
                 const valorDigitado = campoQuantidade.value;
-                const quantidade = parseInt(valorDigitado) || 0;
+                const quantidade = parseInt(valorDigitado);  // || 0;
                 
                 // 1. Atualiza visualização de custos
                 const total = quantidade * Venda_ValorUnitario;
@@ -414,7 +414,7 @@
             const campoQuantidade = document.getElementById('quantidade');
             const displayCartelas = document.getElementById('cartelas-display');
             if (campoQuantidade && displayCartelas) {
-                const quantidade = parseInt(campoQuantidade.value) || 0;
+                const quantidade = parseInt(campoQuantidade.value); //  || 0;
                 displayCartelas.textContent = (quantidade * Venda_UnidadeCartelas);
             }
         }
