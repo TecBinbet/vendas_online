@@ -37,7 +37,7 @@
 
         /* Estilos da Tabela */
         .list-header { background-color: #E5E7EB; color: #374151; font-weight: bold; }
-        .list-row:nth-child(even) { background-color: #F9FAFB; }
+        .list-row:nth-child(even) { background-color: #DCFCE7; }  /* #F9FAFB     */
         .action-link { text-decoration: none; font-weight: 600; margin-right: 10px; }
         .delete-link { color: #EF4444; }
         
@@ -380,25 +380,25 @@
 
         <!-- VISUALIZAÇÃO LISTAR -->
         <div id="view-listar" class="{% if active_view != 'listar' %}hidden{% endif %}">
-            <h3 class="text-xl font-semibold mb-4 text-gray-700">Lista de Clientes (Ordenada por Nick)</h3>
+            <h3 class="text-xl font-semibold mb-2 text-gray-700">Lista de Clientes (Ordenada por Nick)</h3>
             
             <div class="overflow-x-auto shadow-md rounded-lg">
                 <table class="min-w-full bg-white border border-gray-200">
                     <thead>
                         <tr class="list-header">
-                            <th class="py-2 px-4 border-b text-left">ID</th>
-                            <th class="py-2 px-4 border-b text-left">Nome (Nick)</th>
-                            <th class="py-2 px-4 border-b text-left">Cidade</th>
-                            <th class="py-2 px-4 border-b text-left">Telefone</th>
-                            <th class="py-2 px-4 border-b text-left">Ações</th>
+                            <th class="py-0 px-4 border-b text-left">ID</th>
+                            <th class="py-0 px-4 border-b text-left">Nome (Nick)</th>
+                            <th class="py-0 px-4 border-b text-left">Cidade</th>
+                            <th class="py-0 px-4 border-b text-left">Telefone</th>
+                            <th class="py-0 px-4 border-b text-left">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% if active_view == 'listar' and clientes_lista %}
                             {% for cliente in clientes_lista %}
-                            <tr class="list-row hover:bg-gray-100 transition duration-150">
+                            <tr class="list-row hover:bg-green-200 transition duration-150">
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.id_cliente }}</td>
-                                <td class="py-3 px-4 border-b text-sm">{{ cliente.nome_cliente }} ({{ cliente.nick }})</td>
+                                <td class="py-3 px-4 border-b text-sm font-bold">{{ cliente.nome_cliente }} ({{ cliente.nick }})</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.cidade }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.telefone }}</td>
                                 <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
