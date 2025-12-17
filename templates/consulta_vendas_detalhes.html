@@ -77,6 +77,10 @@
 <body class="p-2 md:p-4">
 
     <div class="max-w-6xl mx-auto">
+        <div class="-mt-2">
+            <a href="javascript:history.back()" class=" text-green-800 font-bold text-primary hover:text-secondary font-medium">← Voltar para o Resumo</a>
+        </div>
+
         <h2 class="text-xl font-bold mb-1 text-blue-800">📊 Vendas Detalhadas</h2>
         <p class="text-lg text-gray-700 mb-1">
             Evento:<strong> {{ info_evento | default('N/A') }}</strong> | 
@@ -140,9 +144,6 @@
             </table>
         </div>
         
-        <div class="mt-2">
-            <a href="javascript:history.back()" class=" text-green-800 font-bold text-primary hover:text-secondary font-medium">← Voltar para o Resumo</a>
-        </div>
     </div>
 
     <div id="reprint-modal" class="modal-overlay" onclick="closeReprintModal()">

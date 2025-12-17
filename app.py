@@ -1913,14 +1913,20 @@ def gravar_cliente():
                 raise ValueError("Senha e Confirmação de Senha não conferem.")
         
         senha_final_raw = None
-        if "senha" in campos_config:
-            if senha:
-                senha_final_raw = senha
-            elif not id_cliente_edicao: 
-                if not campos_config.get("senha"): 
-                    senha_final_raw = nick 
-                elif senha == "": 
-                     senha_final_raw = nick 
+
+        if senha:
+            # Se o usuário digitou algo, usa o que foi digitado
+            senha_final_raw = senha
+            
+        elif not id_cliente_edicao: 
+            # Se é NOVO CLIENTE e o campo senha veio vazio...
+            
+            if not campos_config.get("senha"): 
+                # Se o campo senha está DESABILITADO na config, define o padrão "senha"
+                senha_final_raw = "senha" 
+            else:
+                # Fallback caso a validação falhe (embora o ValueError acima deva prevenir isso)
+                senha_final_raw = nick
 
         # --- NOVA VALIDAÇÃO DE DUPLICIDADE (ATIVADA) ---
         query_duplicidade = []

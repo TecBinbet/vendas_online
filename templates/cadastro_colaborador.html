@@ -141,14 +141,23 @@
 </head>
 <body>
 
-    <div id="loading-overlay" class="hidden">
-        <div class="spinner"></div>
-        <p class="loading-text">Salvando dados, aguarde...</p>
-    </div>
 
     <div class="container">
-    <div class="container">
-        <h2 class="text-2xl mb-2 text-blue-800 text-center">Gestão de Colaboradores</h2>
+
+      <div id="loading-overlay" class="hidden">
+           <div class="spinner"></div>
+           <p class="loading-text">Salvando dados, aguarde...</p>
+        
+           <button type="button" onclick="document.getElementById('loading-overlay').classList.add('hidden')" 
+                class="mt-6 text-xs text-gray-500 underline hover:text-red-600 cursor-pointer transition-colors">
+               Travou? Clique aqui para fechar
+           </button>
+       </div>
+        <div class="flex justify-center -mt-3 mb-1">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+        </div>
+
+        <h2 class="text-2xl mb-1 text-blue-800 text-center">Gestão de Colaboradores</h2>
 
         {% if error %}
             <div class="alert-danger">{{ error }}</div>
@@ -157,7 +166,7 @@
             <div class="alert-success">{{ success | safe }}</div>
         {% endif %}
 
-        <div class="flex space-x-4 mb-2 border-b pb-4">
+        <div class="flex space-x-4 mb-0 border-b pb-4">
             <a href="{{ url_for('cadastro_colaborador', view='novo') }}" 
                class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
                 ➕ Novo
@@ -172,7 +181,7 @@
             </a>
         </div>
 
-        <div class="mb-2 p-2 bg-info text-white border border-blue-600 rounded-lg">
+        <div class="mb-2 -mt-1 p-2 bg-info text-white border border-blue-600 rounded-lg">
             Total de Colaboradores Cadastrados: <strong id="total-colaboradores">{{ total_colaboradores }}</strong>.
         </div>
         
@@ -191,7 +200,7 @@
                     <input type="hidden" name="id_colaborador_edicao" value="{{ colab.get('id_colaborador', '') }}">
                 {% endif %}
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-1">
                     
                     <div class="form-group">
                         <label>ID Colaborador:</label>
@@ -274,7 +283,7 @@
                     
                 </div>
                 
-                <div class="mt-6 flex justify-end space-x-2">
+                <div class="mt-2 flex justify-end space-x-2">
                     <button type="submit" class="btn-submit btn-save">
                         {% if active_view == 'alterar' %}
                             ✓ Salvar Alterações
@@ -389,10 +398,6 @@
                 </table>
             </div>
         </div>
-
-        <div class="flex justify-center mt-8">
-            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
-        </div>
         
     </div>
     
@@ -438,13 +443,30 @@
             const overlay = document.getElementById('loading-overlay');
             if (overlay) {
                 overlay.classList.remove('hidden');
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                }, 15000);
             }
             // Retorna true para permitir que o formulário continue o envio
             return true;
         }
 
+        function desativarLoading() {
+           const overlay = document.getElementById('loading-overlay');
+           if (overlay) {
+              overlay.classList.add('hidden'); // Adiciona a classe que esconde
+           }
+        }
+
+       window.addEventListener('pageshow', function(event) {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
+        });
+
         // Função para manipular a tecla Enter
-function handleEnterKey(event) {
+        function handleEnterKey(event) {
             if (event.key === 'Enter') {
                 event.preventDefault(); 
                 const form = event.target.form;

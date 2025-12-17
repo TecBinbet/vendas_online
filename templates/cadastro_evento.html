@@ -130,12 +130,18 @@
 </head>
 <body>
 
-     <div id="loading-overlay" class="hidden">
+   <div id="loading-overlay" class="hidden">
         <div class="spinner"></div>
         <p class="loading-text">Processando, aguarde...</p>
+        
+        <button type="button" onclick="document.getElementById('loading-overlay').classList.add('hidden')" 
+                class="mt-6 text-xs text-gray-500 underline hover:text-red-600 cursor-pointer transition-colors">
+            Travou? Clique aqui para fechar
+        </button>
     </div>
+
     <div class="container">
-        <h2 class="text-2xl mb-4 text-blue-800 text-center">Gestão de Eventos</h2>
+        <h2 class="text-2xl mb-2 -mt-2 text-blue-800 text-center">Gestão de Eventos</h2>
 
         {% if error %}
             <div class="alert-danger">{{ error }}</div>
@@ -144,7 +150,7 @@
             <div class="alert-success">{{ success | safe }}</div>
         {% endif %}
 
-        <div class="flex space-x-4 mb-4 border-b pb-4">
+        <div class="flex space-x-4 mb-1 border-b pb-4">
             <a href="{{ url_for('cadastro_evento', view='novo') }}" 
                class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
                 ➕ Novo
@@ -414,7 +420,7 @@
             </div>
         </div>
 
-        <div class="flex justify-center mt-8">
+        <div class="flex justify-center mt-2">
             <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
         </div>
         
@@ -454,9 +460,22 @@
             const overlay = document.getElementById('loading-overlay');
             if (overlay) {
                 overlay.classList.remove('hidden');
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                }, 15000);
             }
-            return true; // Permite o envio
+            // Retorna true para permitir que o formulário continue o envio
+            return true;
         }
+
+       window.addEventListener('pageshow', function(event) {
+            const overlay = document.getElementById('loading-overlay');
+            if (overlay) {
+                overlay.classList.add('hidden');
+            }
+        });
+
+
         document.addEventListener('DOMContentLoaded', (event) => {
             calculatePremioTotal();
             toggleBolaTope();

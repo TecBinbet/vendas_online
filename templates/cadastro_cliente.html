@@ -133,7 +133,11 @@
 <body>
 
     <div class="container">
-        <h2 class="text-2xl mb-4 text-blue-800 text-center">Gestão de Clientes</h2>
+        <div class="flex justify-center -mt-3 mb-1">
+                        <a href="{{ url_for(next_url | default('menu_operacoes'), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+        </div>
+
+         <h2 class="text-2xl mb-1 text-blue-800 text-center">Gestão de Clientes</h2>
 
         {% if error %}
             <div class="alert-danger">{{ error }}</div>
@@ -142,7 +146,7 @@
             <div class="alert-success">{{ success | safe }}</div>
         {% endif %}
 
-        <div class="flex space-x-4 mb-4 border-b pb-4">
+        <div class="flex space-x-4 mb-0 border-b pb-4">
             <a href="{{ url_for('cadastro_cliente', view='novo', next=next_url) }}" 
                class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
                 ➕ Novo
@@ -162,7 +166,7 @@
             {% endif %}
         </div>
 
-        <div class="mb-2 p-2 bg-info text-white border border-blue-600 rounded-lg">
+        <div class="mb-2 -mt-1 p-2 bg-info text-white border border-blue-600 rounded-lg">
             Total de Clientes Cadastrados: <strong id="total-clientes">{{ total_clientes | default(0) }}</strong>.
         </div>
         
@@ -198,7 +202,7 @@
                 {% endif %}
 
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-1">
 
                     <div class="form-group">
                         <label>ID Cliente:</label>
@@ -296,7 +300,7 @@
                     
                 </div>
                 
-                <div class="mt-6 flex justify-end space-x-2">
+                <div class="mt-2 flex justify-end space-x-2">
                     <button type="submit" class="btn-submit btn-save">
                         {% if active_view == 'alterar' %}
                             ✓ Salvar Alterações
@@ -416,11 +420,6 @@
                     </tbody>
                 </table>
             </div>
-        </div>
-
-        <div class="flex justify-center mt-8">
-            <!-- Rota de retorno atualizada -->
-            <a href="{{ url_for(next_url | default('menu_operacoes'), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-medium">← Voltar</a>
         </div>
         
     </div>
