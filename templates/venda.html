@@ -106,15 +106,18 @@
         {% endif %}
         
         {% if success %}
+          <div id="success-block">
             <!-- Bloco de Sucesso (Mantido igual) -->
             <div class="alert alert-success text-center">
-                <h3 class="text-xl font-bold mb-1">Venda Registrada com Sucesso!</h3>
+                <h3 class="text-lg font-bold -mt-2">Venda Registrada com Sucesso!</h3>
                 <div id="receipt-content">{{ success | safe }}</div>
             </div>
             <div class="flex justify-center mb-1 gap-3 flex-wrap">
                 <button onclick="copyReceiptText()" class="btn btn-primary shadow-lg">📋 Copiar Texto</button>
                 <button onclick="shareReceiptImage()" class="btn btn-warning shadow-lg">🖼️ Gerar Imagem</button>
+                <button onclick="hideReceipt()" class="btn bg-gray-500 text-white hover:bg-gray-700 shadow-lg">👁️ Ocultar Cupom</button>
             </div>
+          </div>
         {% endif %}
 
         {% if not g.db_status %}
@@ -128,17 +131,17 @@
             
             <div class="form-group flex gap-1 items-center">
                 <button type="button" onclick="openEventSelector()" 
-                        class="py-2 btn btn-primary btn-small self-end mb-3 min-w-[120px]">
+                        class="py-3 btn btn-primary btn-small self-end mb-2 min-w-[295px]">
                     Selecionar um Evento
                 </button>
             </div>
 
             {% if selected_event %}
-                <div class="alert alert-info -mt-2 mb-1" style="margin-top: 1px;">
-                    <h4 class="text-lg font-bold">{{ selected_event.descricao }}</h4>
+                <div class="alert alert-info -mt-3 mb-1" style="margin-top: 0px;">
+                    <h4 class="text-lg font-bold -mt-2.5 -mb-1">{{ selected_event.descricao }}</h4>
                     <p>Data: <strong>{{ selected_event.data_evento }}</strong> - | - Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
                     <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
-                    <p>Núm. Inícial: <strong>{{ selected_event.numero_inicial }}</strong> - | - Núm. Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
+                    <p class="text-lg text-red-600 font-semibold -mt-1.5 -mb-2.5 ">  Númeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
                 </div>
             {% endif %}
 
@@ -189,9 +192,11 @@
                 <div class="form-group mt-1">
                     <label for="quantidade">3. Quantidade de Unidades:</label>
                     <input type="number" id="quantidade" name="quantidade" 
-                           value="{{ quantidade | default(0) }}" min="1" required 
+                           value="{{ quantidade if quantidade and quantidade > 0 else '' }}" 
+                           min="1" required 
                            class="form-control text-xl px-2 py-1" 
-                           oninput="updateTotalCost(); updateCartelasDisplay();">
+                           oninput="updateTotalCost(); updateCartelasDisplay();"
+                           {% if cliente_encontrado %}autofocus{% endif %}>
                     <small class="form-text text-muted font-bold">Total de cartelas: 
                         <span id="cartelas-display">
                             {{ (quantidade * selected_event.unidade_de_venda) if quantidade > 0 and selected_event else 0 }}
@@ -381,7 +386,7 @@
             if (campoQuantidade) {
                 // Pega o valor digitado. Se for vazio ou inválido, considera 0.
                 const valorDigitado = campoQuantidade.value;
-                const quantidade = parseInt(valorDigitado);  // || 0;
+                const quantidade = parseInt(valorDigitado) || 0;
                 
                 // 1. Atualiza visualização de custos
                 const total = quantidade * Venda_ValorUnitario;
@@ -409,7 +414,7 @@
             const campoQuantidade = document.getElementById('quantidade');
             const displayCartelas = document.getElementById('cartelas-display');
             if (campoQuantidade && displayCartelas) {
-                const quantidade = parseInt(campoQuantidade.value); //  || 0;
+                const quantidade = parseInt(campoQuantidade.value) || 0;
                 displayCartelas.textContent = (quantidade * Venda_UnidadeCartelas);
             }
         }
@@ -560,6 +565,23 @@
                 openEventSelector(); // Abre a modal
             }
         });
+
+        // --- FUNÇÃO PARA OCULTAR CUPOM E FOCAR NA BUSCA ---
+        function hideReceipt() {
+            // 1. Esconde o bloco de sucesso
+            const block = document.getElementById('success-block');
+            if (block) {
+                block.style.display = 'none';
+            }
+
+            // 2. Foca no campo de busca de cliente
+            const inputBusca = document.getElementById('id_cliente_busca');
+            if (inputBusca) {
+                inputBusca.value = ''; // Limpa o campo (opcional, remova se preferir manter o texto)
+                inputBusca.focus();
+            }
+        }
+
     </script>
 </body>
 </html>
