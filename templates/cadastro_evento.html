@@ -36,7 +36,7 @@
         .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; }
 
         .list-header { background-color: #E5E7EB; color: #374151; font-weight: bold; }
-        .list-row:nth-child(even) { background-color: #F9FAFB; }
+        .list-row:nth-child(even) { background-color: #DCFCE7; }
         .action-link { text-decoration: none; font-weight: 600; margin-right: 10px; }
         .delete-link { color: #EF4444; }
         
@@ -141,7 +141,7 @@
     </div>
 
     <div class="container">
-        <h2 class="text-2xl mb-2 -mt-2 text-blue-800 text-center">Gestão de Eventos</h2>
+        <h2 class="text-2xl mb-0 -mt-4 text-blue-800 text-center">Gestão de Eventos</h2>
 
         {% if error %}
             <div class="alert-danger">{{ error }}</div>
@@ -150,7 +150,7 @@
             <div class="alert-success">{{ success | safe }}</div>
         {% endif %}
 
-        <div class="flex space-x-4 mb-1 border-b pb-4">
+        <div class="flex space-x-4 mb-0 border-b pb-4">
             <a href="{{ url_for('cadastro_evento', view='novo') }}" 
                class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
                 ➕ Novo
@@ -165,7 +165,7 @@
             </a>
         </div>
 
-        <div class="mb-2 p-2 bg-info text-white border border-blue-600 rounded-lg">
+        <div class="mb-1 -mt-3 p-1 bg-info text-white border border-blue-600 rounded-lg">
             Total de Eventos Cadastrados: <strong id="total-eventos">{{ total_eventos | default(0) }}</strong>.
         </div>
         
@@ -174,7 +174,7 @@
             
             {% set evento = evento_edicao if evento_edicao is not none else {} %} 
             
-            <h3 class="text-xl font-semibold mb-2 {% if active_view == 'alterar' %}text-accent{% else %}text-primary{% endif %}">
+            <h3 class="text-lg font-semibold mb-1 -mt-1 {% if active_view == 'alterar' %}text-accent{% else %}text-primary{% endif %}">
                 {% if active_view == 'alterar' %}Alteração de Evento (ID: {{ evento.get('id_evento', 'N/A') }}){% else %}Cadastro de Novo Evento{% endif %}
             </h3>
 
@@ -186,7 +186,7 @@
                     <input type="hidden" name="id_evento_edicao" value="{{ evento.get('id_evento', '') }}">
                 {% endif %}
 
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
                     
                     <div class="form-group">
                         <label>ID Evento:</label>
@@ -209,16 +209,31 @@
                                value="{{ evento.get('hora_evento', '20:00') }}">
                     </div>
 
-                    <div class="form-group md:col-span-3">
+                    <div class="form-group">
                         <label for="descricao" class="required-label">Descrição do Evento:</label>
                         <input type="text" id="descricao" name="descricao" required class="form-control" 
                                value="{{ evento.get('descricao', '') }}">
                     </div>
 
                     <div class="form-group">
+                        <label for="tipo_de_cartela" class="required-label">Tipo de Cartela (15 ou 25 Números):</label>
+                        {% set valor_selecionado = evento.get('tipo_de_cartela', 15) | int %}            
+                        <select id="tipo_de_cartela" name="tipo_de_cartela" required class="form-control" onchange="updateNumeroMaximo()">
+                                    <option value="15" {% if valor_selecionado == 15 %}selected{% endif %}>15 Números</option>
+                                    <option value="25" {% if valor_selecionado == 25 %}selected{% endif %}>25 Números</option>
+                         </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="numero_maximo" class="label ">Número Máximo da Cartela:</label>
+                        <input type="number" id="numero_maximo" name="numero_maximo" min="1" disabled class="form-control bg-green-200"
+                               value="{{ evento.get('numero_maximo', 72000) }}">
+                    </div>
+
+                    <div class="form-group">
                         <label for="unidade_de_venda" class="required-label">Unidade de Venda (1-6):</label>
                         <input type="number" id="unidade_de_venda" name="unidade_de_venda" required min="1" max="6" class="form-control"
-                               value="{{ evento.get('unidade_de_venda', 6) }}" oninput="calculatePremioTotal()">
+                               value="{{ evento.get('unidade_de_venda', 1) }}" oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
                         <label for="valor_de_venda" class="required-label">Valor da Unidade (R$):</label>
@@ -230,11 +245,6 @@
                         <label for="numero_inicial" class="required-label">Número Inicial da Cartela:</label>
                         <input type="number" id="numero_inicial" name="numero_inicial" required min="1" class="form-control"
                                value="{{ evento.get('numero_inicial', 1) }}">
-                    </div>
-                    <div class="form-group">
-                        <label for="numero_maximo" class="required-label">Número Máximo da Cartela:</label>
-                        <input type="number" id="numero_maximo" name="numero_maximo" required min="1" class="form-control"
-                               value="{{ evento.get('numero_maximo', 72000) }}">
                     </div>
 
                     <div class="form-group">
@@ -294,18 +304,6 @@
                                {% if evento.get('premio_acumulado', 0) <= 0 %}disabled{% endif %}>
                     </div>
 
-                    <div class="form-group">
-                        <label for="tipo_de_cartela" class="required-label">Tipo de Cartela:</label>
-                        {% set valor_selecionado = evento.get('tipo_de_cartela', 15) | int %}            
-                        <select id="tipo_de_cartela" name="tipo_de_cartela" required class="form-control">
-                              <option value="15" {% if valor_selecionado == 15 %}selected{% endif %}>
-                                     15 Números
-                              </option>
-                              <option value="25" {% if valor_selecionado == 25 %}selected{% endif %}>
-                                      25 Números
-                              </option>
-                        </select>
-                    </div>
 
                     <div class="form-group">
                          <label for="status">Status (Automático):</label>
@@ -374,32 +372,32 @@
         </div>
 
         <div id="view-listar" class="view-content {% if active_view == 'listar' %}active-view-show{% endif %}">
-            <h3 class="text-xl font-semibold mb-4 text-gray-700">Lista de Eventos (Ordenada por Data)</h3>
+            <h3 class="text-lg font-bold mb-0 -mt-1 text-gray-700">Lista de Eventos (Ordenada por Data)</h3>
             
             <div class="overflow-x-auto shadow-md rounded-lg">
                 <table class="min-w-full bg-white border border-gray-200">
                     <thead>
                         <tr class="list-header">
-                            <th class="py-2 px-4 border-b text-left">ID</th>
-                            <th class="py-2 px-4 border-b text-left">Descrição</th>
-                            <th class="py-2 px-4 border-b text-left">Data/Hora</th>
-                            <th class="py-2 px-4 border-b text-left">Prêmio Total</th>
-                            <th class="py-2 px-4 border-b text-left">Vendas</th>
-                            <th class="py-2 px-4 border-b text-left">Status</th>
-                            <th class="py-2 px-4 border-b text-left">Ações</th>
+                            <th class="py-0 px-2 border-b text-left">ID</th>
+                            <th class="py-0 px-2 border-b text-left">Descrição</th>
+                            <th class="py-0 px-2 border-b text-left">Data/Hora</th>
+                            <th class="py-0 px-2 border-b text-left">Prêmio Total</th>
+                            <th class="py-0 px-2 border-b text-left">Vendas</th>
+                            <th class="py-0 px-2 border-b text-left">Status</th>
+                            <th class="py-0 px-2 border-b text-left">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% if active_view == 'listar' and eventos_lista %}
                             {% for evento in eventos_lista %}
-                            <tr class="list-row hover:bg-gray-100 transition duration-150">
-                                <td class="py-3 px-4 border-b text-sm">{{ evento.id_evento }}</td>
-                                <td class="py-3 px-4 border-b text-sm">{{ evento.descricao }}</td>
-                                <td class="py-3 px-4 border-b text-sm">{{ evento.data_evento | default('N/A') }} às {{ evento.hora_evento | default('N/A') }}</td>
-                                <td class="py-3 px-4 border-b text-sm font-semibold">R$ {{ evento.premio_total | default(0.00) | round(2) }}</td>
-                                <td class="py-3 px-4 border-b text-sm text-gray-600">{{ evento.qtd_vendas | default(0) }}</td>
-                                <td class="py-3 px-4 border-b text-sm">{{ evento.status }}</td>
-                                <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
+                            <tr class="list-row hover:bg-green-200 transition duration-150">
+                                <td class="py-2 px-2 border-b text-sm">{{ evento.id_evento }}</td>
+                                <td class="py-2 px-2 border-b text-sm">{{ evento.descricao }}</td>
+                                <td class="py-2 px-2 border-b text-sm">{{ evento.data_evento | default('N/A') }} às {{ evento.hora_evento | default('N/A') }}</td>
+                                <td class="py-2 px-2 border-b text-sm  font-semibold">R$ {{ evento.premio_total | format_moeda }}</td>
+                                <td class="py-2 px-2 border-b text-sm text-gray-600">{{ evento.qtd_vendas | default(0) }}</td>
+                                <td class="py-2 px-2 border-b text-sm">{{ evento.status }}</td>
+                                <td class="py-2 px-2 border-b text-sm whitespace-nowrap">
                                     <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                     
                                     <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}"
@@ -479,6 +477,7 @@
         document.addEventListener('DOMContentLoaded', (event) => {
             calculatePremioTotal();
             toggleBolaTope();
+            updateNumeroMaximo();
         });
         
         function preventDefaultOnEnter(event) {
@@ -605,6 +604,58 @@
             };
         }
         
+        // Recebe os limites (que agora vêm com padrão 72000 e 90000 do Python)
+        const cartelaLimits = {{ cartela_limits | tojson }};
+
+        function updateNumeroMaximo() {
+            const tipoSelect = document.getElementById('tipo_de_cartela');
+            const maxInput = document.getElementById('numero_maximo');
+            
+            // Novos campos para controlar
+            const faltaUmInput = document.getElementById('premio_faltaum');
+            const qtdLinhasInput = document.getElementById('quantidade_de_linhas');
+            
+            if (tipoSelect) {
+                const tipo = tipoSelect.value.toString(); // '15' ou '25'
+                
+                // 1. Atualiza Número Máximo
+                if (maxInput && cartelaLimits[tipo]) {
+                    maxInput.value = cartelaLimits[tipo];
+                }
+
+                // 2. Aplica Regras de Bloqueio (25 Números)
+                if (tipo === '25') {
+                    // Regra: Falta Um zerado e bloqueado
+                    if (faltaUmInput) {
+                        faltaUmInput.value = "0.00";
+                        faltaUmInput.disabled = true;
+                        faltaUmInput.classList.add('bg-gray-200', 'text-gray-500'); // Visual 'apagado'
+                    }
+                    
+                    // Regra: Linhas forçado em 1 e bloqueado
+                    if (qtdLinhasInput) {
+                        qtdLinhasInput.value = "1";
+                        qtdLinhasInput.disabled = true;
+                        qtdLinhasInput.classList.add('bg-gray-200', 'text-gray-500');
+                    }
+                } 
+                // 3. Libera campos (15 Números)
+                else {
+                    if (faltaUmInput) {
+                        faltaUmInput.disabled = false;
+                        faltaUmInput.classList.remove('bg-gray-200', 'text-gray-500');
+                    }
+                    if (qtdLinhasInput) {
+                        qtdLinhasInput.disabled = false;
+                        qtdLinhasInput.classList.remove('bg-gray-200', 'text-gray-500');
+                    }
+                }
+                
+                // Recalcula o Prêmio Total (pois zeramos valores acima)
+                calculatePremioTotal();
+            }
+        }
+
     </script>
 </body>
 </html>

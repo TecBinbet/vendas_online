@@ -137,7 +137,7 @@
                         <a href="{{ url_for(next_url | default('menu_operacoes'), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
         </div>
 
-         <h2 class="text-2xl mb-1 text-blue-800 text-center">Gestão de Clientes</h2>
+         <h2 class="text-xl mb-1 text-blue-800 text-center font-bold">Gestão de Clientes</h2>
 
         {% if error %}
             <div class="alert-danger">{{ error }}</div>
@@ -146,7 +146,7 @@
             <div class="alert-success">{{ success | safe }}</div>
         {% endif %}
 
-        <div class="flex space-x-4 mb-0 border-b pb-4">
+        <div class="flex space-x-4 border-b pb-4">
             <a href="{{ url_for('cadastro_cliente', view='novo', next=next_url) }}" 
                class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
                 ➕ Novo

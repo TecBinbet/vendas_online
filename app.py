@@ -176,6 +176,27 @@ app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta_aqui' 
 app.permanent_session_lifetime = timedelta(minutes=60) 
 
+# --- NOVO FILTRO DE MOEDA ---
+@app.template_filter('format_moeda')
+def format_moeda(value):
+    try:
+        if value is None or value == "":
+            return "0,00"
+            
+        # Converte Decimal128 ou string para float se necessário
+        if hasattr(value, 'to_decimal'):
+            value = float(value.to_decimal())
+        elif isinstance(value, str):
+             # Tenta limpar string se vier suja
+             value = float(value.replace('R$', '').replace('.', '').replace(',', '.'))
+        
+        # Formata: 
+        # {:,.2f} -> 1,200.50
+        # replace -> 1.200,50
+        return f"{float(value):,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+    except:
+        return "0,00"
+
 # --- LOCKS GLOBAIS PARA SINCRONIZAÇÃO DE SEQUÊNCIAS ---
 venda_lock = threading.Lock()
 cliente_lock = threading.Lock()
@@ -805,6 +826,7 @@ def dashboard_cliente():
     
     return render_template('dashboard_cliente.html', nick_cliente=nick_cliente, g=g)
 
+
 # --- ROTAS DE VENDAS E CONSULTA (Todas atualizadas para usar get_vendas_db()) ---
 @app.route('/consulta_status_eventos', methods=['GET'])
 @login_required
@@ -816,32 +838,42 @@ def consulta_status_eventos():
     error = session.pop('error_message', None)
     success = session.pop('success_message', None)
     
-    # Pega o nível da sessão para passar ao template
     nivel_usuario = session.get('nivel', 0) 
-    
-    eventos_status = []
     view_mode = request.args.get('mode', 'detailed') 
+    
+    # --- NOVA LÓGICA DE FILTRO ---
+    # Padrão: Ativo e Paralizado
+    filtro_padrao = "ativo,paralizado"
+    filtro_str = request.args.get('filtro', filtro_padrao)
+    
+    if filtro_str == 'todos':
+        status_list = ['ativo', 'paralizado', 'finalizado']
+    else:
+        status_list = filtro_str.split(',')
+        # Limpeza básica para evitar injeção ou erros
+        status_list = [s.strip().lower() for s in status_list if s.strip().lower() in ['ativo', 'paralizado', 'finalizado']]
+        if not status_list: # Se ficar vazio, usa o padrão
+            status_list = ['ativo', 'paralizado']
+            
+    # Cria lista de regex para a busca no Mongo
+    status_regex_list = [re.compile(f'^{s}$', re.IGNORECASE) for s in status_list]
+
+    eventos_status = []
     
     def format_currency(value):
         if value is None: return "R$ 0,00"
         return f"R$ {safe_float(value):.2f}".replace('.', ',')
 
     try:
-        if view_mode == 'simple':
-            status_list = [re.compile('^ativo$', re.IGNORECASE)]
-        else:
-            status_list = [
-                re.compile('^ativo$', re.IGNORECASE),
-                re.compile('^paralizado$', re.IGNORECASE),
-                re.compile('^finalizado$', re.IGNORECASE)
-            ]
-        
-        eventos_cursor = db.eventos.find({'status': {'$in': status_list}}).sort("id_evento", pymongo.ASCENDING)
+        # --- ORDENAÇÃO CRONOLÓGICA (Data/Hora Ascendente) ---
+        # Assim os eventos mais antigos (ou finalizados) ficam no topo se estiverem visíveis,
+        # mas com o filtro, o usuário controla isso.
+        eventos_cursor = db.eventos.find({'status': {'$in': status_regex_list}}).sort("data_hora_evento", pymongo.ASCENDING)
         
         for evento in eventos_cursor:
             id_evento_int = evento.get('id_evento')
             
-            # --- Busca dados de vendas ---
+            # Busca dados de vendas
             colecao_vendas = f"vendas{id_evento_int}"
             vendas_data = None
             if colecao_vendas in db.list_collection_names():
@@ -851,12 +883,8 @@ def consulta_status_eventos():
                 vendas_data = vendas_data_list[0] if vendas_data_list else None
             
             total_unidades = vendas_data.get('total_unidades', 0) if vendas_data else 0
-            
-            # Valores Financeiros (Float)
             valor_vendas_float = safe_float(vendas_data.get('total_valor', 0) if vendas_data else 0)
             premio_total_float = safe_float(evento.get('premio_total', 0))
-            
-            # Cálculo do Saldo (Lucro Bruto)
             saldo_float = valor_vendas_float - premio_total_float
 
             controle = db.controle_venda.find_one({'id_evento': id_evento_int})
@@ -882,12 +910,9 @@ def consulta_status_eventos():
                 'data_ativacao': data_ativado_formatada,
                 'total_vendido': total_unidades,
                 'valor_total_vendido': format_currency(valor_vendas_float),
-                
-                # --- NOVOS CAMPOS FINANCEIROS ---
                 'premio_total': format_currency(premio_total_float),
                 'saldo': format_currency(saldo_float),
                 'saldo_is_positivo': (saldo_float >= 0),
-                
                 'numeracao_atual': num_atual,
                 'is_ativo': evento.get('status').lower() == 'ativo' if evento.get('status') else False, 
                 'limite_maximo': evento.get('numero_maximo')
@@ -896,10 +921,13 @@ def consulta_status_eventos():
 
     except Exception as e:
         print(f"ERRO CRÍTICO ao buscar status de eventos: {e}")
-        return render_template('consulta_status_eventos.html', error=f"Erro interno ao carregar status: {e}", eventos_status=[], g=g, success=success, mode=view_mode, nivel=nivel_usuario)
+        return render_template('consulta_status_eventos.html', error=f"Erro interno: {e}", eventos_status=[], g=g, success=success, mode=view_mode, nivel=nivel_usuario, filtro_atual=filtro_str)
 
-    # Passamos 'nivel=nivel_usuario' para o template
-    return render_template('consulta_status_eventos.html', eventos_status=eventos_status, g=g, mode=view_mode, error=error, success=success, nivel=nivel_usuario)
+    return render_template('consulta_status_eventos.html', 
+                           eventos_status=eventos_status, g=g, 
+                           mode=view_mode, error=error, success=success, 
+                           nivel=nivel_usuario, 
+                           filtro_atual=filtro_str) # Passamos o filtro para pintar os botões
 
 
 @app.route('/evento/mudar_status', methods=['POST'])
@@ -1324,8 +1352,8 @@ def nova_venda():
             error = "ID de evento inválido."
             selected_event = None
             
-    if not selected_event and eventos_enriquecidos:
-        selected_event = eventos_enriquecidos[0]
+    #if not selected_event and eventos_enriquecidos:
+    #    selected_event = eventos_enriquecidos[0]
         
     if selected_event and id_cliente_busca and g.db_status:
         search_term_clean = id_cliente_busca 
@@ -1373,16 +1401,17 @@ def nova_venda():
                            custo=custo,
                            g=g)
 
-# Gravar Vendas
+
 @app.route('/processar_venda', methods=['POST'])
 @login_required
 def processar_venda():
     """
     Processo Crítico de Venda - ATUALIZADO para incluir todos os períodos
     do cliente no comprovante e no link final.
+    INCLUI TRAVA DE SEGURANÇA DE STATUS DO EVENTO.
     """
     db = get_vendas_db()
-    if db is None: # <-- CORREÇÃO PYMONGO
+    if db is None: 
         return redirect(url_for('nova_venda', error="DB Offline. Transação Crítica Falhou."))
 
     id_evento_string = request.form.get('id_evento') 
@@ -1414,6 +1443,17 @@ def processar_venda():
     if not selected_event or not cliente_doc:
         error_redirect_kwargs['error'] = "Evento ou Cliente não encontrado no sistema."
         return redirect(url_for('nova_venda', **error_redirect_kwargs))
+
+    # --- [CRÍTICO] VERIFICAÇÃO DE STATUS DO EVENTO ---
+    status_atual = selected_event.get('status', '').lower()
+    if status_atual != 'ativo':
+        error_redirect_kwargs['error'] = (
+            f"⛔ VENDA CANCELADA! O evento não está mais Ativo. "
+            f"Status atual: '{status_atual.upper()}'. "
+            f"Por favor, selecione outro evento."
+        )
+        return redirect(url_for('nova_venda', **error_redirect_kwargs))
+    # --------------------------------------------------
         
     id_evento_int_para_controle = selected_event.get('id_evento') 
     limite_maximo_cartelas = int(selected_event.get('numero_maximo', 72000))
@@ -1430,7 +1470,7 @@ def processar_venda():
     nick_colaborador = session.get('nick', 'Colaborador') 
     nome_colecao_venda = f"vendas{str(id_evento_int_para_controle).strip()}"
 
-# --- Busca Chave PIX do Colaborador para o Comprovante ---
+    # --- Busca Chave PIX do Colaborador para o Comprovante ---
     chave_pix_colaborador = "Consulte o Colaborador"
     try:
         if colaborador_id != 'N/A':
@@ -1629,6 +1669,7 @@ def processar_venda():
             f"Ocorreu um erro ao gerar o comprovante completo, mas a venda foi registrada."
         )
         return redirect(url_for('nova_venda', id_evento=id_evento_string))
+
 
 
 # --- ROTAS DE CADASTRO DE CLIENTE ---
@@ -2399,6 +2440,20 @@ def cadastro_evento():
             if key in evento:
                 evento[key] = safe_float(evento.get(key, 0.0))
 
+    # --- NOVO: BUSCA LIMITES DAS CARTELAS NOS PARAMETROS ---
+    cartela_limits = {'15': 72000, '25': 90000} # Valores padrão de segurança
+    if db_status:
+        try:
+            param_doc = db.parametros.find_one({})
+            if param_doc:
+                # Carrega se existir, senão mantém o padrão 72000
+                if 'arquivo_cartela_15' in param_doc:
+                    cartela_limits['15'] = int(param_doc['arquivo_cartela_15'])
+                if 'arquivo_cartela_25' in param_doc:
+                    cartela_limits['25'] = int(param_doc['arquivo_cartela_25'])
+        except Exception as e:
+            print(f"Aviso: Não foi possível carregar limites de cartela: {e}")
+
     context = {
         'total_eventos': total_eventos,
         'eventos_lista': eventos_lista,
@@ -2407,7 +2462,8 @@ def cadastro_evento():
         'evento_edicao': evento_edicao, 
         'error': error,
         'success': success,
-        'g': g
+        'g': g,
+        'cartela_limits': cartela_limits
     }
     
     return render_template('cadastro_evento.html', **context)
@@ -2437,21 +2493,60 @@ def gravar_evento():
         descricao = format_title_case(request.form.get('descricao'))
         unidade_de_venda = int(request.form.get('unidade_de_venda', 1))
         tipo_de_cartela = int(request.form.get('tipo_de_cartela', 15)) 
+        #numero_maximo = int(request.form.get('numero_maximo', 72000))
+        #quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
+        #premio_faltaum = clean_float_input('premio_faltaum')
+        # --- LÓGICA DE BLOQUEIO E PADRÕES (NOVO) ---
+        if tipo_de_cartela == 25:
+            # Se for 25 números, FORÇA as regras:
+            premio_faltaum = 0.0
+            quantidade_de_linhas = 1
+            # Padrão 90.000 se não achar no banco
+            numero_maximo_default = 90000 
+            
+            # Busca do banco parametro especifico de 25
+            try:
+                param_doc = db.parametros.find_one({})
+                numero_maximo = int(param_doc.get('arquivo_cartela_25', numero_maximo_default)) if param_doc else numero_maximo_default
+            except:
+                numero_maximo = numero_maximo_default
+
+        else:
+            # Se for 15 números (Comportamento Normal):
+            premio_faltaum = clean_float_input('premio_faltaum')
+            quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
+            # Padrão 72.000 se não achar no banco
+            numero_maximo_default = 72000
+            
+            # Busca do banco parametro especifico de 15
+            try:
+                param_doc = db.parametros.find_one({})
+                numero_maximo = int(param_doc.get('arquivo_cartela_15', numero_maximo_default)) if param_doc else numero_maximo_default
+            except:
+                numero_maximo = numero_maximo_default
         
         valor_de_venda = clean_float_input('valor_de_venda')
         premio_quadra = clean_float_input('premio_quadra')
         premio_linha = clean_float_input('premio_linha')
-        premio_faltaum = clean_float_input('premio_faltaum')
         premio_bingo = clean_float_input('premio_bingo')
         premio_segundobingo = clean_float_input('premio_segundobingo', default_value='0')
         premio_acumulado = clean_float_input('premio_acumulado', default_value='0')
         minimo_de_venda = clean_float_input('minimo_de_venda', default_value='0') 
 
         numero_inicial = int(request.form.get('numero_inicial', 1))
-        numero_maximo = int(request.form.get('numero_maximo', 72000))
-        quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
         bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
-        
+
+        numero_maximo = 72000 # Fallback
+        try:
+            param_doc = db.parametros.find_one({})
+            if param_doc:
+                if tipo_de_cartela == 15:
+                    numero_maximo = int(param_doc.get('arquivo_cartela_15', 72000))
+                elif tipo_de_cartela == 25:
+                    numero_maximo = int(param_doc.get('arquivo_cartela_25', 90000))
+        except Exception as e:
+            print(f"Erro ao buscar limite maximo na gravacao: {e}")        
+
         if not all([data_evento_str, hora_evento, descricao, unidade_de_venda]):
              raise ValueError("Preencha todos os campos obrigatórios (*).")
         

@@ -28,34 +28,17 @@
         .container { max-width: 1200px; margin: 20px auto; padding: 30px; background-color: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
         .card { 
             border-radius: 10px; 
-            padding: 20px; 
+            padding: 10px; 
             transition: transform 0.2s, box-shadow 0.2s;
             border: 1px solid #E5E7EB;
         }
-        .card:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
-        }
+        .card:hover { transform: translateY(-3px); box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1); }
         
-        .status-badge {
-            padding: 4px 10px;
-            border-radius: 5px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            text-transform: uppercase;
-        }
+        .status-badge { padding: 4px 10px; border-radius: 5px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; }
 
         .status-control-btn {
-            padding: 4px 10px;
-            border-radius: 5px;
-            font-size: 0.8rem;
-            font-weight: bold;
-            text-transform: uppercase;
-            cursor: pointer;
-            min-width: 100px; 
-            text-align: center;
-            border: 2px solid transparent;
-            transition: all 0.2s;
+            padding: 4px 10px; border-radius: 5px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase;
+            cursor: pointer; min-width: 100px; text-align: center; border: 2px solid transparent; transition: all 0.2s;
         }
         .status-control-btn:hover { opacity: 0.8; }
         
@@ -64,39 +47,53 @@
         .btn-finalizado { background-color: #6B7280; color: white; border-color: #4B5563; }
         
         .dropdown-menu {
-            position: absolute;
-            top: 100%;
-            right: 0;
-            z-index: 10;
-            background-color: white;
-            border-radius: 6px;
-            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
-            overflow: hidden; 
-            min-width: 120px;
+            position: absolute; top: 100%; right: 0; z-index: 10;
+            background-color: white; border-radius: 6px; box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            overflow: hidden; min-width: 120px;
         }
         .dropdown-item {
-            display: block;
-            width: 100%;
-            padding: 10px 15px;
-            font-weight: 500;
-            text-align: left;
-            background-color: white;
-            border: none;
-            cursor: pointer;
+            display: block; width: 100%; padding: 10px 15px; font-weight: 500; text-align: left;
+            background-color: white; border: none; cursor: pointer;
         }
         .dropdown-item:hover { background-color: #F3F4F6; }
         .dropdown-item-danger:hover { background-color: #FEE2E2; color: #991B1B; }
 
-        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #FCA5A5; }
-        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; }
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 4px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #FCA5A5; }
+        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 4px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #6EE7B7; }
+
+        /* Estilos dos Botões de Filtro */
+        .filter-btn {
+            padding: 8px 16px; border-radius: 20px; border: 1px solid #D1D5DB; font-weight: 600; font-size: 0.9rem;
+            cursor: pointer; transition: all 0.2s; background-color: white; color: #4B5563;
+        }
+        .filter-btn:hover { background-color: #F3F4F6; }
+        
+        /* Estados Ativos dos Filtros */
+        .filter-btn.active-ativo { background-color: #3B82F6; color: white; border-color: #6B7280; } 
+        .filter-btn.active-paralizado { background-color: #3B82F6; color: white; border-color: #6B7280; } 
+        .filter-btn.active-finalizado { background-color: #3B82F6; color: white; border-color: #6B7280; } 
+        .filter-btn.active-todos { background-color: #3B82F6; color: white; border-color: #3B82F6; }
+
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h2 class="text-2xl mb-2 -mt-4 text-blue-800 text-center">
+        <div class="flex justify-center -mt-5 mb-1">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+        </div>
+
+        <h2 class="text-xl font-semibold text-blue-800 text-center mb-4">
             Status dos Eventos
         </h2>
+
+        <div class="flex flex-wrap justify-center gap-2 mb-2 -mt-4">
+            <button onclick="toggleFilter('ativo')" id="btn-ativo" class="filter-btn">Ativos</button>
+            <button onclick="toggleFilter('paralizado')" id="btn-paralizado" class="filter-btn">Paralisados</button>
+            <button onclick="toggleFilter('finalizado')" id="btn-finalizado" class="filter-btn">Finalizados</button>
+            <div class="w-px h-8 bg-gray-300 mx-2"></div>
+            <button onclick="setFilter('todos')" id="btn-todos" class="filter-btn">Todos</button>
+        </div>
 
         {% if error %}
             <div class="alert-danger" role="alert">{{ error }}</div>
@@ -118,7 +115,7 @@
 
                     <div class="card {{ bg_color }}">
                         
-                        <div class="flex justify-between items-start mb-2">
+                        <div class="flex justify-between items-start mb-1">
                             <h3 class="text-xl font-semibold text-gray-800 leading-tight">{{ evento.descricao }}</h3>                         
                             
                             {% if mode != 'simple' %}
@@ -133,37 +130,40 @@
 
                                     <div id="menu-{{ evento.id_evento }}" class="dropdown-menu hidden">
                                         {% if evento.status != 'ativo' %}
-                                            <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'ativo', '{{ mode }}')" class="dropdown-item">Ativar</button>
+                                            <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'ativo', '{{ mode }}')" class="dropdown-item text-green-600">Ativar</button>
                                         {% endif %}
                                         {% if evento.status != 'paralizado' %}
-                                            <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'paralizado', '{{ mode }}')" class="dropdown-item">Paralisar</button>
+                                            <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'paralizado', '{{ mode }}')" class="dropdown-item text-amber-600">Paralisar</button>
                                         {% endif %}
                                         {% if evento.status != 'finalizado' %}
                                             <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'finalizado', '{{ mode }}')" class="dropdown-item dropdown-item-danger">Finalizar</button>
+                                        {% endif %}
+                                        
+                                        {% if nivel >= 3 and evento.status == 'finalizado' %}
+                                            <hr class="my-1 border-gray-200">
+                                            <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}" id="form-excluir-{{ evento.id_evento }}" style="display: block;">
+                                                <button type="button" onclick="confirmDelete('{{ evento.id_evento }}')" class="dropdown-item text-red-600 font-bold hover:bg-red-50">
+                                                    🗑️ EXCLUIR
+                                                </button>
+                                            </form>
                                         {% endif %}
                                     </div>
                                 </div>
                             {% else %}
                                 <div>
-                                    {% if evento.status == 'ativo' %}
-                                        <span class="status-badge bg-primary text-white">ATIVO</span>
-                                    {% elif evento.status == 'paralizado' %}
-                                        <span class="status-badge bg-accent text-gray-800">PARALISADO</span>
-                                    {% else %}
-                                        <span class="status-badge bg-gray-500 text-white">{{ evento.status | upper }}</span>
-                                    {% endif %}
+                                    <span class="status-badge bg-gray-500 text-white">{{ evento.status | upper }}</span>
                                 </div>
                             {% endif %}
                         </div>
                         
-                        <div class="font-semibold text-sm text-gray-600 mb-0 border-b pb-2 space-y-1">
-                            <p>ID: EVE{{ evento.id_evento }}</p>
+                        <div class="font-semibold text-sm text-gray-600 mb-0 border-b pb-2 -space-y-0.5 -mt-1 ">
+                            <p>ID: {{ evento.id_evento }}</p>
                             <p>🗓️ Data: <span class="text-md font-bold text-gray-800">**{{ evento.data_hora }}**</span></p>
                             <p>💰 Unidade: <span class="font-bold text-gray-800">{{ evento.valor_venda_unit }}</span></p>
                             <p>⏳ Início Vendas: <span class=" font-bold text-gray-800">{{ evento.data_ativacao }}</span></p>
                         </div>
                         
-                        <div class="space-y-1">                        
+                        <div class="-space-y-0.5">                        
                             {% if mode != 'simple' %}
                                 <p class="text-md font-semibold text-gray-700">Detalhes das Vendas:</p>
 
@@ -174,23 +174,23 @@
 
                                 <div class="flex justify-between">
                                     <span class="text-gray-600">Valor Total:</span>
-                                    <span class="font-bold text-lg text-primary">{{ evento.valor_total_vendido }}</span>
+                                    <span class="font-bold text-lg text-primary">{{ evento.valor_total_vendido | format_moeda }}</span>
                                 </div>
                                 
                                 {% if nivel == 3 %}
                                     <div class="flex justify-between mt-1 pt-1 border-t border-gray-300 border-dashed">
                                         <span class="text-gray-600 font-medium">Prêmio Total:</span>
-                                        <span class="font-bold text-gray-700">{{ evento.premio_total }}</span>
+                                        <span class="font-bold text-gray-700">{{ evento.premio_total | format_moeda }}</span>
                                     </div>
 
                                     <div class="flex justify-between items-center bg-white bg-opacity-50 rounded px-1 -mx-1">
                                         <span class="text-gray-700 font-bold">Saldo (Lucro):</span>
                                         <span class="font-bold text-lg {% if evento.saldo_is_positivo %}text-green-600{% else %}text-red-600{% endif %}">
-                                            {{ evento.saldo }}
+                                            {{ evento.saldo | format_moeda }}
                                         </span>
                                     </div>
                                 {% endif %}
-                                {% endif %}
+                            {% endif %}
                             
                             <div class="flex justify-between border-t border-dashed pt-1 mt-0">
                                 <span class="text-gray-600">Numeração Atual:</span>
@@ -204,12 +204,9 @@
 
             </div>
         {% else %}
-            <p class="text-center text-gray-600 p-10 bg-gray-100 rounded-lg">Nenhum evento ativo ou relevante encontrado para consulta de status.</p>
+            <p class="text-center text-gray-600 p-10 bg-gray-100 rounded-lg">Nenhum evento encontrado para o filtro selecionado.</p>
         {% endif %}
 
-        <div class="flex justify-center mt-6">
-            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
-        </div>
     </div>
     
     <form method="POST" action="{{ url_for('evento_mudar_status') }}" id="status-change-form" class="hidden">
@@ -219,6 +216,56 @@
     </form>
 
     <script>
+        // --- CONTROLE DOS BOTÕES DE FILTRO ---
+        const currentFilters = "{{ filtro_atual }}".split(',');
+
+        function updateButtonStates() {
+            if (currentFilters.includes('ativo')) document.getElementById('btn-ativo').classList.add('active-ativo');
+            if (currentFilters.includes('paralizado')) document.getElementById('btn-paralizado').classList.add('active-paralizado');
+            if (currentFilters.includes('finalizado')) document.getElementById('btn-finalizado').classList.add('active-finalizado');
+            
+            // Botão Todos só ativa se tiver os 3
+            if (currentFilters.includes('ativo') && currentFilters.includes('paralizado') && currentFilters.includes('finalizado')) {
+                document.getElementById('btn-todos').classList.add('active-todos');
+            }
+        }
+
+        function toggleFilter(status) {
+            let newFilters = [...currentFilters];
+            
+            // Se clicar e já estiver 'todos', remove todos e deixa só o clicado? 
+            // Ou apenas remove/adiciona? Vamos na lógica de toggle simples.
+            
+            if (newFilters.includes(status)) {
+                // Remove (se não for o último, para não ficar lista vazia)
+                if (newFilters.length > 1) {
+                    newFilters = newFilters.filter(item => item !== status);
+                }
+            } else {
+                // Adiciona
+                newFilters.push(status);
+            }
+            
+            reloadWithFilters(newFilters.join(','));
+        }
+
+        function setFilter(status) {
+            if (status === 'todos') {
+                reloadWithFilters('todos');
+            }
+        }
+
+        function reloadWithFilters(filterStr) {
+            const url = new URL(window.location.href);
+            url.searchParams.set('filtro', filterStr);
+            window.location.href = url.toString();
+        }
+
+        // Inicializa botões ao carregar
+        updateButtonStates();
+
+
+        // --- MENU DROPDOWN ---
         function toggleMenu(menuId) {
             document.querySelectorAll('.dropdown-menu').forEach(function(menu) {
                 if (menu.id !== menuId) menu.classList.add('hidden');
@@ -234,6 +281,17 @@
                 document.getElementById('form_novo_status').value = novoStatus;
                 document.getElementById('form_current_mode').value = currentMode;
                 document.getElementById('status-change-form').submit();
+            }
+        }
+        
+        // --- FUNÇÃO DE CONFIRMAÇÃO DE EXCLUSÃO ---
+        function confirmDelete(idEvento) {
+            var msg = `⚠️ ATENÇÃO: EXCLUSÃO DE EVENTO!\n\nVocê tem certeza que deseja EXCLUIR DEFINITIVAMENTE o evento ${idEvento}?\n\nIsso apagará todas as vendas e registros financeiros associados.\nEsta ação não pode ser desfeita.`;
+            if (window.confirm(msg)) {
+                // Pede confirmação dupla
+                if (window.confirm("Confirmação final: Deseja realmente excluir?")) {
+                    document.getElementById('form-excluir-' + idEvento).submit();
+                }
             }
         }
 

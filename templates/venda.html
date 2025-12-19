@@ -14,7 +14,7 @@
                         'primary': '#059669', // Emerald Green
                         'secondary': '#10B981', // Green
                         'danger': '#EF4444',
-                        'modal-bg': '#F0FFF4', // Fundo leve para modal
+                        'modal-bg':'#F0FFF4', // Fundo leve para modal
                         'active-border': '#10B981', // Borda ativa do card
                     }
                 }
@@ -99,7 +99,7 @@
 <body>
 
     <div class="container">
-        <h2 class="text-2xl font-bold mb-0 -mt-2 text-gray-900 text-center">⭐ Nova Venda</h2>
+        <h2 class="text-xl font-bold -mt-4 text-gray-900 text-center">⭐ Nova Venda</h2>
 
         {% if error %}
             <div class="alert alert-danger">{{ error }}</div>
@@ -108,10 +108,10 @@
         {% if success %}
             <!-- Bloco de Sucesso (Mantido igual) -->
             <div class="alert alert-success text-center">
-                <h3 class="text-xl font-bold mb-2">Venda Registrada com Sucesso!</h3>
+                <h3 class="text-xl font-bold mb-1">Venda Registrada com Sucesso!</h3>
                 <div id="receipt-content">{{ success | safe }}</div>
             </div>
-            <div class="flex justify-center mb-2 gap-3 flex-wrap">
+            <div class="flex justify-center mb-1 gap-3 flex-wrap">
                 <button onclick="copyReceiptText()" class="btn btn-primary shadow-lg">📋 Copiar Texto</button>
                 <button onclick="shareReceiptImage()" class="btn btn-warning shadow-lg">🖼️ Gerar Imagem</button>
             </div>
@@ -127,24 +127,18 @@
                    value="{% if selected_event %}{{ selected_event._id }}{% endif %}">
             
             <div class="form-group flex gap-1 items-center">
-                <div >
-                    <label for="evento_display">1. Evento >>></label>
-                    <input type=""hidden text" id="evento_display" readonly class="text-[9px] font-bold form-control bg-gray-100"
-                        value="{% if selected_event %}{{ selected_event.descricao }} {% else %}-- Selecione um Evento Ativo --{% endif %}"
-                    >
-                </div>
                 <button type="button" onclick="openEventSelector()" 
-                        class="py-3 btn btn-primary btn-small self-end mb-3 min-w-[120px]">
-                    Selecionar o Evento
+                        class="py-2 btn btn-primary btn-small self-end mb-3 min-w-[120px]">
+                    Selecionar um Evento
                 </button>
             </div>
 
             {% if selected_event %}
-                <div class="alert alert-info mt-0 mb-1" style="margin-top: 1px;">
+                <div class="alert alert-info -mt-2 mb-1" style="margin-top: 1px;">
                     <h4 class="text-lg font-bold">{{ selected_event.descricao }}</h4>
-                    <p>Data: <strong>{{ selected_event.data_evento }}</strong> | Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
+                    <p>Data: <strong>{{ selected_event.data_evento }}</strong> - | - Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
                     <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
-                    <p>Núm. Inícial: <strong>{{ selected_event.numero_inicial }}</strong> | Núm. Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
+                    <p>Núm. Inícial: <strong>{{ selected_event.numero_inicial }}</strong> - | - Núm. Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
                 </div>
             {% endif %}
 
@@ -180,8 +174,8 @@
 
                 <!-- Resultado da seleção (Cliente encontrado) -->
                 {% if cliente_encontrado %}
-                    <div class="alert alert-success mt-1">
-                        Selecionado: <strong>{{ cliente_encontrado.nick }}</strong> ({{ cliente_encontrado.nome_cliente }}) - ID: <strong>CLI{{ id_cliente_final }}</strong>
+                    <div class="alert alert-success mt-1 -mb-1">
+                        Selecionado: <strong>{{ cliente_encontrado.nick }}</strong> ({{ cliente_encontrado.nome_cliente }}) - ID: <strong>{{ id_cliente_final }}</strong>
                         <input type="hidden" name="id_cliente_final" id="id_cliente_final_hidden" value="{{ id_cliente_final }}">
                     </div>
                 {% elif cliente_busca and not cliente_encontrado %}
@@ -196,7 +190,7 @@
                     <label for="quantidade">3. Quantidade de Unidades:</label>
                     <input type="number" id="quantidade" name="quantidade" 
                            value="{{ quantidade | default(0) }}" min="1" required 
-                           class="form-control" 
+                           class="form-control text-xl px-2 py-1" 
                            oninput="updateTotalCost(); updateCartelasDisplay();">
                     <small class="form-text text-muted font-bold">Total de cartelas: 
                         <span id="cartelas-display">
@@ -238,8 +232,8 @@
     
     <!-- MODAL DE EVENTOS (Mantida igual) -->
     <div id="event-selector-modal" class="modal">
-        <div class="modal-content w-full md:w-3/4 lg:w-1/2">
-            <h3 class="text-xl font-bold mb-1 text-gray-700 border-b pb-1">Selecione o Evento Ativo</h3>
+        <div class="modal-content  bg-blue-200 p-3 w-full md:w-3/4 lg:w-1/2">
+            <h3 class="text-lg font-semibold text-gray-700 border-b pb-1 -mb-1 -mt-1">Selecione o Evento Ativo</h3>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-130 overflow-y-auto pr-2">
                 {% for evento in eventos %}
                     <div class="event-card shadow-md flex flex-col justify-between"
@@ -251,19 +245,19 @@
                         <div>
                             <p class="text-md font-bold text-primary">{{ evento.descricao }} ( {{ evento.id_evento }} )</p>
                              <p class="text-md font-bold text-blue-700 ">{{ evento.data_evento }}   às   {{ evento.hora_evento }}</p>
-                            <div class="mt-1 text-md font-semibold">
+                            <div class="-mt-1 text-md font-semibold">
                                 <p>💰 R$ {{ '%.2f' | format(evento.valor_de_venda_float) }} / Unidade</p>
                             </div>
                         </div>
-                        <div class="mt-1 pt-1  border-t border-dashed">
-                            <button class="py-3 btn btn-primary btn-small w-full mt-0">Selecionar</button>
+                        <div class="pt-1 border-t border-dashed">
+                            <button class="py-3 btn btn-primary btn-small w-full mt-0 bg-green-600 hover:bg-green-800">Selecionar</button>
                         </div>
                     </div>
                 {% else %}
                     <p class="text-center text-gray-500 md:col-span-2">Nenhum evento ativo.</p>
                 {% endfor %}
             </div>
-            <button onclick="closeEventSelector()" class="btn bg-gray-400 text-white hover:bg-gray-500 mt-4 w-full">Fechar</button>
+            <button onclick="closeEventSelector()" class="btn bg-gray-400 text-white hover:bg-green-600 mt-2 w-full">Fechar</button>
         </div>
     </div>
 
@@ -425,17 +419,29 @@
         
         function selectEvent(cardElement) {
             const eventId = cardElement.dataset.id;
-            const descricao = cardElement.dataset.descricao;
+            
+            // Dados para lógica local (opcional, já que vamos dar reload)
             const valor = cleanAndParseFloat(cardElement.dataset.valor);
             const unidade = parseInt(cardElement.dataset.unidade) || 0;
-            const valorFormatado = valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
             
-            document.getElementById('input_id_evento').value = eventId;
-            document.getElementById('evento_display').value = `${descricao} (${valorFormatado})`;
+            // 1. Preenche o ID oculto (Essencial)
+            const inputId = document.getElementById('input_id_evento');
+            if (inputId) {
+                inputId.value = eventId;
+            }
+
+            // 2. Atualiza variáveis globais
             Venda_ValorUnitario = valor;
             Venda_UnidadeCartelas = unidade;
+            
+            // 3. Fecha a Modal
             closeEventSelector();
-            document.getElementById('main-form').submit();
+            
+            // 4. Envia o formulário para recarregar a tela com o evento selecionado
+            const form = document.getElementById('main-form');
+            if (form) {
+                form.submit();
+            }
         }
         
         function syncAndConfirm(event) {
@@ -546,6 +552,13 @@
         document.addEventListener('DOMContentLoaded', () => {
             updateTotalCost();
             updateCartelasDisplay();
+            // --- NOVO: FORÇA A ABERTURA DA SELEÇÃO DE EVENTO ---
+            const inputIdEvento = document.getElementById('input_id_evento');
+            
+            // Se o campo de ID do evento estiver vazio (ou seja, nenhum selecionado)
+            if (!inputIdEvento || !inputIdEvento.value) {
+                openEventSelector(); // Abre a modal
+            }
         });
     </script>
 </body>
