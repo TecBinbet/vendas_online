@@ -810,7 +810,15 @@ def menu_operacoes():
     nivel = session.get('nivel', 1) 
     nome_logado = session.get('nick', 'Colaborador')
     db_status = g.db_status 
-    return render_template('menu.html', nivel=nivel, logado=nome_logado, db_status=db_status)
+
+    error = request.args.get('error')
+   
+    return render_template('menu.html', 
+                           nivel=nivel, 
+                           logado=nome_logado, 
+                           db_status=db_status, 
+                           error=error) # Passa o erro para o template
+
 
 @app.route('/dashboard_cliente')
 @login_required
@@ -1217,6 +1225,8 @@ def gravar_colaborador():
                 raise Exception("Falha ao gerar ID sequencial do colaborador.")
 
             dados_colaborador['id_colaborador'] = novo_id_colaborador_int
+
+            dados_colaborador['status'] = 'ativo'
             
             db.colaboradores.insert_one(dados_colaborador)
             success_msg = f"Colaborador {nick} salvo com sucesso! ID: {novo_id_colaborador_int}."
@@ -1287,6 +1297,46 @@ def excluir_colaborador(id_colaborador):
         print(f"ERRO CRÍTICO na exclusão de colaborador ID {id_colaborador}: {e}")
         return redirect(url_for('cadastro_colaborador', error=f"Erro interno ao excluir colaborador.", view='listar'))
 
+@app.route('/colaborador/alternar_status/<int:id_colaborador>', methods=['POST'])
+@login_required
+def alternar_status_colaborador(id_colaborador):
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    # Apenas admin (nível 3) pode bloquear/ativar
+    if session.get('nivel', 0) < 3: 
+        return redirect(url_for('cadastro_colaborador', view='listar', error="Acesso Negado."))
+    
+    # Não pode bloquear a si mesmo
+    if int(session.get('id_colaborador', 0)) == id_colaborador:
+        return redirect(url_for('cadastro_colaborador', view='listar', error="Você não pode bloquear seu próprio usuário."))
+
+    try:
+        colaborador = db.colaboradores.find_one({'id_colaborador': id_colaborador})
+        if not colaborador:
+             return redirect(url_for('cadastro_colaborador', view='listar', error="Colaborador não encontrado."))
+
+        # Lógica de alternância (Toggle)
+        status_atual = colaborador.get('status', 'ativo') # Assume ativo se não existir
+        novo_status = 'bloqueado' if status_atual == 'ativo' else 'ativo'
+        
+        db.colaboradores.update_one(
+            {'id_colaborador': id_colaborador},
+            {'$set': {'status': novo_status}}
+        )
+        
+        acao = "BLOQUEADO" if novo_status == 'bloqueado' else "ATIVADO"
+        msg = f"Colaborador {colaborador.get('nick')} foi {acao} com sucesso."
+        
+        # Redireciona mantendo a view atual se possível (listar ou consulta)
+        view_retorno = request.args.get('view', 'listar')
+        return redirect(url_for('cadastro_colaborador', view=view_retorno, success=msg))
+
+    except Exception as e:
+        print(f"Erro ao alternar status: {e}")
+        return redirect(url_for('cadastro_colaborador', view='listar', error="Erro interno ao alterar status."))
+
+
 
 # --- ROTAS DE VENDA ---
 @app.route('/venda/nova', methods=['GET'])
@@ -1294,6 +1344,23 @@ def excluir_colaborador(id_colaborador):
 def nova_venda():
     db = get_vendas_db()
     if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
+
+    # --- VERIFICAÇÃO DE SEGURANÇA: STATUS DO COLABORADOR ---
+    # Verifica no banco se o usuário foi bloqueado recentemente
+    if 'id_colaborador' in session:
+        try:
+            uid = session.get('id_colaborador')
+            query_colab = {'id_colaborador': int(uid)} if str(uid).isdigit() else {'_id': try_object_id(uid)}
+            
+            colab_atual = db.colaboradores.find_one(query_colab, {'status': 1})
+            
+            if colab_atual and colab_atual.get('status') == 'bloqueado':
+                # ALTERAÇÃO: Não desloga (session.clear removido) e manda para o MENU
+                return redirect(url_for('menu_operacoes', 
+                                      error="⛔ ACESSO BLOQUEADO: Seu usuário está restrito para realizar vendas."))
+        except Exception as e:
+            print(f"Erro ao verificar bloqueio de usuário: {e}")
+    # -------------------------------------------------------
 
     error = request.args.get('error')
     success = session.pop('success_message', None) 

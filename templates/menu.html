@@ -10,6 +10,11 @@
     <div class="container">
         <h4 class="text-sm mt-2">Olá, {{ logado }} </h4>
         <h2>🎯 Menu de Operações</h2>
+        {% if error %}
+            <div style="background-color: #FEE2E2; color: #991B1B; padding: 6px; border: 1px solid #FCA5A5; border-radius: 8px; margin-bottom: 10px; text-align: center; font-weight: bold;">
+                {{ error }}
+            </div>
+        {% endif %}
         <a href="{{ url_for('nova_venda') }}" class="menu-item menu-item-venda">⭐ Nova Venda</a>
         <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" class="menu-item">🗓️ Consulta de Eventos Ativos</a>
         <a href="{{ url_for('consulta_vendas') }}" class="menu-item">

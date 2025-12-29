@@ -323,6 +323,20 @@
                              {% if colaborador.nome_colaborador != 'Tecbin' %}
 
                                 <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+
+<form method="POST" action="{{ url_for('alternar_status_colaborador', id_colaborador=colaborador.id_colaborador) }}?view=consulta" class="inline-block">
+        {% set st = colaborador.get('status', 'ativo') %}
+        {% if st == 'ativo' %}
+            <button type="submit" class="action-link text-amber-600 hover:text-amber-800" onclick="return confirm('Deseja BLOQUEAR este colaborador?')">
+
+                ⛔ Bloquear
+            </button>
+        {% else %}
+            <button type="submit" class="action-link text-green-600 hover:text-green-800">
+                ✅ Ativar
+            </button>
+        {% endif %}
+    </form>
                                 
                                 <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
                                       id="form-excluir-consulta-{{ colaborador.id_colaborador }}"
@@ -364,6 +378,13 @@
                             {% for colaborador in colaboradores_lista %}
                             <tr class="list-row hover:bg-gray-100 transition duration-150">
                                 <td class="py-3 px-4 border-b text-sm">{{ colaborador.id_colaborador }}</td>
+                                <td class="py-3 px-4 border-b text-sm">
+                                      {{ colaborador.nome_colaborador }} ({{ colaborador.nick }})
+                                      {% if colaborador.get('status') == 'bloqueado' %}
+                                           <span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-bold ml-2">BLOQUEADO</span>
+                                      {% endif %}
+                                </td>
+
                                 <td class="py-3 px-4 border-b text-sm">{{ colaborador.nome_colaborador }} ({{ colaborador.nick }})</td>
                                 <td class="py-3 px-4 border-b text-sm font-semibold">{{ colaborador.nivel }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ colaborador.telefone }}</td>
