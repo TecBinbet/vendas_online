@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Minha Conta</title>
+    <title>Minha Conta & Financeiro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <script>
@@ -15,6 +15,7 @@
                         'secondary': '#10B981',
                         'accent': '#F59E0B',
                         'info': '#3B82F6',
+                        'danger': '#EF4444'
                     }
                 }
             }
@@ -22,9 +23,11 @@
     </script>
     <style>
         body { font-family: 'Inter', sans-serif; background-color: #F3F4F6; }
-        .container { max-width: 600px; margin: 5px auto; padding: 5px; }
-        
-        .card { background: white; padding: 20px; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .container { max-width: 800px; margin: 5px auto; padding: 10px; }
+        .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; }
+        .stat-card { text-align: center; padding: 10px; border-radius: 8px; background-color: #F9FAFB; border: 1px solid #E5E7EB; }
+        .stat-value { font-size: 1.25rem; font-weight: 800; color: #1F2937; }
+        .stat-label { font-size: 0.75rem; color: #6B7280; text-transform: uppercase; font-weight: 600; }
         
         /* Modal Styles */
         .modal-overlay {
@@ -33,192 +36,305 @@
             display: none; justify-content: center; align-items: center; z-index: 1000;
         }
         .modal-content {
-            background-color: #FFF; padding: 2rem; border-radius: 8px;
-            width: 90%; max-width: 400px; box-shadow: 0 5px 10px rgba(0,0,0,0.3);
-            text-align: center;
+            background-color: #FFF; padding: 1.5rem; border-radius: 8px;
+            width: 90%; max-width: 450px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
         }
-        .modal-btn {
-            padding: 0.6rem 1rem; border-radius: 6px; font-weight: 600; cursor: pointer; width: 100%; margin-top: 10px;
-        }
-        .btn-cancel { background-color: #D1D5DB; color: #374151; }
     </style>
 </head>
 <body>
 
-    <div class="bg-primary text-white p-0 shadow mb-2">
-        <div class="container mx-auto flex justify-between items-center max-w-2xl">
-            <h1 class="text-xl font-bold">Minha Conta</h1>
-            <a href="{{ url_for('menu_operacoes') }}" class="text-sm bg-white text-primary px-7 py-1 rounded font-bold hover:bg-gray-100">Voltar</a>
+    <div class="bg-primary text-white shadow mb-1 sticky top-0 z-50">
+        <div class="container mx-auto flex justify-between items-center">
+            <h1 class="text-lg font-bold">Minha Conta</h1>
+            <a href="{{ url_for('menu_operacoes') }}" class="text-xs bg-white text-primary px-6 py-1 rounded font-bold hover:bg-gray-100">Voltar</a>
         </div>
     </div>
 
     <div class="container">
+        
+        {% if request.args.get('error') %}
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-1 rounded -mt-2 text-sm font-bold">
+                {{ request.args.get('error') }}
+            </div>
+        {% endif %}
+        {% if request.args.get('success') %}
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-1 rounded -mt-2 text-sm font-bold">
+                {{ request.args.get('success') }}
+            </div>
+        {% endif %}
 
         <div class="card">
-            <h2 class="text-gray-500 text-sm font-bold uppercase mb-1">Gerenciamento de Vendas</h2>
-            
-            <div class="mb-4">
-                <label class="block text-gray-700 font-bold mb-1">Colaborador Ativo:</label>
-                
-                {% if nivel > 1 %}
-                    <select id="select-colaborador" class="w-full p-2 border border-gray-300 rounded-lg bg-gray-50 focus:ring-2 focus:ring-primary outline-none text-lg">
-                        <option value="{{ id_logado }}" selected>Eu ({{ nick_logado }})</option>
-                        <option disabled>----------------</option>
-                        {% for colab in colaboradores %}
-                            {% if colab.id_colaborador != id_logado %}
-                                <option value="{{ colab.id_colaborador }}">{{ colab.nick }}</option>
-                            {% endif %}
-                        {% endfor %}
-                    </select>
-                    <p class="text-xs text-gray-500 mt-0">Como administrador, você pode gerar links para outros vendedores.</p>
-                {% else %}
-                    <div class="w-full p-3 border border-gray-300 rounded-lg bg-gray-100 text-gray-600 font-bold text-lg">
-                        {{ nick_logado }}
-                        <input type="hidden" id="select-colaborador" value="{{ id_logado }}">
+            <form method="GET" action="{{ url_for('minha_conta') }}" id="form-filtro">
+                <div class="flex flex-col gap-3">
+                    
+                    {% if nivel > 1 %}
+                        <div>
+                            <label class="block text-gray-500 text-xs font-bold uppercase mb-1">Visualizar Conta De:</label>
+                            <select name="target_id" class="w-full p-2 border rounded bg-gray-50 text-sm font-semibold" onchange="this.form.submit()">
+                                <option value="{{ session['id_colaborador'] }}" {% if target_colab.id_colaborador == session['id_colaborador']|int %}selected{% endif %}>
+                                    Eu ({{ session['nick'] }})
+                                </option>
+                                <option disabled>----------------</option>
+                                {% for colab in colaboradores %}
+                                    {% if colab.id_colaborador != session['id_colaborador']|int %}
+                                        <option value="{{ colab.id_colaborador }}" {% if target_colab.id_colaborador == colab.id_colaborador %}selected{% endif %}>
+                                            {{ colab.nick }}
+                                        </option>
+                                    {% endif %}
+                                {% endfor %}
+                            </select>
                         </div>
+                    {% else %}
+                       <div class="flex justify-between items-center">
+                           <span class="font-bold text-gray-700">{{ target_colab.nick }}</span>
+                           <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Nível {{ nivel }}</span>
+                           <input type="hidden" name="target_id" value="{{ target_colab.id_colaborador }}">
+                       </div>
+                    {% endif %}
+
+                    <div>
+                        <label class="block text-gray-500 text-xs font-bold uppercase mb-1">Selecionar Evento para Balanço:</label>
+                        <select name="id_evento" class="w-full p-2 border border-blue-300 rounded bg-white text-lg font-semibold text-blue-900" onchange="this.form.submit()">
+                            <option value="">-- Selecione um Evento --</option>
+                            {% for evento in eventos %}
+                                <option value="{{ evento.id_evento }}" {% if evento_selecionado and evento.id_evento == evento_selecionado.id_evento %}selected{% endif %}>
+                                    {{ evento.data_evento }} - {{ evento.descricao }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+            </form>
+            
+            <div class="-mt-2 pt-4 border-t border-dashed">
+                <button onclick="acionarGeracaoLink()" 
+                        class="w-full bg-gray-200 hover:bg-green-300 text-gray-700 font-semibold py-3 rounded flex items-center justify-center gap-2 text-sm transition">
+                    <span>🔗</span> Gerar Link de Cadastro/Venda
+                </button>
+            </div>
+        </div>
+
+        {% if evento_selecionado %}
+            <div class="card bg-gradient-to-b from-white to-blue-50">
+                <h3 class="text-gray-700 font-bold mb-2 flex items-center gap-2 -mt-4">
+                    📊 Balanço: <span class="text-blue-600">{{ evento_selecionado.descricao }}</span>
+                </h3>
+                
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                    <div class="stat-card border-blue-200">
+                        <div class="stat-value text-blue-600">{{ financeiro.total_vendas_qty }}</div>
+                        <div class="stat-label">Vendas (Qtd)</div>
+                    </div>
+                    <div class="stat-card border-blue-200">
+                        <div class="stat-value text-blue-600">R$ {{ financeiro.total_vendas_valor | format_moeda }}</div>
+                        <div class="stat-label">Total Vendas</div>
+                    </div>
+                    <div class="stat-card border-green-200 bg-green-50">
+                        <div class="stat-value text-green-600">R$ {{ financeiro.comissao_valor | format_moeda }}</div>
+                        <div class="stat-label">Minha Comissão</div>
+                    </div>
+                    
+                    <div class="stat-card border-yellow-200 bg-yellow-50">
+                        <div class="stat-value text-yellow-600">R$ {{ financeiro.total_pago | format_moeda }}</div>
+                        <div class="stat-label">Total Pago</div>
+                    </div>
+                </div>
+
+                <div class="bg-white p-3 rounded-lg border border-red-200 shadow-sm flex justify-between items-center mb-2">
+                    <span class="text-gray-500 font-bold text-sm uppercase">Saldo Devedor (A Pagar):</span>
+                    <span class="text-xl font-black {% if financeiro.saldo_devedor > 0 %}text-red-600{% else %}text-green-600{% endif %}">
+                        R$ {{ financeiro.saldo_devedor | format_moeda }}
+                    </span>
+                </div>
+
+                <div class="flex gap-2">
+                    <a href="{{ url_for('consulta_vendas_detalhes', id_evento=evento_selecionado.id_evento, id_colaborador=target_colab.id_colaborador) }}" 
+                       class="flex-1 bg-blue-600 text-white text-center py-2 rounded font-bold hover:bg-blue-700 text-sm">
+                        📄 Ver Vendas Detalhadas
+                    </a>
+                    
+                    {% if financeiro.saldo_devedor > 0 %}
+                    <button onclick="openPaymentModal({{ financeiro.saldo_devedor }})" 
+                            class="flex-1 bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700 text-sm shadow-lg animate-pulse">
+                        💸 Informar Pagamento
+                    </button>
+                    {% else %}
+                    <button disabled class="flex-1 bg-gray-300 text-gray-500 py-2 rounded font-bold text-sm cursor-not-allowed">
+                        Quitado ✅
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+
+            <div class="card">
+                <h3 class="text-gray-500 text-xs font-bold uppercase mb-1 -mt-4 border-b pb-2">Histórico de Pagamentos Realizados</h3>
+                
+                {% if pagamentos %}
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm text-left">
+                            <thead class="bg-gray-300 text-gray-700 uppercase text-xs">
+                                <tr>
+                                    <th class="px-2 py-1">Data</th>
+                                    <th class="px-2 py-1">Valor</th>
+                                    <th class="px-2 py-1">Registrado Por</th>
+                                    {% if nivel >= 3 %}
+                                    <th class="px-2 py-1 text-center">Ação</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-200">
+                                {% for pag in pagamentos %}
+                                <tr>
+                                    <td class="px-2 py-3">{{ pag.data_hora_fmt }}</td>
+                                    <td class="px-2 py-3 font-bold text-green-700">R$ {{ pag.valor_pago | format_moeda }}</td>
+                                    <td class="px-2 py-3 text-xs text-gray-500">{{ pag.registrado_por_nick }}</td>
+                                    {% if nivel >= 3 %}
+                                    <td class="px-2 py-3 text-center">
+                                        <form method="POST" action="{{ url_for('excluir_pagamento') }}" onsubmit="return confirm('Tem certeza que deseja excluir este pagamento?')">
+                                            <input type="hidden" name="id_pagamento" value="{{ pag._id }}">
+                                            <input type="hidden" name="id_evento" value="{{ evento_selecionado.id_evento }}">
+                                            <input type="hidden" name="target_id" value="{{ target_colab.id_colaborador }}">
+                                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold">🗑️</button>
+                                        </form>
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <p class="text-center text-gray-400 py-4 text-sm">Nenhum pagamento registrado para este evento.</p>
                 {% endif %}
             </div>
-
-            <button onclick="acionarGeracaoLink()" 
-                    class="w-full bg-accent hover:bg-yellow-500 text-white font-bold py-2 -mt-2 rounded-lg shadow-lg flex items-center justify-center space-x-2 transition transform hover:scale-105">
-                <span class="text-2xl">🔗</span>
-                <span class="text-xl">Gerar Link de Venda</span>
-            </button>
-        </div>
-
-        <div class="card opacity-50">
-            <h2 class="text-gray-500 text-sm font-bold uppercase mb-2">Eventos Disponíveis</h2>
-            <div class="p-4 border-2 border-dashed border-gray-300 rounded-lg text-center text-gray-400">
-                Em breve: Seleção de eventos e regras de consulta aqui.
-            </div>
-        </div>
+        {% endif %}
 
     </div>
 
-    <input type="hidden" id="base-http-apk" value="{{ g.parametros_globais.http_vendas }}">
-    <input type="hidden" id="current-id-sala" value="{{ g.id_sala }}">
+    <div id="payment-modal" class="modal-overlay">
+        <div class="modal-content">
+            <h3 class="text-xl font-bold text-gray-800 mb-1 -mt-4">Registrar Pagamento</h3>
+            
+            <p class="text-sm text-gray-600 mb-1">Evento: <strong id="modal-evento-nome"></strong></p>
+            <p class="text-sm text-gray-600 mb-1">Saldo Devedor Atual: <strong class="text-red-600 text-lg" id="modal-saldo-display"></strong></p>
+
+            <form method="POST" action="{{ url_for('registrar_pagamento') }}">
+                <input type="hidden" name="id_evento" value="{% if evento_selecionado %}{{ evento_selecionado.id_evento }}{% endif %}">
+                <input type="hidden" name="id_colaborador_alvo" value="{{ target_colab.id_colaborador }}">
+                
+                <div class="mb-2">
+                    <label class="block text-gray-700 text-sm font-bold mb-1">Valor a Pagar (R$):</label>
+                    <input type="number" id="valor_pagamento" name="valor_pagamento" step="0.01" min="0.01" required
+                           class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 outline-none text-xl font-bold text-center"
+                           placeholder="0,00">
+                    <small class="text-red-500 hidden" id="erro-valor">O valor não pode exceder o saldo devedor.</small>
+                </div>
+
+                <div class="flex gap-2">
+                    <button type="button" onclick="document.getElementById('payment-modal').style.display='none'" 
+                            class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 rounded">
+                        Cancelar
+                    </button>
+                    <button type="submit" id="btn-submit-pagto"
+                            class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded shadow">
+                        Confirmar Pagamento
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <div id="qr-modal" class="modal-overlay" onclick="closeQrModal()">
         <div class="modal-content flex flex-col items-center" onclick="event.stopPropagation()">
             <h3 class="text-xl font-bold text-primary">Link de Venda</h3>
-            <p class="text-sm text-gray-600 ">Vincular vendas ao colaborador:</p>
-            <p class="text-xl font-bold text-gray-800 mb-4" id="qr-colab-nick">...</p>
+            <p class="text-sm text-gray-600 ">Vincular vendas a: <strong>{{ target_colab.nick }}</strong></p>
             
-            <div id="qrcode-container" class="border p-2 rounded mb-4"></div>
-            
+            <div id="qrcode-container" class="border p-2 rounded mb-4 mt-2"></div>
             <p id="qr-link-text" class="text-xs text-gray-300 break-all text-center mb-2 px-2 bg-gray-100 rounded py-1 w-full"></p>
-
-            <button type="button" id="btn-copy-link" onclick="copiarLinkQRCode()"
-                    class="mb-1 px-4 py-3 bg-blue-600 text-white rounded hover:bg-blue-800 font-bold w-full text-center shadow">
-                📋 Copiar Link
-            </button>
-
-            <button type="button" class="modal-btn btn-cancel hover:bg-green-300" onclick="closeQrModal()">Fechar</button>
+            <button type="button" id="btn-copy-link" onclick="copiarLinkQRCode()" class="mb-1 px-4 py-2 bg-blue-600 text-white rounded font-bold w-full">📋 Copiar Link</button>
+            <button type="button" class="w-full py-2 mt-2 bg-gray-200 rounded font-bold text-sm" onclick="closeQrModal()">Fechar</button>
         </div>
     </div>
 
+    <input type="hidden" id="base-http-apk" value="{{ g.parametros_globais.http_vendas }}">
+    <input type="hidden" id="current-id-sala" value="{{ g.id_sala }}">
+    <input type="hidden" id="colab-target-id" value="{{ target_colab.id_colaborador }}">
+    <input type="hidden" id="colab-target-nick" value="{{ target_colab.nick }}">
+
     <script>
-        // --- CONFIGURAÇÃO E ELEMENTOS ---
-        const qrModal = document.getElementById('qr-modal');
-        const qrContainer = document.getElementById('qrcode-container');
-        const qrColabNick = document.getElementById('qr-colab-nick');
-        const qrLinkText = document.getElementById('qr-link-text');
-        const btnCopyLink = document.getElementById('btn-copy-link');
-        
-        const baseHttpApkInput = document.getElementById('base-http-apk');
-        const idSalaInput = document.getElementById('current-id-sala');
-        const selectColaborador = document.getElementById('select-colaborador');
+        // --- LÓGICA DE PAGAMENTO ---
+        let saldoMaximo = 0;
 
-        // --- AÇÃO DO BOTÃO PRINCIPAL ---
-        function acionarGeracaoLink() {
-            // Pega o ID do colaborador (do select ou do input hidden)
-            const idColaborador = selectColaborador.value;
+        function openPaymentModal(saldo) {
+            saldoMaximo = parseFloat(saldo);
+            const eventoNome = "{{ evento_selecionado.descricao if evento_selecionado else '' }}";
             
-            // Pega o Texto/Nick para exibir na modal
-            let nickColaborador = "";
-            if (selectColaborador.tagName === 'SELECT') {
-                // Se for select, pega o texto da option selecionada
-                nickColaborador = selectColaborador.options[selectColaborador.selectedIndex].text;
-            } else {
-                // Se for input hidden (Nível 1), pega o texto da div visual (opcional, ou passa via template)
-                // Vamos simplificar e pegar o valor do template jinja renderizado no input se precisar, 
-                // mas aqui vou usar uma lógica genérica:
-                nickColaborador = "{{ nick_logado }}"; 
-            }
-
-            gerarQRCode(idColaborador, nickColaborador);
+            document.getElementById('modal-evento-nome').textContent = eventoNome;
+            document.getElementById('modal-saldo-display').textContent = "R$ " + saldo.toLocaleString('pt-BR', {minimumFractionDigits: 2});
+            document.getElementById('valor_pagamento').max = saldo;
+            document.getElementById('valor_pagamento').value = "";
+            document.getElementById('erro-valor').classList.add('hidden');
+            
+            document.getElementById('payment-modal').style.display = 'flex';
+            setTimeout(() => document.getElementById('valor_pagamento').focus(), 100);
         }
 
-        // --- FUNÇÃO GERADORA (Adaptada) ---
+        const inputValor = document.getElementById('valor_pagamento');
+        if(inputValor){
+            inputValor.addEventListener('input', function() {
+                const val = parseFloat(this.value);
+                const btn = document.getElementById('btn-submit-pagto');
+                const erro = document.getElementById('erro-valor');
+                
+                if (val > saldoMaximo + 0.01) { // Margem de erro pequena
+                    erro.classList.remove('hidden');
+                    btn.disabled = true;
+                    btn.classList.add('opacity-50', 'cursor-not-allowed');
+                } else {
+                    erro.classList.add('hidden');
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            });
+        }
+
+        // --- LÓGICA DE QR CODE (Mantida e Adaptada) ---
+        function acionarGeracaoLink() {
+            const idColab = document.getElementById('colab-target-id').value;
+            const nickColab = document.getElementById('colab-target-nick').value;
+            gerarQRCode(idColab, nickColab);
+        }
+
         function gerarQRCode(idColaborador, nick) {
-            qrContainer.innerHTML = '';
+            const container = document.getElementById('qrcode-container');
+            container.innerHTML = '';
             
-            // URL Base
-            let baseUrl = baseHttpApkInput ? baseHttpApkInput.value : '';
-            if (baseUrl.endsWith('/')) { baseUrl = baseUrl.slice(0, -1); }
-
-            // ID Sala
-            const idSala = idSalaInput ? idSalaInput.value : '000';
-
-            // Monta URL: http://site.com?id_sala=XXX&ref=YYY
-            // Nota: idcliente vai vazio pois é um link genérico de cadastro/venda
+            let baseUrl = document.getElementById('base-http-apk').value;
+            if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
+            const idSala = document.getElementById('current-id-sala').value;
             const finalUrl = `${baseUrl}?id_sala=${idSala}&ref=${idColaborador}`;
 
-            // Atualiza UI da Modal
-            qrColabNick.textContent = nick;
-            qrLinkText.textContent = finalUrl;
-            btnCopyLink.textContent = "📋 Copiar Link";
+            document.getElementById('qr-link-text').textContent = finalUrl;
+            document.getElementById('btn-copy-link').textContent = "📋 Copiar Link";
 
-            // Gera QR
-            new QRCode(qrContainer, {
+            new QRCode(container, {
                 text: finalUrl,
                 width: 200, height: 200,
                 colorDark : "#000000", colorLight : "#ffffff",
                 correctLevel : QRCode.CorrectLevel.H
             });
-
-            qrModal.style.display = 'flex';
+            document.getElementById('qr-modal').style.display = 'flex';
         }
 
-        function closeQrModal() {
-            qrModal.style.display = 'none';
-        }
+        function closeQrModal() { document.getElementById('qr-modal').style.display = 'none'; }
 
-        // --- FUNÇÃO DE COPIAR (Robustez Fallback) ---
         function copiarLinkQRCode() {
-            const linkText = qrLinkText.textContent;
-            if (!linkText) return;
-
-            if (navigator.clipboard && window.isSecureContext) {
-                navigator.clipboard.writeText(linkText)
-                    .then(() => feedbackBotaoCopiado())
-                    .catch(() => copiaFallback(linkText));
-            } else {
-                copiaFallback(linkText);
-            }
-        }
-
-        function copiaFallback(texto) {
-            const textArea = document.createElement("textarea");
-            textArea.value = texto;
-            textArea.style.top = "0"; textArea.style.left = "0"; textArea.style.position = "fixed";
-            document.body.appendChild(textArea);
-            textArea.focus(); textArea.select();
-
-            try {
-                const successful = document.execCommand('copy');
-                if (successful) feedbackBotaoCopiado();
-                else alert('Erro ao copiar manual.');
-            } catch (err) {
-                console.error('Erro:', err);
-            }
-            document.body.removeChild(textArea);
-        }
-
-        function feedbackBotaoCopiado() {
-            const originalText = "📋 Copiar Link"; 
-            btnCopyLink.textContent = "Copiado! ✅";
-            setTimeout(() => { btnCopyLink.textContent = originalText; }, 2000);
+            const linkText = document.getElementById('qr-link-text').textContent;
+            navigator.clipboard.writeText(linkText).then(() => {
+                const btn = document.getElementById('btn-copy-link');
+                btn.textContent = "Copiado! ✅";
+                setTimeout(() => { btn.textContent = "📋 Copiar Link"; }, 2000);
+            });
         }
     </script>
 </body>

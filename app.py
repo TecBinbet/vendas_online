@@ -1620,6 +1620,19 @@ def processar_venda():
             print(f"{log_prefix} LOG 3D: Inserindo venda na coleção '{nome_colecao_venda}'...")
             db[nome_colecao_venda].insert_one(registro_venda)
             print(f"{log_prefix} ... Venda inserida.")
+
+            valor_debito = -abs(valor_total_atual) 
+            desc_transacao = f"Compra de {quantidade} kit(s) - {selected_event.get('descricao')}"
+
+            registrar_transacao_cliente(
+                db=db,
+                id_cliente=id_cliente_final,
+                valor=valor_debito,
+                tipo='compra',
+                descricao=desc_transacao,
+                id_evento=id_evento_int_para_controle,
+                id_venda=id_venda_formatado
+            )
             
         except Exception as e:
             venda_lock.release()
@@ -2907,7 +2920,7 @@ def consulta_vendas():
 def consulta_vendas_detalhes():
     """Mostra a lista detalhada de vendas para um filtro específico."""
     db = get_vendas_db()
-    if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
+    if db is None: return redirect(url_for('login')) 
 
     nivel_usuario = session.get('nivel', 1)
     id_colaborador_logado = session.get('id_colaborador', 'N/A')
@@ -2927,8 +2940,15 @@ def consulta_vendas_detalhes():
     comissao_map = {} 
 
     try:
-        evento_oid = try_object_id(id_evento_param)
-        selected_event = db.eventos.find_one({'_id': evento_oid})
+        # --- CORREÇÃO AQUI: Suporte a ID Inteiro e ObjectId ---
+        selected_event = None
+        if id_evento_param:
+            # Se for numérico (ex: '10'), busca pelo campo id_evento
+            if str(id_evento_param).isdigit():
+                selected_event = db.eventos.find_one({'id_evento': int(id_evento_param)})
+            else:
+                # Caso contrário, tenta pelo _id (ObjectId)
+                selected_event = db.eventos.find_one({'_id': try_object_id(id_evento_param)})
         
         if not selected_event:
             error = "Evento não encontrado."
@@ -2942,17 +2962,25 @@ def consulta_vendas_detalhes():
         
         query_filter = {'id_evento': id_evento_int}
         colab_ids_para_buscar_comissao = []
+        
         if nivel_usuario < 3:
             query_filter['id_colaborador'] = id_colaborador_logado
             info_colaborador = session.get('nick', 'N/A')
             info_telefone_cliente = session.get('telefone_cliente','')
             if isinstance(id_colaborador_logado, int):
                  colab_ids_para_buscar_comissao.append(id_colaborador_logado)       
+        
         elif nivel_usuario == 3:
             if id_colaborador_param and id_colaborador_param != 'ALL':
-                id_colab_int = int(id_colaborador_param)
+                # Garante conversão para int se possível
+                try:
+                    id_colab_int = int(id_colaborador_param)
+                except ValueError:
+                    id_colab_int = id_colaborador_param # Fallback para string se for antigo
+
                 query_filter['id_colaborador'] = id_colab_int
                 colab_ids_para_buscar_comissao.append(id_colab_int)
+                
                 colab_doc = db.colaboradores.find_one({'id_colaborador': id_colab_int}, {'nick': 1})
                 info_colaborador = colab_doc.get('nick') if colab_doc else f"ID {id_colab_int}"
                 info_telefone_cliente = session.get('telefone_cliente','')
@@ -2991,7 +3019,9 @@ def consulta_vendas_detalhes():
     except Exception as e:
         print(f"Erro em consulta_vendas_detalhes: {e}")
         error = f"Erro interno: {e}"
-    print(f" Telefone >>>>  :{info_telefone_cliente}")
+        import traceback
+        traceback.print_exc()
+
     return render_template('consulta_vendas_detalhes.html',
                            g=g,
                            error=error,
@@ -3002,7 +3032,9 @@ def consulta_vendas_detalhes():
                            info_tipo_cartela=info_tipo_cartela,
                            info_telefone_cliente=info_telefone_cliente)
 
+
 # Minha Conta
+# --- ATUALIZAÇÃO DA ROTA MINHA CONTA ---
 @app.route('/minha_conta', methods=['GET'])
 @login_required
 def minha_conta():
@@ -3010,26 +3042,225 @@ def minha_conta():
     if db is None: return redirect(url_for('login'))
 
     nivel_usuario = session.get('nivel', 1)
-    id_colaborador_logado = session.get('id_colaborador')
-    nick_logado = session.get('nick')
+    # Se for admin (nivel 3), pode ver a conta de outros se passar o parametro
+    id_logado_session = session.get('id_colaborador')
+    nick_logado_session = session.get('nick')
+    
+    # ID do colaborador alvo da consulta
+    target_id_colaborador = request.args.get('target_id', id_logado_session)
+    
+    # Se tentar ver outro sem ser admin, força o próprio
+    if str(target_id_colaborador) != str(id_logado_session) and nivel_usuario < 3:
+        target_id_colaborador = id_logado_session
 
+    # Conversão segura para int
+    try:
+        target_id_colaborador_int = int(target_id_colaborador)
+    except:
+        target_id_colaborador_int = None
+
+    # Busca dados do colaborador alvo (para pegar comissão e nick correto)
+    colaborador_alvo = db.colaboradores.find_one({'id_colaborador': target_id_colaborador_int})
+    if not colaborador_alvo:
+        return redirect(url_for('menu_operacoes', error="Colaborador não encontrado."))
+
+    taxa_comissao = colaborador_alvo.get('comissao', g.parametros_globais.get('comissao_padrao', 20))
+    
+    # Lista de colaboradores para o dropdown (apenas se admin)
     colaboradores_para_selecao = []
-
-    # Se for Gerente ou Admin (Nível > 1), busca lista para o dropdown
     if nivel_usuario > 1:
+        colaboradores_para_selecao = list(db.colaboradores.find({}, {'id_colaborador': 1, 'nick': 1}).sort('nick', 1))
+
+    # Eventos Ativos para o Dropdown
+    eventos_ativos = list(db.eventos.find({'status': 'ativo'}).sort('data_evento', pymongo.ASCENDING))
+    
+    # Dados Financeiros (Inicializa zerado)
+    resumo_financeiro = {
+        'total_vendas_qty': 0,
+        'total_vendas_valor': 0.0,
+        'comissao_valor': 0.0,
+        'total_pago': 0.0,
+        'saldo_devedor': 0.0
+    }
+    historico_pagamentos = []
+    
+    id_evento_selected = request.args.get('id_evento')
+    evento_selecionado = None
+
+    if id_evento_selected:
         try:
-            # Busca ID e Nick de todos, exceto talvez 'Tecbin' se quiser filtrar
-            cursor = db.colaboradores.find({}, {'id_colaborador': 1, 'nick': 1}).sort('nick', 1)
-            colaboradores_para_selecao = list(cursor)
+            id_evento_int = int(id_evento_selected)
+            evento_selecionado = db.eventos.find_one({'id_evento': id_evento_int})
+            
+            if evento_selecionado:
+                nome_colecao_vendas = f"vendas{id_evento_int}"
+                nome_colecao_pagtos = f"pagamentos{id_evento_int}"
+                
+                # 1. Agregação de Vendas
+                if nome_colecao_vendas in db.list_collection_names():
+                    pipeline_vendas = [
+                        {'$match': {'id_colaborador': target_id_colaborador_int}},
+                        {'$group': {
+                            '_id': None,
+                            'total_qty': {'$sum': '$quantidade_unidades'},
+                            'total_val': {'$sum': '$valor_total'}
+                        }}
+                    ]
+                    res_vendas = list(db[nome_colecao_vendas].aggregate(pipeline_vendas))
+                    if res_vendas:
+                        resumo_financeiro['total_vendas_qty'] = res_vendas[0]['total_qty']
+                        resumo_financeiro['total_vendas_valor'] = safe_float(res_vendas[0]['total_val'])
+                
+                # 2. Cálculo de Comissão
+                resumo_financeiro['comissao_valor'] = (resumo_financeiro['total_vendas_valor'] * taxa_comissao) / 100.0
+                
+                # 3. Agregação de Pagamentos
+                if nome_colecao_pagtos in db.list_collection_names():
+                    # Lista Detalhada
+                    historico_pagamentos = list(db[nome_colecao_pagtos].find(
+                        {'id_colaborador': target_id_colaborador_int}
+                    ).sort('data_hora', pymongo.DESCENDING))
+                    
+                    # Soma Total Pago
+                    pipeline_pagtos = [
+                        {'$match': {'id_colaborador': target_id_colaborador_int}},
+                        {'$group': {
+                            '_id': None,
+                            'total_pago': {'$sum': '$valor_pago'}
+                        }}
+                    ]
+                    res_pagtos = list(db[nome_colecao_pagtos].aggregate(pipeline_pagtos))
+                    if res_pagtos:
+                        resumo_financeiro['total_pago'] = safe_float(res_pagtos[0]['total_pago'])
+
+                # 4. Cálculo do Saldo Devedor (Total Vendas - Total Pago)
+                # OBS: O saldo devedor é sobre o bruto. A comissão é lucro do colab, mas aqui calculamos o acerto com a banca.
+                # Se a regra for pagar o líquido, altere aqui. Assumindo que paga o Bruto e recebe comissão ou abate depois.
+                # Lógica Padrão: Deve pagar o que vendeu.
+                resumo_financeiro['saldo_devedor'] = resumo_financeiro['total_vendas_valor'] - resumo_financeiro['total_pago']
+
         except Exception as e:
-            print(f"Erro ao buscar colaboradores: {e}")
+            print(f"Erro ao calcular financeiro: {e}")
+
+    # Formata datas do histórico
+    for pag in historico_pagamentos:
+        if '_id' in pag: pag['_id'] = str(pag['_id'])
+        if 'data_hora' in pag and isinstance(pag['data_hora'], datetime):
+            pag['data_hora_fmt'] = pag['data_hora'].strftime("%d/%m/%Y %H:%M")
 
     return render_template('minha_conta.html', 
                            nivel=nivel_usuario, 
                            colaboradores=colaboradores_para_selecao,
-                           id_logado=id_colaborador_logado,
-                           nick_logado=nick_logado,
+                           target_colab=colaborador_alvo, # Objeto completo do alvo
+                           eventos=eventos_ativos,
+                           evento_selecionado=evento_selecionado,
+                           financeiro=resumo_financeiro,
+                           pagamentos=historico_pagamentos,
                            g=g)
+
+
+# --- NOVA ROTA: REGISTRAR PAGAMENTO ---
+@app.route('/registrar_pagamento', methods=['POST'])
+@login_required
+def registrar_pagamento():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+
+    try:
+        id_evento = int(request.form.get('id_evento'))
+        id_colaborador_alvo = int(request.form.get('id_colaborador_alvo'))
+        valor_pagamento = float(request.form.get('valor_pagamento').replace(',', '.'))
+        
+        # Validações de Segurança
+        nivel_logado = session.get('nivel', 1)
+        id_logado = session.get('id_colaborador')
+        
+        # Se não for admin, só pode pagar para si mesmo? 
+        # A regra diz "colaborador efetua o pagamento a central". 
+        # Vamos assumir que qualquer um pode registrar que pagou (pendente de confirmação) ou o Admin registra.
+        # Por segurança, vamos deixar o próprio colaborador registrar.
+        
+        # Validação de Saldo (Server Side)
+        nome_colecao_vendas = f"vendas{id_evento}"
+        nome_colecao_pagtos = f"pagamentos{id_evento}"
+        
+        # Recalcula totais para validar
+        total_vendas = 0.0
+        total_pago = 0.0
+        
+        if nome_colecao_vendas in db.list_collection_names():
+            res = list(db[nome_colecao_vendas].aggregate([
+                {'$match': {'id_colaborador': id_colaborador_alvo}},
+                {'$group': {'_id': None, 'total': {'$sum': '$valor_total'}}}
+            ]))
+            if res: total_vendas = safe_float(res[0]['total'])
+            
+        if nome_colecao_pagtos in db.list_collection_names():
+            res = list(db[nome_colecao_pagtos].aggregate([
+                {'$match': {'id_colaborador': id_colaborador_alvo}},
+                {'$group': {'_id': None, 'total': {'$sum': '$valor_pago'}}}
+            ]))
+            if res: total_pago = safe_float(res[0]['total'])
+            
+        saldo_devedor = total_vendas - total_pago
+        
+        # Pequena margem para erros de ponto flutuante
+        if valor_pagamento > (saldo_devedor + 0.01):
+            return redirect(url_for('minha_conta', id_evento=id_evento, target_id=id_colaborador_alvo, 
+                                  error=f"Valor R$ {valor_pagamento:.2f} excede o saldo devedor de R$ {saldo_devedor:.2f}"))
+        
+        if valor_pagamento <= 0:
+             return redirect(url_for('minha_conta', id_evento=id_evento, target_id=id_colaborador_alvo, 
+                                  error="Valor deve ser maior que zero."))
+
+        # Grava Pagamento
+        colab_doc = db.colaboradores.find_one({'id_colaborador': id_colaborador_alvo})
+        nick_colab = colab_doc.get('nick') if colab_doc else 'Desconhecido'
+        
+        pagamento_doc = {
+            'id_evento': id_evento,
+            'id_colaborador': id_colaborador_alvo,
+            'nick_colaborador': nick_colab,
+            'valor_pago': Decimal128(str(valor_pagamento)),
+            'data_hora': datetime.utcnow(),
+            'registrado_por_id': id_logado,
+            'registrado_por_nick': session.get('nick')
+        }
+        
+        db[nome_colecao_pagtos].insert_one(pagamento_doc)
+        
+        return redirect(url_for('minha_conta', id_evento=id_evento, target_id=id_colaborador_alvo, 
+                              success="Pagamento registrado com sucesso!"))
+
+    except Exception as e:
+        print(f"Erro ao registrar pagamento: {e}")
+        return redirect(url_for('menu_operacoes', error=f"Erro interno: {e}"))
+
+
+# --- NOVA ROTA: EXCLUIR PAGAMENTO ---
+@app.route('/excluir_pagamento', methods=['POST'])
+@login_required
+def excluir_pagamento():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    if session.get('nivel', 0) < 3:
+        return "Acesso Negado", 403
+        
+    try:
+        id_pagamento = request.form.get('id_pagamento')
+        id_evento = int(request.form.get('id_evento'))
+        target_id = request.form.get('target_id') # Para redirecionar de volta
+        
+        nome_colecao_pagtos = f"pagamentos{id_evento}"
+        
+        db[nome_colecao_pagtos].delete_one({'_id': ObjectId(id_pagamento)})
+        
+        return redirect(url_for('minha_conta', id_evento=id_evento, target_id=target_id, 
+                              success="Pagamento estornado com sucesso."))
+                              
+    except Exception as e:
+        return redirect(url_for('menu_operacoes', error=f"Erro ao excluir: {e}"))
 
 
 # --- ROTA PARA GALERIA DE RESULTADOS (Consulta Pública/Interna) ---
@@ -3784,6 +4015,138 @@ def gerar_cartelas_pdf_15():
         traceback.print_exc()
         return f"Erro interno: {e}"
 
+# controle de movimentação dos cleintes
+def registrar_transacao_cliente(db, id_cliente, valor, tipo, descricao, id_evento=None, id_venda=None):
+    """
+    Centraliza toda movimentação financeira do cliente.
+    valor: float ou Decimal128 (positivo para crédito, negativo para débito)
+    tipo: 'compra', 'premio', 'recarga', 'ajuste'
+    """
+    try:
+        # 1. Converte valor para Decimal128 para precisão financeira
+        valor_decimal = Decimal128(str(valor))
+        
+        # 2. Busca saldo atual (Atomicamente para evitar condição de corrida)
+        # Se o cliente não tiver o campo 'saldo', assume 0.00
+        cliente = db.clientes.find_one({'id_cliente': id_cliente})
+        if not cliente:
+            return False, "Cliente não encontrado."
+            
+        saldo_anterior = safe_float(cliente.get('saldo_atual', 0.00))
+        saldo_novo = saldo_anterior + float(valor)
+        
+        # Opcional: Impedir saldo negativo se for compra
+        # if tipo == 'compra' and saldo_novo < 0:
+        #    return False, "Saldo insuficiente."
+
+        # 3. Atualiza o saldo no cadastro do cliente
+        db.clientes.update_one(
+            {'id_cliente': id_cliente},
+            {'$set': {'saldo_atual': Decimal128(str(saldo_novo))}}
+        )
+
+        # 4. Grava o histórico (Extrato)
+        transacao_doc = {
+            'id_cliente': id_cliente,
+            'data_hora': datetime.utcnow() - timedelta(hours=3),
+            'tipo': tipo,
+            'valor': valor_decimal,
+            'saldo_anterior': Decimal128(str(saldo_anterior)),
+            'saldo_posterior': Decimal128(str(saldo_novo)),
+            'descricao': descricao,
+            'id_evento': id_evento,
+            'id_venda': id_venda
+        }
+        db.transacoes_clientes.insert_one(transacao_doc)
+        
+        return True, "Sucesso"
+
+    except Exception as e:
+        print(f"Erro ao registrar transação: {e}")
+        return False, str(e)
+
+
+@app.route('/minha_carteira')
+@login_required
+def minha_carteira():
+    """
+    Exibe o extrato financeiro do cliente logado.
+    """
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+
+    # Verifica se é cliente mesmo
+    if session.get('nivel', 1) != 0:
+        return redirect(url_for('menu_operacoes', error="Acesso exclusivo para clientes."))
+
+    id_cliente = int(session.get('id_cliente'))
+    
+    # 1. Busca Dados do Cliente (Saldo Atual)
+    cliente = db.clientes.find_one({'id_cliente': id_cliente})
+    saldo_atual = safe_float(cliente.get('saldo_atual', 0.00))
+    
+    # 2. Busca Extrato (Últimas 50 movimentações)
+    # Se a coleção não existir ainda, retorna lista vazia
+    transacoes = []
+    if 'transacoes_clientes' in db.list_collection_names():
+        transacoes_cursor = db.transacoes_clientes.find(
+            {'id_cliente': id_cliente}
+        ).sort('data_hora', pymongo.DESCENDING).limit(50)
+        
+        for t in transacoes_cursor:
+            # Formatações para o Template
+            t['valor_float'] = safe_float(t['valor'])
+            t['saldo_pos_float'] = safe_float(t.get('saldo_posterior', 0))
+            if 'data_hora' in t:
+                t['data_fmt'] = t['data_hora'].strftime("%d/%m/%Y %H:%M")
+            transacoes.append(t)
+
+    return render_template('carteira_cliente.html', 
+                           cliente=cliente, 
+                           saldo_atual=saldo_atual, 
+                           transacoes=transacoes,
+                           g=g)
+
+
+# --- ROTA TEMPORÁRIA: RESET DE SENHAS ---
+@app.route('/admin/reset_senhas_global_temp')
+@login_required
+def reset_senhas_global_temp():
+    """
+    ATENÇÃO: Rota temporária para resetar a senha de TODOS os clientes.
+    Define a senha como 'senha' (que o sistema converte para 'Senha' no login).
+    """
+    # 1. Segurança Básica (Apenas Admin)
+    if session.get('nivel', 0) < 3:
+        return "ACESSO NEGADO. Apenas administradores.", 403
+
+    db = get_vendas_db()
+    if db is None: return "Erro de conexão com o banco.", 500
+
+    try:
+        # 2. Gera o Hash da senha padrão "Senha"
+        # O sistema de login usa .capitalize(), então "senha" vira "Senha"
+        senha_padrao = "Senha"
+        hash_senha = bcrypt.hashpw(senha_padrao.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        # 3. Atualiza TODOS os documentos da coleção 'clientes'
+        resultado = db.clientes.update_many(
+            {}, # Filtro vazio pega todos os registros
+            {'$set': {'senha': hash_senha}}
+        )
+
+        return (
+            f"<h1>Operação Concluída com Sucesso!</h1>"
+            f"<p>Total de clientes encontrados: {resultado.matched_count}</p>"
+            f"<p>Total de senhas atualizadas: {resultado.modified_count}</p>"
+            f"<p>Agora todos os clientes podem logar com a senha: <strong>senha</strong></p>"
+            f"<br><a href='/menu'>Voltar ao Menu</a>"
+        )
+
+    except Exception as e:
+        return f"Erro crítico ao resetar senhas: {e}"
+
+
 
 if __name__ == '__main__':
     # Para desenvolvimento local apenas
@@ -3791,3 +4154,8 @@ if __name__ == '__main__':
         app.run(debug=True, host='0.0.0.0', port=5001)
     else:
         print("⚠️  AVISO: Em produção, use Gunicorn. Não execute app.py diretamente!")
+
+
+
+# adicionar credito ao cliente
+#registrar_transacao_cliente(db, id_cliente, valor_recarga, 'recarga',  "Recarga via PIX")
