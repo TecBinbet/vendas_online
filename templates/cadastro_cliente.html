@@ -62,7 +62,7 @@
             padding-right: 70px; /* Espaço para o botão */
         }
 
-        /* --- INÍCIO CSS DA MODAL DE EXCLUSÃO --- */
+        /* --- INÍCIO CSS DA MODAL DE EXCLUSÃO E RECARGA --- */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -94,7 +94,7 @@
         .btn-danger:hover { background-color: #DC2626; }
         .btn-cancel { background-color: #D1D5DB; color: #374151; }
         .btn-cancel:hover { background-color: #B2B8C2; }
-        /* --- FIM CSS DA MODAL DE EXCLUSÃO --- */
+        /* --- FIM CSS DA MODAL --- */
 
         /* --- CSS DA LISTA DE RESULTADOS DE BUSCA --- */
         #search-results-list {
@@ -134,7 +134,7 @@
 
     <div class="container">
         <div class="flex justify-center -mt-3 mb-1">
-                        <a href="{{ url_for(next_url | default('menu_operacoes'), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+            <a href="{{ url_for(next_url | default('menu_operacoes'), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
         </div>
 
          <h2 class="text-xl mb-1 text-blue-800 text-center font-bold">Gestão de Clientes</h2>
@@ -146,7 +146,7 @@
             <div class="alert-success">{{ success | safe }}</div>
         {% endif %}
 
-        <div class="flex space-x-4 border-b pb-4">
+        <div class="flex space-x-4 border-b pb-4 -mt-2">
             <a href="{{ url_for('cadastro_cliente', view='novo', next=next_url) }}" 
                class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
                 ➕ Novo
@@ -159,34 +159,26 @@
                class="nav-link {% if active_view == 'listar' %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
                 📋 Listar
             </a>
-            <!-- Hidden fields para manter contexto -->
             <input type="hidden" id="next_url_val" value="{{ next_url | default('menu_operacoes') }}">
             {% if id_evento_retorno %}
                 <input type="hidden" id="id_evento_retorno_val" value="{{ id_evento_retorno }}">
             {% endif %}
         </div>
 
-        <div class="mb-2 -mt-1 p-2 bg-info text-white border border-blue-600 rounded-lg">
+        <div class="mb-1 -mt-2 p-1 bg-info text-white border border-blue-600 rounded-lg">
             Total de Clientes Cadastrados: <strong id="total-clientes">{{ total_clientes | default(0) }}</strong>.
         </div>
         
-        <!-- VISUALIZAÇÃO NOVO/ALTERAR -->
         {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
-        <!-- NOVO: Adiciona a classe 'hidden' se não for a view ativa -->
         <div id="view-novo" class="{% if not is_novo_alterar %}hidden{% endif %}">
             
-            <!-- DEFINIÇÃO SEGURA: Garante que 'cliente' é um dicionário mesmo se 'cliente_edicao' for None -->
             {% set cliente = cliente_edicao if cliente_edicao is not none else {} %} 
             
             <h3 class="text-xl font-semibold mb-2 {% if active_view == 'alterar' %}text-accent{% else %}text-primary{% endif %}">
                 {% if active_view == 'alterar' %}Alteração de Cliente (ID: CLI{{ cliente.get('id_cliente', 'N/A') }}){% else %}Cadastro de Novo Cliente{% endif %}
             </h3>
 
-            <!-- Captura as configurações de campos do objeto global 'g' -->
-            <!-- Fallback seguro caso g.parametros_globais não esteja definido -->
             {% set config_padrao = {'nome_cliente': True, 'nick': True, 'telefone': True, 'cpf': False, 'cidade': True, 'chave_pix': True, 'senha': True} %}
-            
-            <!-- CORREÇÃO: Verifica se g.parametros_globais E g.parametros_globais.tipo_cadastro_cliente existem -->
             {% set campos = g.parametros_globais.tipo_cadastro_cliente if (g.parametros_globais is defined and g.parametros_globais.tipo_cadastro_cliente is defined) else config_padrao %}
            
            <form method="POST" action="{{ url_for('gravar_cliente') }}" id="form-cadastro" class="space-y-4">
@@ -195,7 +187,6 @@
                     <input type="hidden" name="id_cliente_edicao" value="{{ cliente.get('id_cliente', '') }}">
                 {% endif %}
                 
-                <!-- Campos ocultos para manter o fluxo de retorno -->
                 <input type="hidden" name="next_url" value="{{ next_url | default('menu_operacoes') }}">
                 {% if id_evento_retorno %}
                     <input type="hidden" name="id_evento_retorno" value="{{ id_evento_retorno }}">
@@ -210,8 +201,6 @@
                                value="{% if active_view == 'alterar' %}CLI{{ cliente.get('id_cliente', 'N/A') }}{% else %}Gerado Automaticamente{% endif %}" 
                                disabled class="form-control bg-gray-100">
                     </div>
-
-                    <!-- Campos dinâmicos baseados na configuração -->
 
                     {% if "nome_cliente" in campos %}
                     <div class="form-group">
@@ -315,9 +304,8 @@
             </form>
         </div>
 
-        <!-- VISUALIZAÇÃO CONSULTA (COM BUSCA DINÂMICA) -->
         <div id="view-consulta" class="{% if active_view != 'consulta' %}hidden{% endif %}">
-            <h3 class="text-xl font-semibold mb-4 text-accent">Consulta de Cliente</h3>
+            <h3 class="text-xl font-semibold mb-2 text-accent">Consulta de Cliente</h3>
             
             <form method="GET" action="{{ url_for('cadastro_cliente') }}" class="mb-4 space-y-2" id="form-consulta">
                 <input type="hidden" name="view" value="consulta">
@@ -326,7 +314,6 @@
                 
                 <label for="consulta_termo" class="form-group">Buscar por Nick, Nome ou ID:</label>
                 
-                <!-- SELETOR DE TIPO DE BUSCA -->
                 <div class="search-type-selector">
                     <label><input type="radio" name="search_type" value="nick" checked onchange="clearSearch()"> Nick (Apelido)</label>
                     <label><input type="radio" name="search_type" value="nome" onchange="clearSearch()"> Nome</label>
@@ -343,33 +330,59 @@
                            
                     <button type="submit" class="nav-link bg-accent text-white hover:opacity-90 min-w-[100px]">Buscar</button>
                     
-                    <!-- LISTA DE RESULTADOS FLUTUANTE -->
                     <div id="search-results-list"></div>
                 </div>
             </form>
             
-            <div class="mt-6 p-4 border rounded-lg bg-gray-50">
+            <div class="p-1 border rounded-lg bg-gray-200 -mt-2">
                 {% if active_view == 'consulta' and query and clientes_lista|length > 0 %}
-                    <h4 class="font-bold mb-3">{{ clientes_lista | length }} Resultado(s) encontrado(s) para "{{ query }}"</h4>
+                    <h4 class="font-bold -mb-1">{{ clientes_lista | length }} Resultado(s) para "{{ query }}"</h4>
+                    
                     {% for cliente in clientes_lista %}
-                        <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0">
-                            <p><strong>ID:</strong> {{ cliente.id_cliente }}</p>
-                            <p><strong>Nome:</strong> {{ cliente.nome_cliente }}</p>
-                            <p><strong>Nick:</strong> <span class="font-semibold text-primary">{{ cliente.nick }}</span></p>
-                            <p><strong>Cidade:</strong> {{ cliente.cidade | default('N/A') }}</p>
-                            <div class="mt-2 flex space-x-3">
-                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+                        <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0 bg-white p-3 rounded shadow-sm">
+                            <div class="flex justify-between items-start">
+                                <div>
+                                    <p><strong>{{ cliente.id_cliente }}</strong> | <span class="text-primary font-bold">{{ cliente.nick }}</span></p>
+                                    <p class="text-[10px] text-gray-600"> <strong>{{ cliente.nome_cliente }}</strong></p>
+                                    <p class="text-[12px] text-gray-500">{{ cliente.cidade | default('N/A') }}</p>
+                                </div>
+                                
+                                <div class="text-right">
+                                    <p class="text-xs text-gray-500 uppercase font-bold">Saldo Atual</p>
+                                    {% if cliente.saldo_float < 0 %}
+                                        <span class="text-lg font-black text-red-600">R$ {{ cliente.saldo_float | format_moeda }}</span>
+                                    {% else %}
+                                        <span class="text-lg font-black text-blue-600">R$ {{ cliente.saldo_float | format_moeda }}</span>
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="mt-1 flex flex-wrap gap-2 items-center">
+                                
+                                <button type="button" 
+                                        onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}')"
+                                        class="px-1 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm flex items-center gap-1 shadow-sm">
+                                    💰 + Crédito
+                                </button>
+
+                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" 
+                                   class="px-1 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold">
+                                   ✏️ Alterar
+                                </a>
                                 
                                 <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" 
                                       id="form-excluir-consulta-{{ cliente.id_cliente }}"
                                       class="inline-block">
                                     <button type="button" 
                                             onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta")'
-                                            class="action-link delete-link hover:text-red-600">Excluir</button>
+                                            class="px-1 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">
+                                        🗑️ Excluir
+                                    </button>
                                 </form>
                             </div>
                         </div>
                     {% endfor %}
+
                 {% elif active_view == 'consulta' and query and clientes_lista|length == 0 %}
                     <p class="text-center text-red-500 font-bold">❌ Nenhum cliente encontrado para o termo "{{ query }}".</p>
                 {% else %}
@@ -378,7 +391,6 @@
             </div>
         </div>
 
-        <!-- VISUALIZAÇÃO LISTAR -->
         <div id="view-listar" class="{% if active_view != 'listar' %}hidden{% endif %}">
             <h3 class="text-xl font-semibold mb-2 text-gray-700">Lista de Clientes (Ordenada por Nick)</h3>
             
@@ -424,7 +436,6 @@
         
     </div>
     
-    <!-- MODAL DE EXCLUSÃO -->
     <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
             <h3 class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
@@ -435,6 +446,29 @@
                 <button type="button" class="modal-btn btn-cancel" onclick="closeDeleteModal()">Cancelar</button>
                 <button type="button" id="modal-btn-confirm-delete" class="modal-btn btn-danger">Confirmar Exclusão</button>
             </div>
+        </div>
+    </div>
+
+    <div id="recarga-modal" class="modal-overlay" onclick="closeRecargaModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-2 text-green-700">💰 Adicionar Crédito</h3>
+            <p class="text-sm text-gray-600 mb-4">Adicionar saldo para: <strong id="modal-recarga-nick" class="text-lg text-black">...</strong></p>
+            
+            <form method="POST" action="{{ url_for('adicionar_credito_cliente') }}">
+                <input type="hidden" name="id_cliente" id="modal-recarga-id">
+                
+                <div class="mb-4 text-left">
+                    <label class="block text-gray-700 font-bold mb-1">Valor da Recarga (R$):</label>
+                    <input type="number" name="valor_recarga" step="0.01" min="0.01" required 
+                           class="w-full p-3 border border-green-300 rounded text-xl font-bold text-center text-green-800 focus:ring-2 focus:ring-green-500 outline-none"
+                           placeholder="0,00">
+                </div>
+
+                <div class="flex justify-end space-x-2 mt-4">
+                    <button type="button" class="modal-btn btn-cancel" onclick="closeRecargaModal()">Cancelar</button>
+                    <button type="submit" class="modal-btn bg-green-600 text-white hover:bg-green-700 shadow">✅ Confirmar Recarga</button>
+                </div>
+            </form>
         </div>
     </div>
 
@@ -611,6 +645,28 @@
             }
         }
     });
+
+       // --- FUNÇÕES DA MODAL DE RECARGA ---
+        const recargaModal = document.getElementById('recarga-modal');
+        const recargaNick = document.getElementById('modal-recarga-nick');
+        const recargaId = document.getElementById('modal-recarga-id');
+
+        function openRecargaModal(id, nick) {
+            if (!recargaModal) return;
+            recargaId.value = id;
+            recargaNick.textContent = nick;
+            recargaModal.style.display = 'flex';
+            
+            // Foca no input de valor automaticamente
+            setTimeout(() => {
+                const inputVal = recargaModal.querySelector('input[name="valor_recarga"]');
+                if(inputVal) inputVal.focus();
+            }, 100);
+        }
+
+        function closeRecargaModal() {
+            if (recargaModal) recargaModal.style.display = 'none';
+        }
 
     </script>
 </body>

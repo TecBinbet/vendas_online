@@ -131,7 +131,7 @@
             
             <div class="form-group flex gap-1 items-center">
                 <button type="button" onclick="openEventSelector()" 
-                        class="py-3 btn btn-primary btn-small self-end mb-2 min-w-[295px]">
+                        class="py-3 btn btn-primary btn-small self-end mb-2 min-w-[283px]">
                     Selecionar um Evento
                 </button>
             </div>
@@ -141,7 +141,7 @@
                     <h4 class="text-lg font-bold -mt-2.5 -mb-1">{{ selected_event.descricao }}</h4>
                     <p>Data: <strong>{{ selected_event.data_evento }}</strong> - | - Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
                     <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
-                    <p class="text-lg text-red-600 font-semibold -mt-1.5 -mb-2.5 ">  Númeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
+                    <p class="text-lg text-red-600 text-center font-semibold -mt-1.5 -mb-2.5 ">  Numeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
                 </div>
             {% endif %}
 
@@ -177,10 +177,24 @@
 
                 <!-- Resultado da seleção (Cliente encontrado) -->
                 {% if cliente_encontrado %}
-                    <div class="alert alert-success mt-1 -mb-1">
-                        Selecionado: <strong>{{ cliente_encontrado.nick }}</strong> ({{ cliente_encontrado.nome_cliente }}) - ID: <strong>{{ id_cliente_final }}</strong>
+                    <div class="alert alert-success mt-1 -mb-3">
+                        <strong>{{ cliente_encontrado.nick }}</strong> - ID: <strong>{{ id_cliente_final }}</strong>
                         <input type="hidden" name="id_cliente_final" id="id_cliente_final_hidden" value="{{ id_cliente_final }}">
                     </div>
+
+                    <div class="bg-white px-3 -mt-2 rounded shadow-sm border border-gray-200">
+                            <span class="text-xs font-bold text-gray-500 uppercase mr-1">Carteira:</span>
+                            {% if cliente_encontrado.saldo_float < 0 %}
+                                <span class="text-lg font-black text-red-600">
+                                    R$ {{ "%.2f"|format(cliente_encontrado.saldo_float)|replace('.', ',') }}
+                                </span>
+                            {% else %}
+                                <span class="text-lg font-black text-green-700">
+                                    R$ {{ "%.2f"|format(cliente_encontrado.saldo_float)|replace('.', ',') }}
+                                </span>
+                            {% endif %}
+                        </div>
+
                 {% elif cliente_busca and not cliente_encontrado %}
                     <!-- Este alerta aparece se o backend não achou nada via submit tradicional (fallback) -->
                     <div class="alert alert-warning mt-1 alert-info">Cliente '{{ cliente_busca }}' não encontrado.</div>

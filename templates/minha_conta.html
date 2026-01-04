@@ -25,7 +25,7 @@
         body { font-family: 'Inter', sans-serif; background-color: #F3F4F6; }
         .container { max-width: 800px; margin: 5px auto; padding: 10px; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; }
-        .stat-card { text-align: center; padding: 10px; border-radius: 8px; background-color: #F9FAFB; border: 1px solid #E5E7EB; }
+        .stat-card { text-align: center; padding: 5px; border-radius: 8px; background-color: #F9FAFB; border: 1px solid #E5E7EB; }
         .stat-value { font-size: 1.25rem; font-weight: 800; color: #1F2937; }
         .stat-label { font-size: 0.75rem; color: #6B7280; text-transform: uppercase; font-weight: 600; }
         
@@ -120,7 +120,7 @@
                     📊 Balanço: <span class="text-blue-600">{{ evento_selecionado.descricao }}</span>
                 </h3>
                 
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-3">
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-1 mb-1">
                     <div class="stat-card border-blue-200">
                         <div class="stat-value text-blue-600">{{ financeiro.total_vendas_qty }}</div>
                         <div class="stat-label">Vendas (Qtd)</div>
@@ -140,7 +140,7 @@
                     </div>
                 </div>
 
-                <div class="bg-white p-3 rounded-lg border border-red-200 shadow-sm flex justify-between items-center mb-2">
+                <div class="bg-white p-2 rounded-lg border border-red-200 shadow-sm flex justify-between items-center mb-2">
                     <span class="text-gray-500 font-bold text-sm uppercase">Saldo Devedor (A Pagar):</span>
                     <span class="text-xl font-black {% if financeiro.saldo_devedor > 0 %}text-red-600{% else %}text-green-600{% endif %}">
                         R$ {{ financeiro.saldo_devedor | format_moeda }}

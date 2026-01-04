@@ -217,7 +217,7 @@
 
                     <div class="form-group">
                         <label for="tipo_de_cartela" class="required-label">Tipo de Cartela (15 ou 25 Números):</label>
-                        {% set valor_selecionado = evento.get('tipo_de_cartela', 15) | int %}            
+                        {% set valor_selecionado = evento.get('tipo_de_cartela', 25) | int %}            
                         <select id="tipo_de_cartela" name="tipo_de_cartela" required class="form-control" onchange="updateNumeroMaximo()">
                                     <option value="15" {% if valor_selecionado == 15 %}selected{% endif %}>15 Números</option>
                                     <option value="25" {% if valor_selecionado == 25 %}selected{% endif %}>25 Números</option>
@@ -227,7 +227,7 @@
                     <div class="form-group">
                         <label for="numero_maximo" class="label ">Número Máximo da Cartela:</label>
                         <input type="number" id="numero_maximo" name="numero_maximo" min="1" disabled class="form-control bg-green-200"
-                               value="{{ evento.get('numero_maximo', 72000) }}">
+                               value="{{ evento.get('numero_maximo', 90000) }}">
                     </div>
 
                     <div class="form-group">

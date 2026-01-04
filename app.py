@@ -1447,6 +1447,15 @@ def nova_venda():
         if cliente:
             cliente_encontrado = cliente
             id_cliente_final = cliente.get('id_cliente')
+
+            # --- NOVO: Prepara o saldo para exibição ---
+            val_decimal = cliente_encontrado.get('saldo_atual', 0.0)
+            # Usa safe_float ou converte direto se safe_float não estiver no escopo local
+            if isinstance(val_decimal, Decimal128):
+                cliente_encontrado['saldo_float'] = float(str(val_decimal))
+            else:
+                cliente_encontrado['saldo_float'] = float(val_decimal)
+            # -------------------------------------------
             
             valor_unitario = safe_float(selected_event.get('valor_de_venda', 0.00))
             custo = valor_unitario * quantidade
@@ -1620,19 +1629,25 @@ def processar_venda():
             print(f"{log_prefix} LOG 3D: Inserindo venda na coleção '{nome_colecao_venda}'...")
             db[nome_colecao_venda].insert_one(registro_venda)
             print(f"{log_prefix} ... Venda inserida.")
+            
+            # Gravar da movimentação do cliente.
+            saldo_verificacao = 0.0
+            if cliente_encontrado:
+                saldo_verificacao = safe_float(cliente_encontrado.get('saldo_atual', 0.0))
 
-            valor_debito = -abs(valor_total_atual) 
-            desc_transacao = f"Compra de {quantidade} kit(s) - {selected_event.get('descricao')}"
+            if saldo_verificacao > 0:
+                valor_debito = -abs(valor_total_atual) 
+                desc_transacao = f"Compra de {quantidade} kit(s) - {selected_event.get('descricao')}"
 
-            registrar_transacao_cliente(
-                db=db,
-                id_cliente=id_cliente_final,
-                valor=valor_debito,
-                tipo='compra',
-                descricao=desc_transacao,
-                id_evento=id_evento_int_para_controle,
-                id_venda=id_venda_formatado
-            )
+                registrar_transacao_cliente(
+                    db=db,
+                    id_cliente=id_cliente_final,
+                    valor=valor_debito,
+                    tipo='compra',
+                    descricao=desc_transacao,
+                    id_evento=id_evento_int_para_controle,
+                    id_venda=id_venda_formatado
+                )
             
         except Exception as e:
             venda_lock.release()
@@ -1922,12 +1937,18 @@ def cadastro_cliente():
                 clientes_cursor = db.clientes.find(query_filter)
                 clientes_lista = list(clientes_cursor) 
 
+
+
         except Exception as e:
             print(f"Erro ao buscar dados no MongoDB em cadastro_cliente: {e}")
             error = f"Erro crítico ao carregar dados do DB: {e}"
 
     for cliente in clientes_lista:
         if '_id' in cliente: cliente['_id'] = str(cliente['_id'])
+
+        val_decimal = cliente.get('saldo_atual', 0.0)
+        cliente['saldo_float'] = safe_float(val_decimal)
+
         for campo_data in ['data_cadastro', 'data_ultimo_compra']:
             if cliente.get(campo_data) and isinstance(cliente[campo_data], datetime):
                 cliente[f'{campo_data}_formatada'] = cliente[campo_data].strftime("%d/%m/%Y %H:%M:%S")
@@ -2742,6 +2763,9 @@ def excluir_evento(id_evento):
             if nome_colecao_venda in db.list_collection_names():
                 db[nome_colecao_venda].drop()
                 msg_extra = " e todas as vendas associadas foram removidas."
+            nome_colecao_pgtos = f"pagamentos{id_evento}"
+            if nome_colecao_pgtos in db.list_collection_names():
+                db[nome_colecao_pgtos].drop()
             # -----------------------------------------------------
             success_msg = f"Evento ID: {id_evento} excluído{msg_extra} com sucesso."
         else:
@@ -4055,7 +4079,8 @@ def registrar_transacao_cliente(db, id_cliente, valor, tipo, descricao, id_event
             'saldo_posterior': Decimal128(str(saldo_novo)),
             'descricao': descricao,
             'id_evento': id_evento,
-            'id_venda': id_venda
+            'id_venda': id_venda,
+            'registrado_por': session.get('nick', 'Sistema') # Rastreabilidade
         }
         db.transacoes_clientes.insert_one(transacao_doc)
         
@@ -4064,6 +4089,39 @@ def registrar_transacao_cliente(db, id_cliente, valor, tipo, descricao, id_event
     except Exception as e:
         print(f"Erro ao registrar transação: {e}")
         return False, str(e)
+
+
+# --- NOVA ROTA: ADICIONAR CRÉDITO (RECARGA) ---
+@app.route('/cliente/adicionar_credito', methods=['POST'])
+@login_required
+def adicionar_credito_cliente():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    try:
+        id_cliente = int(request.form.get('id_cliente'))
+        valor_recarga = float(request.form.get('valor_recarga', '0').replace(',', '.'))
+        
+        if valor_recarga <= 0:
+            return redirect(url_for('cadastro_cliente', view='consulta', error="Valor da recarga deve ser positivo."))
+
+        # Chama a função de transação
+        sucesso = registrar_transacao_cliente(
+            db, 
+            id_cliente, 
+            valor_recarga, 
+            'recarga', 
+            f"Recarga via Colaborador ({session.get('nick')})"
+        )
+        
+        if sucesso:
+            msg = f"Recarga de R$ {valor_recarga:.2f} realizada com sucesso para o Cliente {id_cliente}."
+            return redirect(url_for('cadastro_cliente', view='consulta', success=msg, query=str(id_cliente)))
+        else:
+            return redirect(url_for('cadastro_cliente', view='consulta', error="Erro ao registrar recarga."))
+
+    except Exception as e:
+        return redirect(url_for('cadastro_cliente', view='consulta', error=f"Erro interno: {e}"))
 
 
 @app.route('/minha_carteira')
@@ -4145,8 +4203,6 @@ def reset_senhas_global_temp():
 
     except Exception as e:
         return f"Erro crítico ao resetar senhas: {e}"
-
-
 
 if __name__ == '__main__':
     # Para desenvolvimento local apenas
