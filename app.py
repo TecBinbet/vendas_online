@@ -1632,22 +1632,23 @@ def processar_venda():
             
             # Gravar da movimentação do cliente.
             saldo_verificacao = 0.0
-            if cliente_encontrado:
-                saldo_verificacao = safe_float(cliente_encontrado.get('saldo_atual', 0.0))
 
-            if saldo_verificacao > 0:
-                valor_debito = -abs(valor_total_atual) 
-                desc_transacao = f"Compra de {quantidade} kit(s) - {selected_event.get('descricao')}"
+            if cliente_doc: 
+                saldo_verificacao = safe_float(cliente_doc.get('saldo_atual', 0.0))
+            
+            #if saldo_verificacao > 0:
+            valor_debito = -abs(valor_total_atual) 
+            desc_transacao = f"Compra de {quantidade} kit(s) - {selected_event.get('descricao')}"
 
-                registrar_transacao_cliente(
-                    db=db,
-                    id_cliente=id_cliente_final,
-                    valor=valor_debito,
-                    tipo='compra',
-                    descricao=desc_transacao,
-                    id_evento=id_evento_int_para_controle,
-                    id_venda=id_venda_formatado
-                )
+            registrar_transacao_cliente(
+                db=db,
+                id_cliente=id_cliente_final,
+                valor=valor_debito,
+                tipo='compra',
+                descricao=desc_transacao,
+                id_evento=id_evento_int_para_controle,
+                id_venda=id_venda_formatado
+            )
             
         except Exception as e:
             venda_lock.release()
