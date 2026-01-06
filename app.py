@@ -681,7 +681,9 @@ def before_request():
                     'http_vendas': params_doc.get('http_vendas', 'http://localhost:5000'),
                     'id_sala_param': g.id_sala, # Armazena a sala atual nos parâmetros cacheados
                     'tipo_cadastro_cliente': params_doc.get('tipo_cadastro_cliente', default_config_cadastro), 
-                    'comissao_padrao': params_doc.get('comissao_padrao', 20), 
+                    'comissao_padrao': params_doc.get('comissao_padrao', 20),
+                    'comissao_autoatendimento': params_doc.get('comissao_autoatendimento', 10), 
+
                 }
                 # --- ESTE É O LOG QUE VOCÊ QUERIA VER ---
                 print(f"@before_request: Parâmetros CARREGADOS da coleção 'salas'. {g.id_sala} = {g.parametros_globais['nome_sala']}") 
@@ -1609,7 +1611,7 @@ def processar_venda():
                 "telefone_cliente": cliente_doc.get('telefone',''),
                 "id_colaborador": colaborador_id,
                 "nick_colaborador": nick_colaborador,
-                "data_venda": datetime.utcnow(),
+                "data_venda": datetime.utcnow() - timedelta(hours=3) ,     #  << data correta
                 "quantidade_unidades": quantidade,
                 "quantidade_cartelas": quantidade_cartelas_atual,
                 "numero_inicial": numero_inicial_atual,
@@ -1617,7 +1619,8 @@ def processar_venda():
                 "numero_inicial2": numero_inicial2_atual,
                 "numero_final2": numero_final2_atual,
                 "valor_unitario": Decimal128(str(valor_unitario)), 
-                "valor_total": Decimal128(str(valor_total_atual))
+                "valor_total": Decimal128(str(valor_total_atual)),
+                "origem": "terminal_colaborador"
             }
             
             print(f"{log_prefix} LOG 3C: Atualizando cliente {id_cliente_final}...")
@@ -2779,16 +2782,15 @@ def excluir_evento(id_evento):
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento.", view='listar'))
 
 
-# --- Rota de Consulta de Vendas (com cálculo de comissão) ---
 @app.route('/consulta_vendas', methods=['GET'])
 @login_required
 def consulta_vendas():
     """
     Página principal de consulta de vendas.
-    (Com cálculo de comissão)
+    (Com correção na soma de comissões para não perder vendas antigas)
     """
     db = get_vendas_db()
-    if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
+    if db is None: return redirect(url_for('login'))
 
     error_from_session = session.pop('error_message', None)
     success = session.pop('success_message', None)
@@ -2808,6 +2810,7 @@ def consulta_vendas():
     selected_colab_id_str = None
     
     default_comissao = g.parametros_globais.get('comissao_padrao', 0)
+    comissao_autoatendimento = g.parametros_globais.get('comissao_autoatendimento', 0)
     comissao_map = {} 
 
     try:
@@ -2828,14 +2831,20 @@ def consulta_vendas():
                 eventos_ativos.append(clean_event_numerics(evento))
         
         else:
-            evento_oid = try_object_id(id_evento_param)
-            selected_event_raw = db.eventos.find_one({'_id': evento_oid})
+            # Busca Evento (Suporta ID int ou ObjectId)
+            selected_event_raw = None
+            if str(id_evento_param).isdigit():
+                selected_event_raw = db.eventos.find_one({'id_evento': int(id_evento_param)})
+            if not selected_event_raw:
+                selected_event_raw = db.eventos.find_one({'_id': try_object_id(id_evento_param)})
+
             selected_event = clean_event_numerics(selected_event_raw)
             
             if not selected_event:
                 error = "Evento não encontrado."
                 return render_template('consulta_vendas.html', error=error, g=g)
 
+            # --- LÓGICA DE FILTRO DE COLABORADORES ---
             if nivel_usuario == 3:
                 colaboradores_lista.append({'nick': 'TODOS', 'id_colaborador': 'ALL'})
                 colabs_cursor = db.colaboradores.find({}, {'nick': 1, 'id_colaborador': 1, 'comissao': 1}).sort('nick', pymongo.ASCENDING)
@@ -2858,14 +2867,19 @@ def consulta_vendas():
             
             elif nivel_usuario == 3:
                 if id_colaborador_param and id_colaborador_param != 'ALL':
-                    filtro_colaborador_query = {'id_colaborador': int(id_colaborador_param)}
-                    selected_colab_id_str = id_colaborador_param
+                    # Tenta converter para int se possível
+                    try: val_id = int(id_colaborador_param)
+                    except: val_id = id_colaborador_param
+                    
+                    filtro_colaborador_query = {'id_colaborador': val_id}
+                    selected_colab_id_str = str(id_colaborador_param)
                 elif id_colaborador_param == 'ALL':
                     selected_colab_id_str = 'ALL'
 
             id_evento_int = selected_event.get('id_evento')
             nome_colecao_venda = f"vendas{id_evento_int}"
 
+            # --- AGREGATION PIPELINE CORRIGIDA ---
             pipeline = []
             match_stage = {'id_evento': id_evento_int}
             match_stage.update(filtro_colaborador_query) 
@@ -2880,7 +2894,23 @@ def consulta_vendas():
                     'total_valor': {'$sum': '$valor_total'},
                     'total_vendas': {'$sum': 1},
                     'data_inicial': {'$min': '$data_venda'},
-                    'data_final': {'$max': '$data_venda'}
+                    'data_final': {'$max': '$data_venda'},
+                    
+                    # === CORREÇÃO CRÍTICA AQUI ===
+                    # 1. Soma AUTO: Apenas se origem for 'terminal_cliente'
+                    'total_valor_auto': {
+                        '$sum': {
+                            '$cond': [{'$eq': ['$origem', 'terminal_cliente']}, '$valor_total', 0]
+                        }
+                    },
+                    # 2. Soma COLAB: TUDO que NÃO for 'terminal_cliente'. 
+                    # Isso pega 'terminal_colaborador', 'balcao', null, etc.
+                    'total_valor_colab': {
+                        '$sum': {
+                            '$cond': [{'$ne': ['$origem', 'terminal_cliente']}, '$valor_total', 0]
+                        }
+                    }
+                    # =============================
                 }
             })
             pipeline.append({'$sort': {'nick_colaborador': 1}})
@@ -2889,34 +2919,42 @@ def consulta_vendas():
             
             for res in resultados_cursor:
                 res['total_valor_float'] = safe_float(res['total_valor'])
-                
+
+                venda_via_colab = safe_float(res.get('total_valor_colab', 0))
+                venda_via_auto  = safe_float(res.get('total_valor_auto', 0))
+
                 colab_id = res['_id'] 
-                taxa_aplicada = comissao_map.get(colab_id, default_comissao) 
                 
-                res['taxa_comissao_aplicada'] = taxa_aplicada
-                res['valor_comissao_float'] = (res['total_valor_float'] * taxa_aplicada) / 100.0
+                # Define a taxa do colaborador (ou padrão)
+                taxa_aplicada = comissao_map.get(colab_id, default_comissao) 
+                # Define a taxa auto (global)
+                taxa_aplicada_auto = comissao_autoatendimento 
+
+                # CALCULA A SOMA
+                comissao_parte_1 = (venda_via_colab * taxa_aplicada) / 100.0
+                comissao_parte_2 = (venda_via_auto * taxa_aplicada_auto) / 100.0
+
+                valor_comissao_total = comissao_parte_1 + comissao_parte_2
+                
+                # Grava no objeto para o HTML ler
+                res['taxa_comissao_aplicada'] = taxa_aplicada 
+                res['taxa_comissao_auto'] = taxa_aplicada_auto
+                res['valor_comissao_float'] = valor_comissao_total
                 
                 resultados_agregados.append(res)
                 
+            # --- TOTAIS GERAIS (RESUMO NO TOPO) ---
             if selected_colab_id_str == 'ALL' and resultados_agregados:
-                total_kits_geral = sum(r['total_kits'] for r in resultados_agregados)
-                total_cartelas_geral = sum(r['total_cartelas'] for r in resultados_agregados)
-                total_valor_geral = sum(r['total_valor_float'] for r in resultados_agregados)
-                total_vendas_geral = sum(r['total_vendas'] for r in resultados_agregados)
-                total_comissao_geral = sum(r['valor_comissao_float'] for r in resultados_agregados) 
-                data_inicial_geral = min(r['data_inicial'] for r in resultados_agregados)
-                data_final_geral = max(r['data_final'] for r in resultados_agregados)
-                
                 resumo_geral = {
                     'nick_colaborador': '⭐ Resumo Geral (TODOS)',
                     '_id': 'ALL',
-                    'total_kits': total_kits_geral,
-                    'total_cartelas': total_cartelas_geral,
-                    'total_valor_float': total_valor_geral,
-                    'total_vendas': total_vendas_geral,
-                    'valor_comissao_float': total_comissao_geral, 
-                    'data_inicial': data_inicial_geral,
-                    'data_final': data_final_geral
+                    'total_kits': sum(r['total_kits'] for r in resultados_agregados),
+                    'total_cartelas': sum(r['total_cartelas'] for r in resultados_agregados),
+                    'total_valor_float': sum(r['total_valor_float'] for r in resultados_agregados),
+                    'total_vendas': sum(r['total_vendas'] for r in resultados_agregados),
+                    'valor_comissao_float': sum(r['valor_comissao_float'] for r in resultados_agregados), # Soma correta das comissões mistas
+                    'data_inicial': min(r['data_inicial'] for r in resultados_agregados),
+                    'data_final': max(r['data_final'] for r in resultados_agregados)
                 }
                 
             if not resultados_agregados and id_colaborador_param and not error:
@@ -2925,6 +2963,8 @@ def consulta_vendas():
     except Exception as e:
         print(f"Erro em consulta_vendas: {e}")
         error = f"Erro interno ao processar consulta: {e}"
+        import traceback
+        traceback.print_exc()
 
     return render_template('consulta_vendas.html',
                            g=g,
@@ -2939,11 +2979,11 @@ def consulta_vendas():
                            resultados_agregados=resultados_agregados)
 
 
-# --- ROTA MODIFICADA 'consulta_vendas_detalhes' ---
+
 @app.route('/consulta_vendas/detalhes', methods=['GET'])
 @login_required
 def consulta_vendas_detalhes():
-    """Mostra a lista detalhada de vendas para um filtro específico."""
+    """Mostra a lista detalhada de vendas com cálculo de comissão mista (Auto vs Colab)."""
     db = get_vendas_db()
     if db is None: return redirect(url_for('login')) 
 
@@ -2961,18 +3001,17 @@ def consulta_vendas_detalhes():
     info_tipo_cartela = 25 
     info_telefone_cliente = ''
     
+    # --- 1. PREPARA AS TAXAS ---
     default_comissao = g.parametros_globais.get('comissao_padrao', 0)
+    comissao_autoatendimento = g.parametros_globais.get('comissao_autoatendimento', 0)
     comissao_map = {} 
 
     try:
-        # --- CORREÇÃO AQUI: Suporte a ID Inteiro e ObjectId ---
         selected_event = None
         if id_evento_param:
-            # Se for numérico (ex: '10'), busca pelo campo id_evento
             if str(id_evento_param).isdigit():
                 selected_event = db.eventos.find_one({'id_evento': int(id_evento_param)})
             else:
-                # Caso contrário, tenta pelo _id (ObjectId)
                 selected_event = db.eventos.find_one({'_id': try_object_id(id_evento_param)})
         
         if not selected_event:
@@ -2988,20 +3027,20 @@ def consulta_vendas_detalhes():
         query_filter = {'id_evento': id_evento_int}
         colab_ids_para_buscar_comissao = []
         
+        # --- LÓGICA DE FILTROS DE USUÁRIO ---
         if nivel_usuario < 3:
             query_filter['id_colaborador'] = id_colaborador_logado
             info_colaborador = session.get('nick', 'N/A')
             info_telefone_cliente = session.get('telefone_cliente','')
             if isinstance(id_colaborador_logado, int):
-                 colab_ids_para_buscar_comissao.append(id_colaborador_logado)       
+                 colab_ids_para_buscar_comissao.append(id_colaborador_logado)        
         
         elif nivel_usuario == 3:
             if id_colaborador_param and id_colaborador_param != 'ALL':
-                # Garante conversão para int se possível
                 try:
                     id_colab_int = int(id_colaborador_param)
                 except ValueError:
-                    id_colab_int = id_colaborador_param # Fallback para string se for antigo
+                    id_colab_int = id_colaborador_param 
 
                 query_filter['id_colaborador'] = id_colab_int
                 colab_ids_para_buscar_comissao.append(id_colab_int)
@@ -3009,7 +3048,7 @@ def consulta_vendas_detalhes():
                 colab_doc = db.colaboradores.find_one({'id_colaborador': id_colab_int}, {'nick': 1})
                 info_colaborador = colab_doc.get('nick') if colab_doc else f"ID {id_colab_int}"
                 info_telefone_cliente = session.get('telefone_cliente','')
-               
+                
             elif id_colaborador_param == 'ALL':
                 info_colaborador = "TODOS"
                 todos_colabs = db.colaboradores.find({}, {'id_colaborador': 1, 'comissao': 1})
@@ -3017,7 +3056,8 @@ def consulta_vendas_detalhes():
                     taxa = c.get('comissao')
                     if isinstance(taxa, (int, float)):
                         comissao_map[c['id_colaborador']] = taxa
-            
+        
+        # Busca taxas específicas dos colaboradores filtrados
         if colab_ids_para_buscar_comissao:
              colab_docs = db.colaboradores.find(
                  {'id_colaborador': {'$in': colab_ids_para_buscar_comissao}},
@@ -3031,12 +3071,36 @@ def consulta_vendas_detalhes():
                  
         vendas_cursor = db[nome_colecao_venda].find(query_filter).sort('data_venda', pymongo.DESCENDING)
         
+        # --- LOOP CORRIGIDO COM TAXA MISTA ---
         for venda in vendas_cursor:
             venda['valor_total_float'] = safe_float(venda.get('valor_total'))
+            
+            # Identifica quem ganha a comissão e a origem
             colab_id = venda.get('id_colaborador')
-            taxa_comissao = comissao_map.get(colab_id, default_comissao) 
-            venda['valor_comissao_float'] = (venda['valor_total_float'] * taxa_comissao) / 100.0
+            # Se você estiver usando 'id_colaborador_indicacao' para auto-atendimento, 
+            # pode ser necessário ajustar a linha acima para:
+            # colab_id = venda.get('id_colaborador_indicacao') or venda.get('id_colaborador')
+
+            origem_venda = venda.get('origem', 'terminal_colaborador')
+
+            # DECISÃO DA TAXA
+            if origem_venda == 'terminal_cliente':
+                # Venda Auto-Atendimento -> Usa taxa Fixa Auto
+                taxa_final = comissao_autoatendimento
+                venda['tipo_taxa'] = 'AUTO' # Opcional: para debug ou mostrar na tela
+            else:
+                # Venda Normal -> Usa taxa do Colaborador (ou padrão)
+                taxa_final = comissao_map.get(colab_id, default_comissao)
+                venda['tipo_taxa'] = 'NORMAL'
+
+            # CÁLCULO
+            venda['valor_comissao_float'] = (venda['valor_total_float'] * taxa_final) / 100.0
+            
+            # Grava a taxa aplicada para exibir na tabela se quiser
+            venda['taxa_comissao_aplicada'] = taxa_final
+            
             vendas_detalhadas.append(venda)
+        # -------------------------------------
             
         if not vendas_detalhadas:
             error = "Nenhuma venda detalhada encontrada."
@@ -3056,6 +3120,7 @@ def consulta_vendas_detalhes():
                            info_colaborador=info_colaborador,
                            info_tipo_cartela=info_tipo_cartela,
                            info_telefone_cliente=info_telefone_cliente)
+
 
 
 # Minha Conta
