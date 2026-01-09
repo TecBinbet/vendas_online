@@ -27,9 +27,13 @@
        
         {% if nivel >= 3 %} 
             <hr class="my-0 ">
-            <a href="{{ url_for('cadastro_evento', view='listar') }}" class="menu-item gerencial-item">🗓️ Cadastro de Eventos</a>
-            <a href="{{ url_for('consulta_status_eventos', mode='detailed') }}" class="menu-item gerencial-item">💰 Status de Vendas dos Eventos</a>
-            <a href="{{ url_for('cadastro_colaborador', view='listar') }}" class="menu-item gerencial-item">🛠️ Cadastro de Colaboradores</a>
+
+             <a href="{{ url_for('submenu_eventos') }}" class="menu-item gerencial-item">
+                 🎉 Menu Eventos
+            </a>
+            <a href="{{ url_for('cadastro_colaborador', view='listar') }}" class="menu-item gerencial-item">
+                 🛠️ Cadastro de Colaboradores
+            </a>
         {% endif %}
         
         <a href="{{ url_for('login_page') }}" class="-mt-10 menu-item menu-item-exit">🚪 Sair</a>

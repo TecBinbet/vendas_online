@@ -63,7 +63,7 @@
             border-radius: 8px; padding: 15px; cursor: pointer;
             transition: border-color 0.2s, box-shadow 0.2s;
         }
-        .event-card:hover { border-color: #A7F3D0; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1); }
+        .event-card:hover { border-color: #A7F3D0; box-shadow: 0 2px 2px rgba(0, 0, 0, 0.1); }
 
         /* --- CSS DA LISTA DE RESULTADOS DE BUSCA (NOVO) --- */
         #search-results-list {
@@ -252,8 +252,8 @@
     <!-- MODAL DE EVENTOS (Mantida igual) -->
     <div id="event-selector-modal" class="modal">
         <div class="modal-content  bg-blue-200 p-3 w-full md:w-3/4 lg:w-1/2">
-            <h3 class="text-lg font-semibold text-gray-700 border-b pb-1 -mb-1 -mt-1">Selecione o Evento Ativo</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-130 overflow-y-auto pr-2">
+            <h3 class="text-lg font-semibold text-gray-700 border-b pb-1 -mb-1 -mt-2">Selecione o Evento Ativo</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-1 max-h-110 overflow-y-auto pr-2">
                 {% for evento in eventos %}
                     <div class="event-card shadow-md flex flex-col justify-between"
                         data-id="{{ evento._id }}"
@@ -262,14 +262,14 @@
                         data-unidade="{{ evento.unidade_de_venda }}"
                         onclick="selectEvent(this)">
                         <div>
-                            <p class="text-md font-bold text-primary">{{ evento.descricao }} ( {{ evento.id_evento }} )</p>
-                             <p class="text-md font-bold text-blue-700 ">{{ evento.data_evento }}   às   {{ evento.hora_evento }}</p>
+                            <p class="text-md font-bold text-primary -mt-3 ">{{ evento.descricao }} ( {{ evento.id_evento }} )</p>
+                            <p class="text-md font-bold text-blue-700 ">{{ evento.data_evento }}   às   {{ evento.hora_evento }}</p>
                             <div class="-mt-1 text-md font-semibold">
                                 <p>💰 R$ {{ '%.2f' | format(evento.valor_de_venda_float) }} / Unidade</p>
                             </div>
                         </div>
                         <div class="pt-1 border-t border-dashed">
-                            <button class="py-3 btn btn-primary btn-small w-full mt-0 bg-green-600 hover:bg-green-800">Selecionar</button>
+                            <button class="py-3 btn btn-primary btn-small w-full mt-0 -mb-2 bg-green-600 hover:bg-green-800">Selecionar</button>
                         </div>
                     </div>
                 {% else %}

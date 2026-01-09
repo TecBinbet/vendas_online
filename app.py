@@ -793,12 +793,6 @@ def login():
                 session['nivel'] = usuario.get('nivel', 1) 
                 session['nick'] = usuario.get('nick') or usuario.get('nome_colaborador')
                 return redirect(url_for('menu_operacoes'))
-            
-            else: # tipo_usuario == 'cliente'
-                session['id_cliente'] = usuario.get('id_cliente') or str(usuario['_id'])
-                session['nivel'] = 0 
-                session['nick'] = usuario.get('nick')
-                return redirect(url_for('dashboard_cliente'))
           
     print(f"[LOG] login (POST): Autenticação FALHOU para {nome_usuario}.") 
     return redirect(url_for('login_page', 
@@ -822,19 +816,10 @@ def menu_operacoes():
                            error=error) # Passa o erro para o template
 
 
-@app.route('/dashboard_cliente')
+@app.route('/submenu_eventos')
 @login_required
-def dashboard_cliente():
-    db = get_vendas_db()
-    if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
-
-    if session.get('nivel', 1) != 0:
-        session.clear() 
-        return redirect(url_for('login_page', error="Tipo de acesso inválido."))
-
-    nick_cliente = session.get('nick', 'Cliente')
-    
-    return render_template('dashboard_cliente.html', nick_cliente=nick_cliente, g=g)
+def submenu_eventos():
+    return render_template('submenu_eventos.html')
 
 
 # --- ROTAS DE VENDAS E CONSULTA (Todas atualizadas para usar get_vendas_db()) ---
@@ -2393,10 +2378,217 @@ def salvar_auto_cadastro():
 
 
 # --- ROTAS DE CADASTRO DE EVENTO (NOVO CRUD) ---
+# --- COLE ISSO ANTES DA FUNÇÃO cadastro_evento ---
+
+@app.route('/api/check_event_availability', methods=['GET'])
+@login_required
+def check_event_availability():
+    db = get_vendas_db()
+    if db is None: return jsonify({'error': 'DB Offline'}), 500
+
+    data_input = request.args.get('data') # YYYY-MM-DD
+    hora_input = request.args.get('hora') # HH:MM
+    exclude_id = request.args.get('exclude_id') 
+
+    if not data_input or not hora_input:
+        return jsonify({'exists': False})
+
+    try:
+        dt_obj = datetime.strptime(data_input, '%Y-%m-%d')
+        data_formatada = dt_obj.strftime('%d/%m/%Y')
+        
+        query = {
+            'data_evento': data_formatada,
+            'hora_evento': hora_input,
+            'status': {'$ne': 'finalizado'} 
+        }
+
+        if exclude_id and exclude_id.isdigit():
+            query['id_evento'] = {'$ne': int(exclude_id)}
+        
+        count = db.eventos.count_documents(query)
+        
+        if count > 0:
+            return jsonify({
+                'exists': True, 
+                'msg': f'Já existe um evento em {data_formatada} às {hora_input}.'
+            })
+        
+        return jsonify({'exists': False})
+
+    except Exception as e:
+        print(f"Erro check availability: {e}")
+        return jsonify({'exists': False})
+
+
+# --- SUBSTITUA A FUNÇÃO cadastro_evento EXISTENTE POR ESTA ---
 
 @app.route('/cadastro_evento', methods=['GET'])
 @login_required
 def cadastro_evento():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login')) 
+    
+    db_status = g.db_status
+    form_data_erro = session.pop('form_data', None)
+    
+    active_view = request.args.get('view', 'novo')
+    search_term = request.args.get('query', '').strip()
+    id_evento_edicao = request.args.get('id_evento', None)
+    
+    evento_edicao = None 
+    eventos_lista = []
+    total_eventos = 0
+    
+    error = request.args.get('error')
+    success = request.args.get('success')
+
+    numeric_float_fields = [
+        'valor_de_venda', 'premio_quadra', 'premio_linha', 'premio_bingo', 
+        'premio_segundobingo', 'premio_acumulado', 'minimo_de_venda', 'premio_total'
+    ]
+    numeric_int_fields = [
+        'unidade_de_venda', 'numero_inicial', 'numero_maximo', 'tipo_de_cartela',
+        'quantidade_de_linhas', 'bola_tope_acumulado'
+    ]
+    all_numeric_fields = numeric_float_fields + numeric_int_fields
+
+    # --- BLOCO 1: RECUPERAÇÃO DE ERRO DE FORMULÁRIO ---
+    if form_data_erro:
+        evento_edicao = form_data_erro
+        if 'id_evento_edicao' in form_data_erro and form_data_erro['id_evento_edicao']:
+             active_view = 'alterar'
+             id_evento_edicao = form_data_erro['id_evento_edicao']
+        else:
+             active_view = 'novo'
+        
+        for key in numeric_float_fields:
+             if key in evento_edicao: 
+                  evento_edicao[key] = safe_float(evento_edicao.get(key, 0.0))
+
+        for key in numeric_int_fields:
+             if key in evento_edicao:
+                  valor = evento_edicao.get(key, 0)
+                  if isinstance(valor, Decimal128): valor = valor.to_decimal()
+                  try: evento_edicao[key] = int(float(str(valor)))
+                  except: evento_edicao[key] = 0
+             
+    # --- BLOCO 2: CARREGAR DADOS PARA EDIÇÃO ---
+    elif active_view == 'alterar' and id_evento_edicao and db_status:
+        try:
+            id_evento_int = int(id_evento_edicao)
+            evento_edicao = db.eventos.find_one({'id_evento': id_evento_int})
+            
+            if evento_edicao:
+                if '_id' in evento_edicao: evento_edicao['_id'] = str(evento_edicao['_id'])
+
+                data_evento_db = evento_edicao.get('data_evento') 
+                if data_evento_db and isinstance(data_evento_db, str):
+                    try:
+                        dt_obj = datetime.strptime(data_evento_db, '%d/%m/%Y')
+                        evento_edicao['data_evento'] = dt_obj.strftime('%Y-%m-%d')
+                    except ValueError: pass 
+                
+                for key in numeric_float_fields:
+                    if key in evento_edicao:
+                        evento_edicao[key] = safe_float(evento_edicao.get(key, 0.0))
+                
+                for key in numeric_int_fields:
+                    if key in evento_edicao:
+                        valor = evento_edicao.get(key, 0)
+                        if isinstance(valor, Decimal128): valor = valor.to_decimal()
+                        try: evento_edicao[key] = int(float(str(valor)))
+                        except: evento_edicao[key] = 0
+            else:
+                 error = f"Evento ID {id_evento_int} não encontrado."
+                 active_view = 'listar'
+        except (ValueError, TypeError):
+            error = "ID inválido."
+            active_view = 'listar'
+            
+    # --- BLOCO 3: LISTAGEM E CONSULTA ---
+    if db_status:
+        try:
+            total_eventos = db.eventos.count_documents({})
+            
+            if active_view == 'listar':
+                eventos_cursor = db.eventos.find({}).sort([("data_evento", pymongo.ASCENDING), ("hora_evento", pymongo.ASCENDING)])
+                eventos_lista = list(eventos_cursor)
+            
+            elif active_view == 'consulta' and search_term:
+                query_filter = {}
+                if search_term.isdigit(): 
+                    query_filter = {'id_evento': int(search_term)}
+                if not query_filter:
+                    regex_term = re.compile(re.escape(search_term), re.IGNORECASE)
+                    query_filter = {
+                        '$or': [
+                            {'descricao': {'$regex': regex_term}},
+                            {'data_evento': {'$regex': regex_term}}
+                        ]
+                    }
+                eventos_cursor = db.eventos.find(query_filter).sort("data_evento", pymongo.ASCENDING)
+                eventos_lista = list(eventos_cursor) 
+
+        except Exception as e:
+            print(f"Erro mongo cadastro_evento: {e}")
+            error = f"Erro crítico: {e}"
+
+    for evento in eventos_lista:
+        if '_id' in evento: evento['_id'] = str(evento['_id'])
+        id_ev = evento.get('id_evento')
+        nome_cv = f"vendas{id_ev}"
+        qtd = 0
+        if nome_cv in db.list_collection_names():
+            qtd = db[nome_cv].count_documents({})
+        evento['qtd_vendas'] = qtd
+        for key in all_numeric_fields:
+            if key in evento: evento[key] = safe_float(evento.get(key, 0.0))
+
+    # --- BUSCA LIMITES E PADRÕES NOS PARAMETROS ---
+    cartela_limits = {'15': 72000, '25': 90000}
+    default_acumulado = 0.0
+    default_tope = 0
+
+    if db_status:
+        try:
+            param_doc = db.parametros.find_one({})
+            if param_doc:
+                if 'arquivo_cartela_15' in param_doc:
+                    cartela_limits['15'] = int(param_doc['arquivo_cartela_15'])
+                if 'arquivo_cartela_25' in param_doc:
+                    cartela_limits['25'] = int(param_doc['arquivo_cartela_25'])
+                
+                # Novos campos
+                if 'acumulado' in param_doc:
+                    default_acumulado = safe_float(param_doc['acumulado'])
+                if 'tope' in param_doc:
+                    default_tope = int(param_doc['tope'])
+
+        except Exception as e:
+            print(f"Aviso parametros: {e}")
+
+    context = {
+        'total_eventos': total_eventos,
+        'eventos_lista': eventos_lista,
+        'active_view': active_view,
+        'query': search_term, 
+        'evento_edicao': evento_edicao, 
+        'error': error,
+        'success': success,
+        'g': g,
+        'cartela_limits': cartela_limits,
+        'default_acumulado': default_acumulado, # Enviando para template
+        'default_tope': default_tope            # Enviando para template
+    }
+    
+    return render_template('cadastro_evento.html', **context)
+
+
+
+@app.route('/cadastro_eventb', methods=['GET'])
+@login_required
+def cadastro_eventob():
     db = get_vendas_db()
     if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
     
@@ -2547,6 +2739,9 @@ def cadastro_evento():
 
     # --- NOVO: BUSCA LIMITES DAS CARTELAS NOS PARAMETROS ---
     cartela_limits = {'15': 72000, '25': 90000} # Valores padrão de segurança
+    default_acumulado = 0.0
+    default_tope = 0
+
     if db_status:
         try:
             param_doc = db.parametros.find_one({})
@@ -2556,6 +2751,13 @@ def cadastro_evento():
                     cartela_limits['15'] = int(param_doc['arquivo_cartela_15'])
                 if 'arquivo_cartela_25' in param_doc:
                     cartela_limits['25'] = int(param_doc['arquivo_cartela_25'])
+                # Carrega Padrões de Acumulado (NOVO)
+                # Usa safe_float para converter Decimal128
+                if 'acumulado' in param_doc:
+                    default_acumulado = safe_float(param_doc['acumulado'])
+                if 'tope' in param_doc:
+                    default_tope = int(param_doc['tope'])
+
         except Exception as e:
             print(f"Aviso: Não foi possível carregar limites de cartela: {e}")
 
@@ -2568,7 +2770,9 @@ def cadastro_evento():
         'error': error,
         'success': success,
         'g': g,
-        'cartela_limits': cartela_limits
+        'cartela_limits': cartela_limits,
+        'default_acumulado': default_acumulado, # <--- Passando para o template
+        'default_tope': default_tope            # <--- Passando para o template
     }
     
     return render_template('cadastro_evento.html', **context)
@@ -4230,6 +4434,8 @@ def minha_carteira():
                            saldo_atual=saldo_atual, 
                            transacoes=transacoes,
                            g=g)
+
+
 
 
 # --- ROTA TEMPORÁRIA: RESET DE SENHAS ---

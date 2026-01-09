@@ -203,10 +203,13 @@
                                {% endif %}
                                >
                     </div>
+
                     <div class="form-group">
                         <label for="hora_evento" class="required-label">Hora do Evento (hh:mm):</label>
-                        <input type="time" id="hora_evento" name="hora_evento" required class="form-control"
-                               value="{{ evento.get('hora_evento', '20:00') }}">
+                       <input type="time" id="hora_evento" name="hora_evento" required class="form-control"
+                              value="{{ evento.get('hora_evento', '20:00') }}">
+    
+                       <span id="hora-availability-msg" class="text-xs font-bold mt-1 block h-4"></span>
                     </div>
 
                     <div class="form-group">
@@ -291,19 +294,19 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="premio_acumulado">Prêmio Acumulado (R$):</label>
-                        <input type="number" id="premio_acumulado" name="premio_acumulado" step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_acumulado', 0.00) }}" oninput="toggleBolaTope()">
-                    </div>
-                    
+                         <label for="premio_acumulado">Prêmio Acumulado (R$):</label>
+                         <input type="number" id="premio_acumulado" name="premio_acumulado" step="0.01" min="0" class="form-control"
+                                value="{% if active_view == 'alterar' %}{{ evento.get('premio_acumulado', 0.00) }}{% else %}{{ default_acumulado }}{% endif %}" 
+                                oninput="toggleBolaTope()">
+                    </div>      
+              
                     <div class="form-group">
                         <label for="bola_tope_acumulado" id="label_bola_tope" 
-                               class="{% if evento.get('premio_acumulado', 0) <= 0 %}text-gray-400{% endif %}">Bola Tope Acumulado (2 dígitos):</label>
+                               class="{% if (active_view == 'alterar' and evento.get('premio_acumulado', 0) <= 0) or (active_view != 'alterar' and default_acumulado <= 0) %}text-gray-400{% endif %}">Bola Tope Acumulado (2 dígitos):</label>
                         <input type="number" id="bola_tope_acumulado" name="bola_tope_acumulado" min="1" max="99" class="form-control"
-                               value="{{ evento.get('bola_tope_acumulado', '') }}" 
-                               {% if evento.get('premio_acumulado', 0) <= 0 %}disabled{% endif %}>
+                               value="{% if active_view == 'alterar' %}{{ evento.get('bola_tope_acumulado', '') }}{% else %}{{ default_tope }}{% endif %}" 
+                               {% if (active_view == 'alterar' and evento.get('premio_acumulado', 0) <= 0) or (active_view != 'alterar' and default_acumulado <= 0) %}disabled{% endif %}>
                     </div>
-
 
                     <div class="form-group">
                          <label for="status">Status (Automático):</label>
@@ -419,7 +422,7 @@
         </div>
 
         <div class="flex justify-center mt-2">
-            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+            <a href="{{ url_for('submenu_eventos') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
         </div>
         
     </div>
@@ -655,6 +658,88 @@
                 calculatePremioTotal();
             }
         }
+
+    // Variável para armazenar o timeout e evitar chamadas excessivas
+    let checkTimeout = null;
+
+    function checkAvailability() {
+        const dataInput = document.getElementById('data_evento');
+        const horaInput = document.getElementById('hora_evento');
+        const msgSpan = document.getElementById('hora-availability-msg');
+        const btnSubmit = document.querySelector('.btn-submit');
+        
+        // Pega o ID da edição se existir (campo hidden)
+        const idEdicaoInput = document.querySelector('input[name="id_evento_edicao"]');
+        const excludeId = idEdicaoInput ? idEdicaoInput.value : '';
+
+        // Limpa mensagem anterior
+        msgSpan.textContent = '';
+        msgSpan.className = 'text-xs font-bold mt-1 block h-4'; // Reseta classes
+
+        if (!dataInput.value || !horaInput.value) {
+            return; // Só checa se ambos estiverem preenchidos
+        }
+
+        // Debounce: Aguarda 500ms após o usuário parar de digitar
+        clearTimeout(checkTimeout);
+        checkTimeout = setTimeout(() => {
+            
+            msgSpan.textContent = 'Verificando disponibilidade...';
+            msgSpan.classList.add('text-blue-500');
+
+            const url = `/api/check_event_availability?data=${dataInput.value}&hora=${horaInput.value}&exclude_id=${excludeId}`;
+
+            fetch(url)
+                .then(response => response.json())
+                .then(data => {
+                    if (data.exists) {
+                        // CONFLITO ENCONTRADO
+                        msgSpan.textContent = `⛔ ${data.msg}`;
+                        msgSpan.classList.remove('text-blue-500');
+                        msgSpan.classList.add('text-red-600');
+                        
+                        // Trava o botão de salvar
+                        if(btnSubmit) {
+                            btnSubmit.disabled = true;
+                            btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+                            btnSubmit.title = "Resolva o conflito de horário para salvar";
+                        }
+                    } else {
+                        // DISPONÍVEL
+                        msgSpan.textContent = '✅ Horário Disponível';
+                        msgSpan.classList.remove('text-blue-500', 'text-red-600');
+                        msgSpan.classList.add('text-green-600');
+
+                        // Libera o botão
+                        if(btnSubmit) {
+                            btnSubmit.disabled = false;
+                            btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+                            btnSubmit.title = "";
+                        }
+                        
+                        // Limpa a mensagem de "disponível" após 3 segundos para limpar o visual
+                        setTimeout(() => {
+                            if(msgSpan.textContent.includes('Disponível')) msgSpan.textContent = '';
+                        }, 3000);
+                    }
+                })
+                .catch(err => {
+                    console.error('Erro ao verificar disponibilidade:', err);
+                    msgSpan.textContent = '';
+                });
+
+        }, 500); // Delay de meio segundo
+    }
+
+    // Adiciona os ouvintes de evento assim que a página carrega
+    document.addEventListener('DOMContentLoaded', () => {
+        const dataInput = document.getElementById('data_evento');
+        const horaInput = document.getElementById('hora_evento');
+
+        if(dataInput) dataInput.addEventListener('change', checkAvailability);
+        if(horaInput) horaInput.addEventListener('input', checkAvailability); // 'input' pega digitação em tempo real
+    });
+
 
     </script>
 </body>
