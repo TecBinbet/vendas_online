@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor de Saques</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+
+    <style>
+        .card-saque {
+            /* De #fff para #e5e7eb (Gray-200) */
+            background: #e5e7eb; 
+            border-radius: 8px; 
+            padding: 15px; 
+            margin-bottom: 10px;
+            border-left: 5px solid #ccc; 
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        .status-pendente { 
+            border-left-color: #F59E0B; 
+        }
+        
+        .status-pago { 
+            border-left-color: #10B981; 
+            opacity: 0.8; 
+        }
+        
+        .status-rejeitado { 
+            border-left-color: #EF4444; 
+            opacity: 0.8; 
+        }
+        
+        .row-botoes { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+        .form-btn { flex: 1; min-width: 120px; }
+        .btn-acao { width: 100%; padding: 10px 5px; border-radius: 6px; font-weight: bold; cursor: pointer; border: none; color: white; white-space: nowrap; font-size: 0.9rem; }
+        .btn-aprovar { background-color: #10B981; }
+        .btn-rejeitar { background-color: #EF4444; }
+        
+        /* Ajuste nos filtros para remover margens extras pois agora estão dentro de um container */
+        .filtros { display: flex; gap: 10px; overflow-x: auto; padding-bottom: 5px; }
+        .filtros a { padding: 6px 12px; background: #e5e7eb; border-radius: 20px; text-decoration: none; color: #333; font-size: 0.9rem; white-space: nowrap; }
+        .filtros a.active { background: #3B82F6; color: white; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <h2 style="margin:0;">💸 Monitor de Saques</h2>
+            <a href="{{ url_for('menu_operacoes') }}" style="text-decoration: none; font-size: 1.5rem;">🏠</a>
+        </div>
+
+        {% if request.args.get('error') %}
+            <div style="background-color: #FEE2E2; color: #991B1B; padding: 5px; border-radius: 8px; margin-bottom: 10px; text-align: center;">
+                {{ request.args.get('error') }}
+            </div>
+        {% endif %}
+        {% if request.args.get('success') %}
+            <div style="background-color: #D1FAE5; color: #065F46; padding: 5px; border-radius: 8px; margin-bottom: 10px; text-align: center;">
+                {{ request.args.get('success') }}
+            </div>
+        {% endif %}
+
+        <div style="display: flex; flex-wrap: wrap; align-items: center; gap: 15px; margin-bottom: 15px; background: #f3f4f6; padding: 10px; border-radius: 10px;">
+            
+            <div class="filtros" style="margin-bottom: 0; padding-bottom: 0;">
+                <a href="{{ url_for('monitor_saques', status='pendente', limit=limit_atual) }}" 
+                   class="{{ 'active' if filtro_atual == 'pendente' }}">Pendentes</a>
+                   
+                <a href="{{ url_for('monitor_saques', status='pago', limit=limit_atual) }}" 
+                   class="{{ 'active' if filtro_atual == 'pago' }}">Pagos</a>
+                   
+                <a href="{{ url_for('monitor_saques', status='rejeitado', limit=limit_atual) }}" 
+                   class="{{ 'active' if filtro_atual == 'rejeitado' }}">Rejeitados</a>
+                   
+                <a href="{{ url_for('monitor_saques', status='todos', limit=limit_atual) }}" 
+                   class="{{ 'active' if filtro_atual == 'todos' }}">Todos</a>
+            </div>
+
+            <div style="display: flex; align-items: center; gap: 5px; margin-left: auto;">
+                <label for="limitInput" style="font-size: 0.9rem; font-weight: bold; color: #555;">Visualizar:</label>
+                
+                <input type="number" id="limitInput" value="{{ limit_atual }}" min="1" max="500"
+                       style="width: 70px; padding: 5px; border: 1px solid #ccc; border-radius: 5px; text-align: center;">
+                
+                <button onclick="atualizarLimite()" 
+                        style="padding: 6px 12px; background: #3B82F6; color: white; border: none; border-radius: 5px; cursor: pointer; font-weight: bold;">
+                    OK
+                </button>
+            </div>
+        </div>
+
+        {% if not saques %}
+            <div style="text-align: center; color: #666; margin-top: 30px;">
+                <p>Nenhuma solicitação encontrada neste filtro.</p>
+            </div>
+        {% endif %}
+
+        {% for s in saques %}
+        <div class="card-saque status-{{ s.status }}">
+            <div style="display: flex; justify-content: space-between;">
+                <strong>{{ s.nick }}</strong>
+                <span style="font-size: 0.85rem; color: #666;">
+                    <strong>
+                     {% if s.data_requisicao.strftime %}
+                           {{ s.data_requisicao.strftime('%d/%m/%Y às %H:%M') }}
+                     {% else %}
+                           {{ s.data_requisicao }}
+                     {% endif %}
+                     </strong>
+                </span>
+            </div>
+            <div style="font-size: 1.2rem; margin: 5px 0; color: #111;">
+                Valor: <strong>R$ {{ "{:,.2f}".format(s.valor_requerido) }}</strong>
+            </div>
+            <div style="font-size: 0.9rem; color: #444; background: #fff; padding: 5px; border: 1px dashed #ccc; margin-bottom: 5px;">
+                🔑 PIX: <strong>{{ s.chave_pix }}</strong>
+            </div>
+            
+            {% if s.status == 'pendente' %}
+                <div class="row-botoes">
+                <form action="{{ url_for('acao_saque') }}" method="POST" class="form-btn" onsubmit="return confirm('Confirmar pagamento?');">
+                    <input type="hidden" name="id_saque" value="{{ s._id }}">
+                    <input type="hidden" name="acao" value="pagar">
+                    <button type="submit" class="btn-acao btn-aprovar">✅ PAGAR</button>
+                </form>
+
+                <form action="{{ url_for('acao_saque') }}" method="POST" class="form-btn" onsubmit="return confirm('Rejeitar solicitação?');">
+                    <input type="hidden" name="id_saque" value="{{ s._id }}">
+                    <input type="hidden" name="acao" value="rejeitar">
+                    <button type="submit" class="btn-acao btn-rejeitar">❌ REJEITAR</button>
+                </form>
+            </div>
+            {% else %}
+                <div style="margin-top: 5px; font-size: 0.85rem; color: #666; border-top: 1px solid #eee; padding-top: 5px;">
+                    Processado por: <strong>{{ s.operador_pgto or 'Sistema' }}</strong> <br>
+                    {% if s.data_pgto %}
+                        Em: <strong>{{ s.data_pgto.strftime('%d/%m/%Y às %H:%M') }}</strong>
+                        <span style="margin: 0 5px; color: #ccc;">|</span>
+                    {% endif %}
+                    Status: <strong style="text-transform: uppercase;">{{ s.status }}</strong>
+                </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+    </div>
+
+    <script>
+        function atualizarLimite() {
+            const novoLimite = document.getElementById('limitInput').value;
+            const statusAtual = "{{ filtro_atual }}"; // Pega do Flask
+            
+            // Redireciona mantendo o status e mudando o limite
+            window.location.href = `/monitor_saques?status=${statusAtual}&limit=${novoLimite}`;
+        }
+
+        // Opcional: Permitir apertar ENTER no input
+        document.getElementById('limitInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') {
+                atualizarLimite();
+            }
+        });
+    </script>
+</body>
+</html>

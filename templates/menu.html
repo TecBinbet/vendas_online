@@ -27,7 +27,10 @@
        
         {% if nivel >= 3 %} 
             <hr class="my-0 ">
-
+             <a href="{{ url_for('monitor_saques') }}" class="menu-item gerencial-item">
+                  <span class="emoji">💸</span>
+                  <span class="menu-text">Monitor de Saques</span>
+             </a>
              <a href="{{ url_for('submenu_eventos') }}" class="menu-item gerencial-item">
                  🎉 Menu Eventos
             </a>

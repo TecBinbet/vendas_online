@@ -154,7 +154,9 @@ textarea {
     background-color: #ffc107; 
     color: #333; 
     font-weight: bold;
+    border-left: 5px solid #F59E0B;
 }
+
 .gerencial-item:hover { 
     background-color: #e0a800; 
 }

@@ -305,7 +305,7 @@
         </div>
 
         <div id="view-consulta" class="{% if active_view != 'consulta' %}hidden{% endif %}">
-            <h3 class="text-xl font-semibold mb-2 text-accent">Consulta de Cliente</h3>
+            <h3 class="text-xl font-semibold text-accent">Consulta de Cliente</h3>
             
             <form method="GET" action="{{ url_for('cadastro_cliente') }}" class="mb-4 space-y-2" id="form-consulta">
                 <input type="hidden" name="view" value="consulta">
@@ -339,7 +339,7 @@
                     <h4 class="font-bold -mb-1">{{ clientes_lista | length }} Resultado(s) para "{{ query }}"</h4>
                     
                     {% for cliente in clientes_lista %}
-                        <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0 bg-white p-3 rounded shadow-sm">
+                        <div class="border-b pb-3 mb-1 last:border-b-0 last:mb-0 bg-gray-300 p-3 rounded shadow-sm">
                             <div class="flex justify-between items-start">
                                 <div>
                                     <p><strong>{{ cliente.id_cliente }}</strong> | <span class="text-primary font-bold">{{ cliente.nick }}</span></p>
@@ -563,7 +563,7 @@
                         div.className = 'search-result-item';
                         div.innerHTML = `
                             <div class="font-bold text-gray-800">${cli.nick || cli.nome}</div>
-                            <div class="text-sm text-gray-600">ID: ${cli.id} | ${cli.nome} | ${cli.cidade}</div>
+                            <div class="text-sm  font-semibold text-gray-600">${cli.nome} |  ID: ${cli.id} |  ${cli.cidade}</div>
                         `;
                         // Ao clicar, redireciona para alterar
                         div.onclick = () => selecionarClienteParaEdicao(cli);

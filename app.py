@@ -1757,12 +1757,13 @@ def processar_venda():
 
 
 # --- ROTAS DE CADASTRO DE CLIENTE ---
+# No seu arquivo app.py
+
 @app.route('/buscar_clientes_json', methods=['GET'])
 @login_required
 def buscar_clientes_json():
     db = get_vendas_db()
-    if db is None: 
-        return jsonify({'error': 'DB Offline'}), 500
+    if db is None: return jsonify({'error': 'DB Offline'}), 500
     
     termo = request.args.get('termo', '').strip()
     tipo = request.args.get('tipo', 'nick')
@@ -1775,66 +1776,68 @@ def buscar_clientes_json():
         if termo.isdigit():
             query['id_cliente'] = int(termo)
         else:
-            return jsonify([]) # ID inválido
+            return jsonify([])
     elif tipo == 'nome':
-        query['nome_cliente'] = {'$regex': termo, '$options': 'i'}
+        # Adicionado o ^ para buscar apenas o início
+        query['nome_cliente'] = {'$regex': f'^{re.escape(termo)}', '$options': 'i'}
     elif tipo == 'nick':
-        query['nick'] = {'$regex': termo, '$options': 'i'}
+        # Adicionado o ^ para buscar apenas o início
+        query['nick'] = {'$regex': f'^{re.escape(termo)}', '$options': 'i'}
         
     try:
-        # Limita a 20 resultados e retorna apenas os campos necessários
         clientes = list(db.clientes.find(query, {'_id': 0, 'id_cliente': 1, 'nome_cliente': 1, 'nick': 1, 'cidade': 1}).limit(20))
         return jsonify(clientes)
     except Exception as e:
-        print(f"Erro na busca dinâmica: {e}")
+        print(f"Erro na busca dinâmica json: {e}")
         return jsonify([]), 500
 
 
 # Consulta de Cliente
+# No seu arquivo app.py
+
 @app.route('/buscar_clientes', methods=['GET'])
 @login_required
 def buscar_clientes():
     """
     Rota API para busca dinâmica de clientes.
-    Retorna JSON para o frontend.
+    AJUSTADA PARA BUSCAR APENAS O INÍCIO DA PALAVRA (STARTSWITH)
     """
     db = get_vendas_db()
-    # --- CORREÇÃO CRÍTICA AQUI ---
-    if db is None: # Era 'if not db:'
+    if db is None: 
         return jsonify({'clientes': [], 'error': 'DB Offline'})
-    # -----------------------------
 
     termo = request.args.get('termo', '').strip()
     tipo_busca = request.args.get('tipo', 'nick') # nick, nome, id
     
-    if not termo or len(termo) < 2: # Mínimo 2 caracteres para buscar
+    if not termo or len(termo) < 2: 
          return jsonify({'clientes': []})
 
     query_filter = {}
     
     try:
-        # Lógica de filtro baseada na opção selecionada
         if tipo_busca == 'id':
-            # Remove prefixos como "CLI" se o usuário digitar
+            # ID continua sendo busca exata ou contém digitos
             clean_id = re.sub(r'\D', '', termo)
             if clean_id.isdigit():
                 query_filter = {'id_cliente': int(clean_id)}
             else:
-                return jsonify({'clientes': []}) # ID inválido
+                return jsonify({'clientes': []})
                 
         elif tipo_busca == 'nome':
-            regex_term = re.compile(re.escape(termo), re.IGNORECASE)
+            # --- MUDANÇA AQUI: Adicionado o '^' antes do termo ---
+            # O '^' diz ao Banco: "Busque apenas se COMEÇAR com isso"
+            regex_term = re.compile(f"^{re.escape(termo)}", re.IGNORECASE)
             query_filter = {'nome_cliente': {'$regex': regex_term}}
             
         else: # Padrão: 'nick'
-            regex_term = re.compile(re.escape(termo), re.IGNORECASE)
+            # --- MUDANÇA AQUI TAMBÉM ---
+            regex_term = re.compile(f"^{re.escape(termo)}", re.IGNORECASE)
             query_filter = {'nick': {'$regex': regex_term}}
             
-        # Executa a busca (Limitada a 10 resultados para performance)
         clientes_cursor = db.clientes.find(
             query_filter, 
-            {'id_cliente': 1, 'nome_cliente': 1, 'nick': 1, 'cidade': 1} # Projeção: Só o necessário
-        ).limit(10)
+            {'id_cliente': 1, 'nome_cliente': 1, 'nick': 1, 'cidade': 1}
+        ).limit(10) # Mantém o limite para ser rápido
         
         resultados = []
         for cli in clientes_cursor:
@@ -1850,6 +1853,7 @@ def buscar_clientes():
     except Exception as e:
         print(f"Erro na busca dinâmica: {e}")
         return jsonify({'clientes': [], 'error': str(e)})
+
 
 @app.route('/cadastro_cliente', methods=['GET'])
 @login_required
@@ -4309,7 +4313,8 @@ def gerar_cartelas_pdf_15():
         traceback.print_exc()
         return f"Erro interno: {e}"
 
-# controle de movimentação dos cleintes
+
+# controle de movimentação dos clientes
 def registrar_transacao_cliente(db, id_cliente, valor, tipo, descricao, id_evento=None, id_venda=None):
     """
     Centraliza toda movimentação financeira do cliente.
@@ -4437,7 +4442,6 @@ def minha_carteira():
 
 
 
-
 # --- ROTA TEMPORÁRIA: RESET DE SENHAS ---
 @app.route('/admin/reset_senhas_global_temp')
 @login_required
@@ -4476,13 +4480,363 @@ def reset_senhas_global_temp():
     except Exception as e:
         return f"Erro crítico ao resetar senhas: {e}"
 
+
+# --- ROTA: MONITOR DE SAQUES ---
+@app.route('/monitor_saques', methods=['GET'])
+@login_required
+def monitor_saques():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+
+    filtro_status = request.args.get('status', 'pendente')
+    
+    # 1. Captura o limite (Padrão: 30 registros)
+    try:
+        limit_param = int(request.args.get('limit', 30))
+    except ValueError:
+        limit_param = 30 # Fallback se digitarem texto
+        
+    query = {}
+    if filtro_status != 'todos':
+        query['status'] = filtro_status
+
+    try:
+        # 2. Aplica o .limit() na consulta
+        saques_cursor = db.requisao_saque.find(query)\
+            .sort('data_requisicao', pymongo.DESCENDING)\
+            .limit(limit_param)
+            
+        saques = list(saques_cursor)
+        
+        # Tratamento de dados (seu código existente de conversão de data/float)
+        for s in saques:
+            s['_id'] = str(s['_id'])
+            s['valor_requerido'] = safe_float(s.get('valor_requerido'))
+            if 'data_requisicao' in s and isinstance(s['data_requisicao'], str):
+                try:
+                    s['data_requisicao'] = datetime.strptime(s['data_requisicao'], '%Y-%m-%dT%H:%M:%S.%f')
+                except ValueError:
+                    try:
+                        s['data_requisicao'] = datetime.strptime(s['data_requisicao'], '%Y-%m-%dT%H:%M:%S')
+                    except: pass
+
+    except Exception as e:
+        print(f"Erro ao buscar saques: {e}")
+        saques = []
+
+    # 3. Passamos 'limit_atual' para o template manter o input preenchido
+    return render_template('monitor_saques.html', 
+                           saques=saques, 
+                           filtro_atual=filtro_status,
+                           limit_atual=limit_param, 
+                           g=g)
+
+
+# --- ROTA: AÇÃO DO SAQUE (PAGAR ou REJEITAR) ---
+@app.route('/acao_saque', methods=['POST'])
+@login_required
+def acao_saque():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+
+    try:
+        id_saque = request.form.get('id_saque')
+        acao = request.form.get('acao') # 'pagar' ou 'rejeitar'
+        
+        saque = db.requisao_saque.find_one({'_id': ObjectId(id_saque)})
+        if not saque:
+            return redirect(url_for('monitor_saques', error="Solicitação não encontrada."))
+        
+        if saque.get('status') != 'pendente':
+            return redirect(url_for('monitor_saques', error="Esta solicitação já foi processada."))
+
+        id_cliente = saque.get('id_cliente')
+        valor = safe_float(saque.get('valor_requerido'))
+        
+        if acao == 'pagar':
+            # Pega o ID que estava salvo no pedido de saque
+            id_raw = saque.get('id_cliente')
+            
+            # --- CORREÇÃO: BUSCA INTELIGENTE (HÍBRIDA) ---
+            # Monta uma lista de possibilidades para achar o cliente
+            # Ex: Se id_raw for "20", ele vai procurar por "20" E por 20
+            possiveis_ids = [id_raw]
+            
+            try:
+                # Tenta criar a versão numérica
+                if str(id_raw).isdigit():
+                    possiveis_ids.append(int(id_raw))
+                # Tenta criar a versão texto
+                possiveis_ids.append(str(id_raw))
+            except:
+                pass
+            
+            # Busca no banco usando o operador $in (procura por qualquer um da lista)
+            cliente = db.clientes.find_one({'id_cliente': {'$in': possiveis_ids}})
+            # ---------------------------------------------
+
+            if not cliente:
+                # Se mesmo procurando de todos os jeitos não achar, aí sim é erro real
+                return redirect(url_for('monitor_saques', error=f"Erro Crítico: Cliente {id_raw} deletado ou não encontrado."))
+
+            # Continua o processo de pagamento...
+            saldo_atual = safe_float(cliente.get('saldo_atual', 0))
+            
+            if saldo_atual < valor:
+                return redirect(url_for('monitor_saques', error=f"Erro: Cliente tem apenas R$ {saldo_atual:.2f}. Saque de R$ {valor:.2f} impossível."))
+
+            # 2. Debita o saldo
+            sucesso, msg = registrar_transacao_cliente(
+                db=db,
+                id_cliente=cliente.get('id_cliente'), # Usa o ID oficial achado no banco
+                valor=-abs(valor), 
+                tipo='saque',
+                descricao=f"Saque Aprovado (Req: {str(id_saque)[-4:]})",
+                id_evento=None,
+                id_venda=None
+            )
+            
+            if not sucesso:
+                 return redirect(url_for('monitor_saques', error=f"Erro ao debitar: {msg}"))
+
+            # 3. Atualiza status do saque para PAGO
+            db.requisao_saque.update_one(
+                {'_id': ObjectId(id_saque)},
+                {'$set': {
+                    'status': 'pago',
+                    'data_pgto': datetime.utcnow() - timedelta(hours=3),
+                    'operador_pgto': session.get('nick'),
+                    'saldo_atual_pgto': saldo_atual - valor
+                }}
+            )
+            msg_sucesso = "Saque APROVADO e saldo debitado com sucesso!"
+
+        elif acao == 'rejeitar':
+            # Apenas muda o status, não mexe no saldo (pois não foi debitado na solicitação)
+            db.requisao_saque.update_one(
+                {'_id': ObjectId(id_saque)},
+                {'$set': {
+                    'status': 'rejeitado',
+                    'data_pgto': datetime.utcnow() - timedelta(hours=3),
+                    'operador_pgto': session.get('nick')
+                }}
+            )
+            msg_sucesso = "Solicitação de Saque REJEITADA."
+
+        else:
+            return redirect(url_for('monitor_saques', error="Ação inválida."))
+
+        return redirect(url_for('monitor_saques', success=msg_sucesso))
+
+    except Exception as e:
+        print(f"Erro critico acao_saque: {e}")
+        return redirect(url_for('monitor_saques', error=f"Erro interno: {e}"))
+
+
+@app.route('/financeiro_evento', methods=['GET'])
+@login_required
+def financeiro_evento():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    # Nível de acesso (Gerencial)
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+
+    id_evento_param = request.args.get('id_evento')
+
+    # SE NÃO TEM EVENTO SELECIONADO: MOSTRA LISTA DE EVENTOS ATIVOS/PARALISADOS
+    if not id_evento_param:
+        eventos = list(db.eventos.find(
+            {'status': {'$in': ['ativo', 'paralizado', 'finalizado']}}
+        ).sort('data_evento', -1))
+        
+        # Formata data para a lista
+        for e in eventos:
+            e['_id'] = str(e['_id'])
+            # Tenta formatar data se for objeto
+            if 'data_evento' in e:
+                 try: e['data_fmt'] = e['data_evento'].strftime('%d/%m/%Y') if hasattr(e['data_evento'], 'strftime') else e['data_evento']
+                 except: e['data_fmt'] = str(e['data_evento'])
+
+        return render_template('financeiro_evento_selecao.html', eventos=eventos, g=g)
+
+    # SE TEM EVENTO: CALCULA O RELATÓRIO
+    try:
+        # 1. Dados do Evento
+        id_evento_int = int(id_evento_param)
+        evento = db.eventos.find_one({'id_evento': id_evento_int})
+        if not evento:
+            return redirect(url_for('financeiro_evento', error="Evento não encontrado"))
+
+        # 2. Carrega Parâmetros de Comissão
+        default_comissao = g.parametros_globais.get('comissao_padrao', 20)
+        comissao_auto = g.parametros_globais.get('comissao_autoatendimento', 10)
+        
+        # Mapa de comissões por colaborador
+        colabs = db.colaboradores.find({})
+        mapa_comissao = {c['id_colaborador']: c.get('comissao', default_comissao) for c in colabs}
+        mapa_nicks = {c['id_colaborador']: c.get('nick', f"ID {c['id_colaborador']}") for c in colabs} # Cache de Nicks
+
+        # 3. Agregação de VENDAS (Por Colaborador e Origem)
+        nome_col_vendas = f"vendas{id_evento_int}"
+        nome_col_pagtos = f"pagamentos{id_evento_int}"
+        
+        vendas_agg = []
+        if nome_col_vendas in db.list_collection_names():
+            pipeline = [
+                {
+                    '$group': {
+                        '_id': {
+                            'id_colab': '$id_colaborador',
+                            'origem': '$origem' # Importante separar AUTO de NORMAL
+                        },
+                        'total_qtd': {'$sum': '$quantidade_unidades'},
+                        'total_val': {'$sum': '$valor_total'}
+                    }
+                }
+            ]
+            vendas_agg = list(db[nome_col_vendas].aggregate(pipeline))
+
+        # 4. Agregação de PAGAMENTOS (Do Colaborador para a Central)
+        pagtos_agg = {}
+        if nome_col_pagtos in db.list_collection_names():
+            pipeline_pagtos = [
+                {
+                    '$group': {
+                        '_id': '$id_colaborador',
+                        'total_pago': {'$sum': '$valor_pago'}
+                    }
+                }
+            ]
+            raw_pagtos = list(db[nome_col_pagtos].aggregate(pipeline_pagtos))
+            pagtos_agg = {p['_id']: safe_float(p['total_pago']) for p in raw_pagtos}
+
+        # 5. Processamento e Consolidação
+        relatorio = {} # Chave: id_colaborador
+        
+        # Processa Vendas e Calcula Comissões
+        for v in vendas_agg:
+            id_colab = v['_id'].get('id_colab')
+            origem = v['_id'].get('origem')
+            qtd = v['total_qtd']
+            valor = safe_float(v['total_val'])
+            
+            # Define taxa
+            taxa = comissao_auto if origem == 'terminal_cliente' else mapa_comissao.get(id_colab, default_comissao)
+            valor_comissao = (valor * taxa) / 100.0
+            
+            # Inicializa se não existir
+            if id_colab not in relatorio:
+                relatorio[id_colab] = {
+                    'id': id_colab,
+                    'nick': mapa_nicks.get(id_colab, 'Desconhecido') if id_colab != 'N/A' else 'Auto-Atendimento',
+                    'qtd': 0,
+                    'vendas': 0.0,
+                    'comissao': 0.0,
+                    'pago_central': 0.0,
+                    'recebido_colab': 0.0 # Placeholder
+                }
+            
+            relatorio[id_colab]['qtd'] += qtd
+            relatorio[id_colab]['vendas'] += valor
+            relatorio[id_colab]['comissao'] += valor_comissao
+
+        # Adiciona Pagamentos ao Relatório
+        for id_colab_pag, valor_pago in pagtos_agg.items():
+            if id_colab_pag not in relatorio:
+                # Caso raro: Pagou mas não vendeu nada (adiantamento?)
+                relatorio[id_colab_pag] = {
+                    'id': id_colab_pag,
+                    'nick': mapa_nicks.get(id_colab_pag, 'Desconhecido'),
+                    'qtd': 0, 'vendas': 0.0, 'comissao': 0.0,
+                    'pago_central': 0.0, 'recebido_colab': 0.0
+                }
+            relatorio[id_colab_pag]['pago_central'] += valor_pago
+
+        # 6. Calcula Totais Finais
+        lista_final = []
+        totais = {
+            'vendas': 0.0, 'qtd': 0, 'comissao': 0.0, 
+            'pago_central': 0.0, 'pendente_central': 0.0,
+            'premios_pagos': 0.0 # Placeholder
+        }
+
+        for dados in relatorio.values():
+            # Cálculo do Líquido
+            # Regra: O colaborador deve (Vendas - Comissão). O que ele pagou abata disso.
+            liquido_devido = dados['vendas'] - dados['comissao']
+            saldo_final = liquido_devido - dados['pago_central']
+            
+            dados['pendente'] = saldo_final if saldo_final > 0 else 0.0
+            dados['a_receber_colab'] = abs(saldo_final) if saldo_final < 0 else 0.0
+            
+            lista_final.append(dados)
+            
+            # Soma Totais
+            totais['vendas'] += dados['vendas']
+            totais['qtd'] += dados['qtd']
+            totais['comissao'] += dados['comissao']
+            totais['pago_central'] += dados['pago_central']
+            totais['pendente_central'] += dados['pendente']
+
+        # Ordena por Nick
+        lista_final.sort(key=lambda x: x['nick'])
+        
+        # 7. Dados do Evento (Prêmios)
+        premio_total = safe_float(evento.get('premio_total', 0))
+        # Se tivesse tabela de pagamento de prêmios, somaria aqui. 
+        # Por enquanto, assumimos pago = 0
+        premios_pagos = 0.0 
+        premios_pendentes = premio_total - premios_pagos
+
+        # Saldo do Evento (Visão da Casa)
+        # Saldo = (Vendas Líquidas que entraram) - Prêmios Pagos
+        # Ou Saldo Projetado = (Vendas Brutas - Comissões) - Prêmios Totais
+        saldo_evento_projetado = (totais['vendas'] - totais['comissao']) - premio_total
+
+        # Totais Financeiros Reais (Fluxo de Caixa)
+        total_recebido_real = totais['pago_central']
+        total_a_receber_real = totais['pendente_central']
+
+        dados_painel = {
+            'total_vendas': totais['vendas'],
+            'total_qtd': totais['qtd'],
+            'total_comissao': totais['comissao'],
+            'premio_total': premio_total,
+            'saldo_projetado': saldo_evento_projetado,
+            'total_recebido': total_recebido_real,
+            'total_a_receber': total_a_receber_real,
+            'premios_pagos': premios_pagos,
+            'premios_pendentes': premios_pendentes
+        }
+
+        return render_template('financeiro_evento.html', 
+                               evento=evento, 
+                               lista=lista_final, 
+                               painel=dados_painel,
+                               totais=totais,
+                               g=g)
+
+    except Exception as e:
+        print(f"Erro financeiro_evento: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect(url_for('financeiro_evento', error=f"Erro interno: {e}"))
+
+
 if __name__ == '__main__':
     # Para desenvolvimento local apenas
     if os.environ.get('FLASK_ENV') != 'production':
         app.run(debug=True, host='0.0.0.0', port=5001)
     else:
         print("⚠️  AVISO: Em produção, use Gunicorn. Não execute app.py diretamente!")
-
 
 
 # adicionar credito ao cliente
