@@ -1946,6 +1946,16 @@ def cadastro_cliente():
             if cliente.get(campo_data) and isinstance(cliente[campo_data], datetime):
                 cliente[f'{campo_data}_formatada'] = cliente[campo_data].strftime("%d/%m/%Y %H:%M:%S")
 
+    # 1. INSIRA A LÓGICA DE BUSCA AQUI (Antes do context)
+    lista_bloqueio = []
+    if active_view == 'bloqueio' and db_status:
+        try:
+            config = db.config_bloqueio.find_one({'tipo': 'nicks_proibidos'})
+            if config and 'palavras' in config:
+                lista_bloqueio = sorted(config['palavras'])
+        except Exception as e:
+            print(f"Erro ao carregar bloqueios: {e}")
+
     context = {
         'total_clientes': total_clientes,
         'clientes_lista': clientes_lista,
@@ -1959,7 +1969,8 @@ def cadastro_cliente():
         'g': g,
         'nivel': nivel_usuario,
         'id_logado': id_logado,  
-        'logado': nome_logado 
+        'logado': nome_logado,
+        'lista_bloqueio': lista_bloqueio
     }
     
     return render_template('cadastro_cliente.html', **context)
@@ -2224,7 +2235,66 @@ def excluir_cliente(id_cliente):
         return redirect(url_for('cadastro_cliente', error=f"Erro interno ao excluir cliente.", view='listar'))
 
 
-# ... (Seu código existente ...)
+# --- ROTAS DE GERENCIAMENTO DE BLOQUEIO (NICKS) ---
+
+@app.route('/adicionar_bloqueio', methods=['POST'])
+@login_required
+def adicionar_bloqueio():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('cadastro_cliente', view='bloqueio', error="Acesso Negado."))
+
+    termo = request.form.get('termo', '').strip().lower()
+    
+    if not termo:
+        return redirect(url_for('cadastro_cliente', view='bloqueio', error="Digite uma palavra."))
+
+    try:
+        # 1. VERIFICA SE JÁ EXISTE (Sua solicitação)
+        existe = db.config_bloqueio.find_one({
+            'tipo': 'nicks_proibidos', 
+            'palavras': termo 
+        })
+        
+        if existe:
+            return redirect(url_for('cadastro_cliente', view='bloqueio', error=f"O termo '{termo}' já está na lista de bloqueio."))
+
+        # 2. SE NÃO EXISTE, ADICIONA
+        db.config_bloqueio.update_one(
+            {'tipo': 'nicks_proibidos'},
+            {'$push': {'palavras': termo}}, # $push adiciona ao final
+            upsert=True # Cria o documento se não existir
+        )
+        
+        return redirect(url_for('cadastro_cliente', view='bloqueio', success=f"Termo '{termo}' bloqueado com sucesso."))
+
+    except Exception as e:
+        return redirect(url_for('cadastro_cliente', view='bloqueio', error=f"Erro interno: {e}"))
+
+
+@app.route('/remover_bloqueio', methods=['POST'])
+@login_required
+def remover_bloqueio():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('cadastro_cliente', view='bloqueio', error="Acesso Negado."))
+
+    termo = request.form.get('termo')
+    
+    try:
+        # Usa $pull para remover a palavra da lista
+        db.config_bloqueio.update_one(
+            {'tipo': 'nicks_proibidos'},
+            {'$pull': {'palavras': termo}}
+        )
+        return redirect(url_for('cadastro_cliente', view='bloqueio', success=f"Termo '{termo}' liberado."))
+    except Exception as e:
+        return redirect(url_for('cadastro_cliente', view='bloqueio', error=f"Erro: {e}"))
+
 
 # --- ROTAS DE AUTO CADASTRO (PÚBLICAS) ---
 # Cole este bloco no final do seu app.py para registrar as rotas
@@ -2571,6 +2641,7 @@ def cadastro_evento():
 
         except Exception as e:
             print(f"Aviso parametros: {e}")
+
 
     context = {
         'total_eventos': total_eventos,
