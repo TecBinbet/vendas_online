@@ -3039,16 +3039,27 @@ def excluir_evento(id_evento):
     if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
 
     try:
+        # 1. Exclui o registro principal do Evento
         result = db.eventos.delete_one({'id_evento': id_evento})
+        
         msg_extra = ""
         if result.deleted_count == 1:
+            
+            # 2. Remove as coleções dinâmicas inteiras (Vendas e Pagamentos)
             nome_colecao_venda = f"vendas{id_evento}"
             if nome_colecao_venda in db.list_collection_names():
                 db[nome_colecao_venda].drop()
                 msg_extra = " e todas as vendas associadas foram removidas."
+            
             nome_colecao_pgtos = f"pagamentos{id_evento}"
             if nome_colecao_pgtos in db.list_collection_names():
                 db[nome_colecao_pgtos].drop()
+
+            # 3. NOVO: Remove registros vinculados nas tabelas de apoio
+            # Usamos delete_many por segurança, caso haja lixo duplicado, mas geralmente é 1 registro.
+            db.resultados.delete_many({'id_evento': id_evento})
+            db.controle_venda.delete_many({'id_evento': id_evento})
+            
             # -----------------------------------------------------
             success_msg = f"Evento ID: {id_evento} excluído{msg_extra} com sucesso."
         else:
@@ -3058,6 +3069,8 @@ def excluir_evento(id_evento):
 
     except Exception as e:
         print(f"ERRO CRÍTICO na exclusão de evento ID {id_evento}: {e}")
+        import traceback
+        traceback.print_exc()
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento.", view='listar'))
 
 
@@ -3750,47 +3763,54 @@ def consulta_resultados():
                 # 2. Busca Resultados na coleção 'resultados'
                 # NOVA ESTRUTURA: Um único documento contendo array 'ganhadores'
                 print(f"id_evento:   {id_evento_int}")
-                if 'resultados' in db.list_collection_names():
-                    resultado_doc = db.resultados.find_one({'id_evento': id_evento_int})
+
+            if 'resultados' in db.list_collection_names():
+                resultado_doc = db.resultados.find_one({'id_evento': id_evento_int})
+                
+                if resultado_doc:
+                    # Extrai dados gerais do sorteio
+                    total_bolas = resultado_doc.get('total_de_bolas', 0)
+                    if 'bolas_sorteadas' in resultado_doc:
+                        # Opcional: Se quiser processar as bolas sorteadas para exibir
+                        pass 
                     
-                    if resultado_doc:
-                        # Extrai dados gerais do sorteio
-                        total_bolas = resultado_doc.get('total_de_bolas', 0)
-                        
-                        # Processa o ARRAY de ganhadores
-                        # Assume-se que 'ganhadores' é uma lista de objetos
-                        raw_ganhadores = resultado_doc.get('ganhadores', [])
-                        
-                        if isinstance(raw_ganhadores, list):
-                            for item in raw_ganhadores:
-                                if not isinstance(item, dict): continue
+                    # Acessa o ARRAY de ganhadores (Lista de 5 itens no seu exemplo)
+                    raw_ganhadores = resultado_doc.get('ganhadores', [])
+                    
+                    # Garante que é uma lista antes de iterar
+                    if isinstance(raw_ganhadores, list):
+                        for item in raw_ganhadores:
+                            # Proteção caso algum item não seja dicionário
+                            if not isinstance(item, dict): continue
 
-                                # Mapeia os campos do objeto interno para o template
-                                # Tenta chaves comuns caso variem (descricao/premio, valor/valor_premio)
-                                descricao = item.get('descricao') or item.get('premio') or item.get('descricao_premio') or 'Prêmio'
-                                
-                                # --- CORREÇÃO AQUI: Adicionado 'valor_rateio' à busca ---
-                                valor = item.get('valor_rateio') or item.get('valor') or item.get('valor_premio') or 0
-                                
-                                # Lista de Nomes
-                                lista_nomes = item.get('ganhadores') or item.get('nome') or []
-                                if isinstance(lista_nomes, str): lista_nomes = [lista_nomes]
-                                
-                                # Cartelas (pode ser int, str ou list)
-                                cartelas_raw = item.get('cartela') or item.get('cartelas') or []
-                                if isinstance(cartelas_raw, (int, str)):
-                                    cartelas_fmt = str(cartelas_raw)
-                                elif isinstance(cartelas_raw, list):
-                                    cartelas_fmt = ", ".join(str(c) for c in cartelas_raw)
-                                else:
-                                    cartelas_fmt = ""
+                            # Tenta variações de chaves para garantir compatibilidade
+                            descricao = item.get('descricao') or item.get('premio') or item.get('descricao_premio') or 'Prêmio'
+                            
+                            # Busca valor (incluindo valor_rateio)
+                            valor = item.get('valor_rateio') or item.get('valor') or item.get('valor_premio') or 0
+                            
+                            # Lista de Nomes (pode vir como 'ganhadores' ou 'nome')
+                            lista_nomes = item.get('ganhadores') or item.get('nome') or []
+                            if isinstance(lista_nomes, str): 
+                                lista_nomes = [lista_nomes]
+                            
+                            # Cartelas
+                            cartelas_raw = item.get('cartela') or item.get('cartelas') or []
+                            if isinstance(cartelas_raw, (int, str)):
+                                cartelas_fmt = str(cartelas_raw)
+                            elif isinstance(cartelas_raw, list):
+                                cartelas_fmt = ", ".join(str(c) for c in cartelas_raw)
+                            else:
+                                cartelas_fmt = ""
 
-                                resultados.append({
-                                    'descricao_premio': descricao,
-                                    'ganhadores': lista_nomes,
-                                    'cartela': cartelas_fmt,
-                                    'valor_premio': format_moeda(valor) # Usa a função ajustada
-                                })
+                            # Adiciona à lista final que vai para o HTML
+                            resultados.append({
+                                'descricao_premio': descricao,
+                                'ganhadores': lista_nomes,
+                                'cartela': cartelas_fmt,
+                                'valor_premio': format_moeda(valor)
+                            })
+
                         else:
                             print("Aviso: Campo 'ganhadores' não é uma lista.")
 
@@ -4902,6 +4922,54 @@ def financeiro_evento():
         return redirect(url_for('financeiro_evento', error=f"Erro interno: {e}"))
 
 
+
+# --- ROTA UTILITÁRIA: LIMPAR TABELA ESPECÍFICA ---
+@app.route('/admin/limpar_tabela/<string:nome_tabela>', methods=['GET'])
+@login_required
+def limpar_tabela_dinamica(nome_tabela):
+    """
+    Limpa todos os dados de uma tabela específica passada por parâmetro na URL.
+    Uso: /admin/limpar_tabela/nome_da_colecao
+    """
+    db = get_vendas_db()
+    if db is None: 
+        return jsonify({'status': 'error', 'msg': 'Banco de dados offline.'}), 500
+
+    # 1. SEGURANÇA: Apenas Nível 3 (Admin)
+    if session.get('nivel', 0) < 3:
+        return jsonify({'status': 'error', 'msg': 'ACESSO NEGADO: Apenas administradores.'}), 403
+
+    # 2. SEGURANÇA: Lista de tabelas INTOCÁVEIS (Para não quebrar o sistema)
+    tabelas_proibidas = ['colaboradores', 'parametros', 'salas', 'contadores']
+    
+    if nome_tabela in tabelas_proibidas:
+        return jsonify({
+            'status': 'error', 
+            'msg': f'PROIBIDO: A tabela "{nome_tabela}" é crítica para o sistema e não pode ser limpa por aqui.'
+        }), 400
+
+    try:
+        # Verifica se a coleção existe antes de tentar limpar
+        if nome_tabela not in db.list_collection_names():
+             return jsonify({'status': 'error', 'msg': f'A tabela "{nome_tabela}" não existe no banco.'}), 404
+
+        # 3. EXECUÇÃO: Apaga todos os registros (mantém a estrutura e índices)
+        # Se quiser apagar a tabela inteira (drop), use: db[nome_tabela].drop()
+        resultado = db[nome_tabela].delete_many({})
+        
+        msg = f"SUCESSO: Foram removidos {resultado.deleted_count} registros da tabela '{nome_tabela}'."
+        print(f"[AUDITORIA] Admin {session.get('nick')} limpou a tabela {nome_tabela}.")
+        
+        return jsonify({
+            'status': 'success',
+            'msg': msg,
+            'registros_removidos': resultado.deleted_count
+        })
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'msg': f'Erro interno: {e}'}), 500
+
+
 if __name__ == '__main__':
     # Para desenvolvimento local apenas
     if os.environ.get('FLASK_ENV') != 'production':
@@ -4910,5 +4978,6 @@ if __name__ == '__main__':
         print("⚠️  AVISO: Em produção, use Gunicorn. Não execute app.py diretamente!")
 
 
-# adicionar credito ao cliente
-#registrar_transacao_cliente(db, id_cliente, valor_recarga, 'recarga',  "Recarga via PIX")
+# limpar registros de tala tebela; exemplo tabela "requisao_saque"
+# deve estar logando como administrador
+#http://localhost:5001/admin/limpar_tabela/requisao_saque

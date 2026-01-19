@@ -160,10 +160,12 @@
                 📋 Listar
             </a>
 
-            <a href="{{ url_for('cadastro_cliente', view='bloqueio') }}" 
-                 class="nav-link {% if active_view == 'bloqueio' %}bg-red-600 text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-red-700">
-                🚫 Bloqueios de Termos (apelido)
-            </a>
+            {% if nivel >= 3 %}  
+                <a href="{{ url_for('cadastro_cliente', view='bloqueio') }}" 
+                     class="nav-link {% if active_view == 'bloqueio' %}bg-red-600 text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-red-700">
+                    🚫 Bloqueios de Termos (apelido)
+                </a>
+            {% endif %}
 
             <input type="hidden" id="next_url_val" value="{{ next_url | default('menu_operacoes') }}">
             {% if id_evento_retorno %}
