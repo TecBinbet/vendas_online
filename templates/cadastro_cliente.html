@@ -134,7 +134,7 @@
 
     <div class="container">
         <div class="flex justify-center -mt-3 mb-1">
-            <a href="{{ url_for(next_url | default('menu_operacoes'), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+            <a href="{{ url_for(next_url | default('menu_operacoes', true), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
         </div>
 
          <h2 class="text-xl mb-1 text-blue-800 text-center font-bold">Gestão de Clientes</h2>
@@ -192,10 +192,9 @@
            <form method="POST" action="{{ url_for('gravar_cliente') }}" id="form-cadastro" class="space-y-4">
                 
                 {% if active_view == 'alterar' %}
-                    <input type="hidden" name="id_cliente_edicao" value="{{ cliente.get('id_cliente', '') }}">
+                    <input type="hidden" name="id_cliente" value="{{ cliente.get('id_cliente', '') }}">
                 {% endif %}
-                
-                <input type="hidden" name="next_url" value="{{ next_url | default('menu_operacoes') }}">
+                <input type="hidden" name="next_url" value="{{ next_url | default('') }}">
                 {% if id_evento_retorno %}
                     <input type="hidden" name="id_evento_retorno" value="{{ id_evento_retorno }}">
                 {% endif %}
@@ -407,7 +406,7 @@
                     <thead>
                         <tr class="list-header">
                             <th class="py-0 px-4 border-b text-left">ID</th>
-                            <th class="py-0 px-4 border-b text-left">Nome (Nick)</th>
+                            <th class="py-0 px-4 border-b text-left">Nick (Nomek)</th>
                             <th class="py-0 px-4 border-b text-left">Cidade</th>
                             <th class="py-0 px-4 border-b text-left">Telefone</th>
                             <th class="py-0 px-4 border-b text-left">Ações</th>
@@ -418,7 +417,7 @@
                             {% for cliente in clientes_lista %}
                             <tr class="list-row hover:bg-green-200 transition duration-150">
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.id_cliente }}</td>
-                                <td class="py-3 px-4 border-b text-sm font-bold">{{ cliente.nome_cliente }} ({{ cliente.nick }})</td>
+                                <td class="py-3 px-4 border-b text-sm font-bold">{{ cliente.nick }} ({{ cliente.nome_cliente }})</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.cidade }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.telefone }}</td>
                                 <td class="py-3 px-4 border-b text-sm whitespace-nowrap">

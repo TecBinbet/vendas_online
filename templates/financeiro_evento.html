@@ -15,12 +15,12 @@
 </head>
 <body class="bg-gray-50 text-gray-800 font-sans">
 
-    <div class="max-w-7xl mx-auto p-4">
+    <div class="max-w-7xl mx-auto p-2">
         
-        <div class="flex justify-between items-center mb-6 no-print">
+        <div class="flex justify-between items-center mb-1 no-print">
             <div>
-                <h1 class="text-2xl font-bold text-gray-900">Financeiro do Evento</h1>
-                <p class="text-gray-600">{{ evento.descricao }} (ID: {{ evento.id_evento }}) - {{ evento.data_evento }}</p>
+                <h1 class="text-xl text-gray-400">Financeiro do Evento</h1>
+                <p class="text-xl font-bold text-yellow-500 -mt-1">{{ evento.descricao }} (ID: {{ evento.id_evento }}) - {{ evento.data_evento }} às {{ evento.hora_evento }}</p>
             </div>
             <div class="flex gap-2">
                 <button onclick="window.print()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded font-bold">🖨️ Imprimir</button>
@@ -29,30 +29,78 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
             
-            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-blue-500">
-                <p class="text-sm text-gray-500 font-bold uppercase">Total Vendas</p>
-                <p class="text-2xl font-black text-blue-700">R$ {{ "{:,.2f}".format(painel.total_vendas) }}</p>
-                <p class="text-xs text-gray-500">{{ painel.total_qtd }} cartelas vendidas</p>
-            </div>
+            <div class="bg-white py-2 px-4 rounded-lg shadow border-l-4 border-blue-500">
+                <h3 class="text-gray-500 text-sm font-bold uppercase mb-2">Faturamento Bruto</h3>
+                
+                <div class="flex justify-between items-center border-b pb-2 mb-2">
+                    <div class="text-left">
+                        <span class="text-xs text-gray-500 block">📋Cartelas (Bingo)</span>
+                        <span class="text-lg font-bold text-blue-600">
+                            R$ {{ painel.total_vendas_bingo | format_moeda }}
+                        </span>
+                    </div>
+                    
+                    <div class="text-gray-300 text-2xl font-light">|</div>
 
-            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-red-500">
-                <p class="text-sm text-gray-500 font-bold uppercase">Total Premiação</p>
-                <p class="text-2xl font-black text-red-700">R$ {{ "{:,.2f}".format(painel.premio_total) }}</p>
-                <div class="flex justify-between text-xs mt-1">
-                    <span class="text-red-400">Pago: {{ "{:,.2f}".format(painel.premios_pagos) }}</span>
-                    <span class="text-gray-600 font-bold">Pend: {{ "{:,.2f}".format(painel.premios_pendentes) }}</span>
+                    <div class="text-right">
+                        <span class="text-xs text-gray-500 block">🍀Sorte Extra</span>
+                        <span class="text-lg font-bold text-purple-600">
+                            R$ {{ painel.total_vendas_cupons | format_moeda }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center pt-1">
+                    <span class="text-sm font-bold text-gray-700">TOTAL GERAL:</span>
+                    <span class="text-xl font-extrabold text-green-600">
+                        R$ {{ painel.receita_bruta_total | format_moeda }}
+                    </span>
                 </div>
             </div>
 
-            <div class="bg-white p-4 rounded-lg shadow border-l-4 border-yellow-500">
+            <div class="bg-white py-2 px-4 rounded-lg shadow border-l-4 border-red-500">
+                <h3 class="text-gray-500 text-sm font-bold uppercase mb-2">Total Premiação</h3>
+                
+                <div class="flex justify-between items-center border-b pb-2 mb-2">
+                    <div class="text-left">
+                        <span class="text-xs text-gray-500 block">Prêmios Bingo</span>
+                        <span class="text-lg font-bold text-red-600">
+                            R$ {{ painel.premio_bingo | format_moeda }}
+                        </span>
+                    </div>
+                    
+                    <div class="text-gray-300 text-2xl font-light">|</div>
+
+                    <div class="text-right">
+                        <span class="text-xs text-gray-500 block">Prêmios Sorte Extra</span>
+                        <span class="text-lg font-bold text-red-800">
+                            R$ {{ painel.premio_extra | format_moeda }}
+                        </span>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center pt-1 mb-1">
+                    <span class="text-sm font-bold text-gray-700">TOTAL GERAL:</span>
+                    <span class="text-xl font-extrabold text-red-700">
+                        R$ {{ painel.premio_total_geral | format_moeda }}
+                    </span>
+                </div>
+                
+                <div class="flex justify-between text-xs mt-1 pt-1 border-t border-gray-100">
+                    <span class="text-green-600 font-bold">Pago: {{ painel.premios_pagos | format_moeda }}</span>
+                    <span class="text-gray-500 font-bold">Pend: {{ painel.premios_pendentes | format_moeda }}</span>
+                </div>
+            </div>
+
+            <div class="bg-white py-2 px-4 rounded-lg shadow border-l-4 border-yellow-500">
                 <p class="text-sm text-gray-500 font-bold uppercase">Total Comissões</p>
                 <p class="text-2xl font-black text-yellow-600">R$ {{ "{:,.2f}".format(painel.total_comissao) }}</p>
                 <p class="text-xs text-gray-400">Descontado dos colaboradores</p>
             </div>
 
-            <div class="bg-white p-4 rounded-lg shadow border-l-4 {% if painel.saldo_projetado >= 0 %}border-green-500{% else %}border-red-600{% endif %}">
+            <div class="bg-white py-2 px-4 rounded-lg shadow border-l-4 {% if painel.saldo_projetado >= 0 %}border-green-500{% else %}border-red-600{% endif %}">
                 <p class="text-sm text-gray-500 font-bold uppercase">Saldo do Evento (Lucro)</p>
                 <p class="text-2xl font-black {% if painel.saldo_projetado >= 0 %}text-green-700{% else %}text-red-700{% endif %}">
                     R$ {{ "{:,.2f}".format(painel.saldo_projetado) }}
@@ -61,49 +109,56 @@
             </div>
         </div>
 
-        <div class="bg-gray-100 p-4 rounded-lg border border-gray-300 mb-6 flex flex-wrap justify-between items-center gap-4">
+        <div class="bg-gray-100 py-1 px-4 rounded-lg border border-gray-300 mb-2 flex flex-wrap justify-between items-center gap-1">
             <div>
                 <span class="text-gray-600 font-bold text-sm block">DINHEIRO EM CAIXA (RECEBIDO)</span>
-                <span class="text-xl font-bold text-green-700">R$ {{ "{:,.2f}".format(painel.total_recebido) }}</span>
+                <span class="text-xl font-bold text-green-700 -mt-2">R$ {{ "{:,.2f}".format(painel.total_recebido) }}</span>
             </div>
             <div class="text-right">
                 <span class="text-gray-600 font-bold text-sm block">PENDENTE DE RECEBIMENTO (DOS VENDEDORES)</span>
-                <span class="text-xl font-bold text-red-600">R$ {{ "{:,.2f}".format(painel.total_a_receber) }}</span>
+                <span class="text-xl font-bold text-red-600 -mt-2">R$ {{ "{:,.2f}".format(painel.total_a_receber) }}</span>
             </div>
         </div>
 
         <div class="bg-white rounded-lg shadow overflow-hidden">
-            <div class="bg-gray-800 text-white p-3 font-bold">
+            <div class="bg-gray-800 text-white py-1 px-3 font-bold">
                 Detalhamento por Colaborador
             </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full text-sm">
                     <thead>
                         <tr class="bg-gray-100 border-b border-gray-200 text-gray-600 uppercase">
-                            <th class="py-3 px-4 text-left">Colaborador</th>
-                            <th class="py-3 px-4 text-center">Qtd</th>
-                            <th class="py-3 px-4 text-right bg-blue-50">Vendas</th>
-                            <th class="py-3 px-4 text-right">Comissão</th>
-                            <th class="py-3 px-4 text-right text-green-700">Pago (Central)</th>
-                            <th class="py-3 px-4 text-right text-red-600 font-bold">Pendente</th>
-                            <th class="py-3 px-4 text-right text-gray-400">A Receber (Colab)</th>
+                            <th class="py-1 px-4 text-left">Colaborador</th>
+                            <th class="py-1 px-4 text-center">Qtd</th>
+                            <th class="py-1 px-4 text-right bg-blue-50">Vendas</th>
+                            <th class="py-1 px-4 text-right text-purple-600 border-b">Sorte Extra</th>                          
+                            <th class="py-1 px-4 text-right">Comissão</th>
+                            <th class="py-1 px-4 text-right text-green-700">Pago (Central)</th>
+                            <th class="py-1 px-4 text-right text-red-600 font-bold">Pendente</th>
+                            <th class="py-1 px-4 text-right text-gray-400">A Receber (Colab)</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-gray-200">
                         {% for item in lista %}
                         <tr class="hover:bg-gray-50 transition">
-                            <td class="py-2 px-4 font-bold text-gray-700">
+                            <td class="py-1 px-4 font-bold text-gray-700">
                                 {{ item.nick }}
                                 <span class="block text-xs text-gray-400 font-normal">ID: {{ item.id }}</span>
                             </td>
-                            <td class="py-2 px-4 text-center">{{ item.qtd }}</td>
-                            <td class="py-2 px-4 text-right font-bold bg-blue-50">R$ {{ "{:,.2f}".format(item.vendas) }}</td>
-                            <td class="py-2 px-4 text-right text-yellow-600">R$ {{ "{:,.2f}".format(item.comissao) }}</td>
-                            <td class="py-2 px-4 text-right text-green-700">R$ {{ "{:,.2f}".format(item.pago_central) }}</td>
-                            <td class="py-2 px-4 text-right font-bold {% if item.pendente > 0 %}text-red-600{% else %}text-gray-300{% endif %}">
+                            <td class="py-1 px-4 text-center">{{ item.qtd }}</td>
+                            <td class="py-1 px-4 text-right font-bold bg-blue-50">R$ {{ "{:,.2f}".format(item.vendas) }}</td>
+                            
+                            <td class="py-1 px-4 text-right text-purple-600 font-semibold border-b">
+                                R$ {{ item.vendas_cupons | format_moeda }}
+                                <div class="text-xs text-gray-400">Qtd: {{ item.qtd_cupons }}</div>
+                            </td>
+
+                            <td class="py-1 px-4 text-right text-yellow-600">R$ {{ "{:,.2f}".format(item.comissao) }}</td>
+                            <td class="py-1 px-4 text-right text-green-700">R$ {{ "{:,.2f}".format(item.pago_central) }}</td>
+                            <td class="py-1 px-4 text-right font-bold {% if item.pendente > 0 %}text-red-600{% else %}text-gray-300{% endif %}">
                                 R$ {{ "{:,.2f}".format(item.pendente) }}
                             </td>
-                            <td class="py-2 px-4 text-right text-gray-400">
+                            <td class="py-1 px-4 text-right text-gray-400">
                                 {% if item.a_receber_colab > 0 %}
                                     <span class="text-blue-500 font-bold">R$ {{ "{:,.2f}".format(item.a_receber_colab) }}</span>
                                 {% else %}
@@ -115,13 +170,19 @@
                     </tbody>
                     <tfoot class="bg-gray-200 font-bold text-gray-800">
                         <tr>
-                            <td class="py-3 px-4">TOTAIS</td>
-                            <td class="py-3 px-4 text-center">{{ totais.qtd }}</td>
-                            <td class="py-3 px-4 text-right text-blue-800">R$ {{ "{:,.2f}".format(totais.vendas) }}</td>
-                            <td class="py-3 px-4 text-right text-yellow-800">R$ {{ "{:,.2f}".format(totais.comissao) }}</td>
-                            <td class="py-3 px-4 text-right text-green-800">R$ {{ "{:,.2f}".format(totais.pago_central) }}</td>
-                            <td class="py-3 px-4 text-right text-red-800">R$ {{ "{:,.2f}".format(totais.pendente_central) }}</td>
-                            <td class="py-3 px-4 text-right">-</td>
+                            <td class="py-1 px-4">TOTAIS</td>
+                            <td class="py-1 px-4 text-center">{{ totais.qtd }}</td>
+                            <td class="py-1 px-4 text-right text-blue-800">R$ {{ "{:,.2f}".format(totais.vendas) }}</td>
+                            
+                            <td class="py-1 px-4 text-right text-purple-800">
+                                R$ {{ "{:,.2f}".format(totais.vendas_cupons) }}
+                                <div class="text-xs font-normal">Qtd: {{ totais.qtd_cupons }}</div>
+                            </td>
+
+                            <td class="py-1 px-4 text-right text-yellow-800">R$ {{ "{:,.2f}".format(totais.comissao) }}</td>
+                            <td class="py-1 px-4 text-right text-green-800">R$ {{ "{:,.2f}".format(totais.pago_central) }}</td>
+                            <td class="py-1 px-4 text-right text-red-800">R$ {{ "{:,.2f}".format(totais.pendente_central) }}</td>
+                            <td class="py-1 px-4 text-right">-</td>
                         </tr>
                     </tfoot>
                 </table>

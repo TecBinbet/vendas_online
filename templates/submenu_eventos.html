@@ -30,6 +30,8 @@
         }
         .card-cadastro { border-left-color: #059669; } /* Verde Primary */
         .card-status { border-left-color: #F59E0B; } /* Amber Accent */
+        .card-financeiro { border-left-color: #2563EB; } /* Blue 600 */
+        .card-extra { border-left-color: #9333EA; } /* Purple 600 (Novo) */
     </style>
 </head>
 <body>
@@ -68,6 +70,15 @@
                     </div>
                     <h3 class="text-xl font-bold text-gray-800 group-hover:text-blue-600">Financeiro do Evento</h3>
                     <p class="text-sm text-gray-500 -mt-1">Fechamento, comissões, saldos e prêmios.</p>
+                </a>
+
+                <a href="{{ url_for('controle_sorte_extra') }}" 
+                   class="menu-card card-extra bg-gray-50 hover:bg-purple-50 p-1 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center text-center group no-underline">
+                    <div class="bg-purple-100 p-2 rounded-full mb-1 group-hover:bg-purple-200 transition">
+                        <span class="text-2xl">🍀</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-800 group-hover:text-purple-600">Controle Sorte Extra</h3>
+                    <p class="text-sm text-gray-500 -mt-1">Gerenciar vendas de cupons e premiações extras.</p>
                 </a>
 
             </div>

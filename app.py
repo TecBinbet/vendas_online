@@ -27,6 +27,7 @@ CARTELAS_FOLDER = os.path.join(BASE_DIR, 'cartelas')
 DEFAULT_SALA_ID = "000"
 JaLogado = 0
 
+
 # --- FIM DA VARIÁVEL GLOBAL ---
 
 class PDF(FPDF):
@@ -579,128 +580,93 @@ def buscar_dados_cartela_2d(numero_cartela, tipo_cartela):
     
     return None
 
+
 # --- HOOKS DA APLICAÇÃO ---@app.before_request
 @app.before_request
 def before_request():
     global client_control, db_control, DEFAULT_SALA_ID
 
-    # 1. CRÍTICO: Inicialização de variáveis globais em 'g'
-    if not hasattr(g, 'client_control'):
+    # Setup Básico
+    if not hasattr(g, 'client_control'): 
         g.client_control = client_control
-        g.db_control = db_control
-    if not hasattr(g, 'parametros_globais'):
+    
+    if not hasattr(g, 'parametros_globais'): 
         g.parametros_globais = {}
-    if not hasattr(g, 'db_status'):
-        g.db_status = False
-        
-    # 2. Lógica Dinâmica da Sala ("Sticky Session")
+    
+    # CORREÇÃO AQUI: Verificamos explicitamente se não é None
+    g.db_status = True if db_control is not None else False
+
+    # 1. Define ID SALA (URL > Sessão > Default)
     id_sala_url = request.args.get('id_sala')
     id_sala_sessao = session.get('id_sala')
     
-    id_sala_final = None
-
-    is_root_request = (request.path == '/')
-    """
     if id_sala_url:
-        # Prioridade 1: URL (Mudar de sala explicitamente)
-        id_sala_final = id_sala_url
-        session['id_sala'] = id_sala_url 
-        print(f"[1] @before_request: Sala definida via URL: {id_sala_final}")
-        
-    elif is_root_request and not id_sala_url:
-        # Prioridade 2 (NOVO): Acesso à raiz SEM parâmetro -> Força PADRÃO
-        # Isso ignora a sessão se você estiver na tela de login sem especificar sala
-        id_sala_final = DEFAULT_SALA_ID
-        session['id_sala'] = DEFAULT_SALA_ID # Atualiza a sessão para o padrão
-        print(f"[2] @before_request: Acesso à raiz sem ID. Resetando para PADRÃO: {id_sala_final}")
-
+        g.id_sala = id_sala_url
+        session['id_sala'] = id_sala_url
     elif id_sala_sessao:
-        # Prioridade 3: Sessão (Mantém a sala em outras rotas internas)
-        id_sala_final = id_sala_sessao
-        print(f"[3] @before_request: Sala mantida via Sessão: {id_sala_final}")
-        
+        g.id_sala = id_sala_sessao
     else:
-        # Prioridade 4: Fallback final
-        id_sala_final = DEFAULT_SALA_ID 
-        session['id_sala'] = DEFAULT_SALA_ID
-        print(f"[4] @before_request: Sem sala definida. Usando PADRÃO: {id_sala_final}")
-    """
-    if id_sala_url:
-        # Prioridade 1: O parâmetro da URL (Sempre vence, força a mudança de sala)
-        id_sala_final = id_sala_url
-        session['id_sala'] = id_sala_url 
-        #print(f"[LOG] @before_request: Sala definida via URL: {id_sala_final}")
-        
-    elif id_sala_sessao:
-        # Prioridade 2: A Sessão (Mantém a sala atual, mesmo na página de login)
-        # Esta é a lógica "Sticky Session" que você queria.
-        id_sala_final = id_sala_sessao
-        # print(f"[LOG] @before_request: 'id_sala' definido pela SESSÃO: {id_sala_final}")
-        
-    else:
-        # Prioridade 3: Padrão (Primeira visita absoluta, ou sessão expirada e sem URL)
-        # Se é raiz, sem URL e sem sessão -> Usa padrão
-        id_sala_final = DEFAULT_SALA_ID 
-        session['id_sala'] = DEFAULT_SALA_ID
-        #print(f"[LOG] @before_request: 'id_sala' NÃO encontrado. Usando PADRÃO (Primeira Visita): {id_sala_final}")
-    
-    g.id_sala = id_sala_final
-    #print(f"[LOG] @before_request: 'g.id_sala' DEFINIDO COMO: {g.id_sala}") 
-    
-    # 3. Verifica o Status da Conexão Master
-    if db_control is None:
-         g.db_status = False
-    else:
-         g.db_status = True 
-    #print(f"[LOG] @before_request: Status do DB de Controle (g.db_status): {g.db_status}") 
-    # 4. Carregamento de Parâmetros Globais (CORRIGIDO)
-    default_config_cadastro = {
-        "nome_cliente": True, "nick": True, "telefone": True,
-        "cpf": False, "cidade": True, "chave_pix": True, "senha": True
-    }
+        g.id_sala = "000"
+        session['id_sala'] = "000"
 
-    # Verifica se os parâmetros no 'g' são da sala errada
-    if g.parametros_globais.get('id_sala_param') != g.id_sala:
-        g.parametros_globais = {} # Limpa se a sala mudou
-        #print(f"[LOG] @before_request: Sala alterada ou cache vazio. Recarregando parâmetros para '{g.id_sala}'.")
-
-    if g.db_status and not g.parametros_globais:
-        #print(f"[LOG] @before_request: Tentando carregar parâmetros da coleção 'salas' para sala_id '{g.id_sala}'...") 
+    # 2. Carrega Parâmetros (Apenas se DB estiver ON)
+    if g.db_status:
         try:
-            # --- AQUI ESTÁ A CORREÇÃO ---
-            # Procura na coleção 'salas' usando o id_sala atual
-            params_doc = g.db_control.salas.find_one({'id_sala': g.id_sala})
-            # --- FIM DA CORREÇÃO ---
-            if params_doc:
-                # Preenche 'g.parametros_globais' com os dados da coleção 'salas'
-                g.parametros_globais = {
-                    'url_live': params_doc.get('url_live', '#'), 
-                    'url_site': params_doc.get('url_site', '#'), 
-                    'nome_sala': params_doc.get('nome_sala', 'SALA PADRÃO').strip(),
-                    'http_apk': params_doc.get('http_apk', 'http://localhost:5000'), 
-                    'http_vendas': params_doc.get('http_vendas', 'http://localhost:5000'),
-                    'id_sala_param': g.id_sala, # Armazena a sala atual nos parâmetros cacheados
-                    'tipo_cadastro_cliente': params_doc.get('tipo_cadastro_cliente', default_config_cadastro), 
-                    'comissao_padrao': params_doc.get('comissao_padrao', 20),
-                    'comissao_autoatendimento': params_doc.get('comissao_autoatendimento', 10), 
+            db = get_vendas_db() 
+            
+            # Valores padrão
+            default_config_cadastro = {
+                "nome_cliente": True, "nick": True, "telefone": True,
+                "cpf": False, "cidade": True, "chave_pix": True, "senha": True
+            }
+            
+            # Verifica se db não é None antes de usar
+# Verifica se db não é None antes de usar
+            if db is not None:
+                #print(f"\n[DEBUG] --- Iniciando busca de parâmetros para sala: '{g.id_sala}' ---")
+                
+                # Busca parametros no banco específico da sala
+                params = db.parametros.find_one({'id_sala': g.id_sala})
+                
+                # Se não achar por ID exato, tenta com prefixo "SALA"
+                if params is None:
+                     #print(f"[DEBUG] ID exato não encontrado. Tentando buscar por 'SALA{g.id_sala}'...")
+                     params = db.parametros.find_one({'id_sala': f"SALA{g.id_sala}"})
 
-                }
-                # --- ESTE É O LOG QUE VOCÊ QUERIA VER ---
-                print(f"@before_request: Parâmetros CARREGADOS da coleção 'salas'. {g.id_sala} = {g.parametros_globais['nome_sala']}") 
-            else:
-                 # Se o id_sala (ex: "000") não foi encontrado na coleção 'salas'
-                 g.parametros_globais = {'tipo_cadastro_cliente': default_config_cadastro, 'comissao_padrao': 20, 'nome_sala': 'SALA (DEFAULT)', 'id_sala_param': g.id_sala}
-                 print(f"[LOG] @before_request: Nenhum documento encontrado em 'salas' para '{g.id_sala}', usando default.") 
+                if params is not None:
+                    # LOGS PARA CONFERÊNCIA
+                    val_banco = params.get('limite_de_credito')
+                    #print(f"[DEBUG] SUCESSO! Documento encontrado.")
+                    #print(f"[DEBUG] > Nome Sala no Banco: {params.get('nome_sala')}")
+                    #print(f"[DEBUG] > Limite Crédito no Banco: {val_banco} (Tipo: {type(val_banco)})")
+                    
+                    val_limite_bruto = params.get('limite_de_credito', 100) 
+                    limite_convertido = float(str(val_limite_bruto))
+
+                    g.parametros_globais = {
+                        'url_live': params.get('url_live', '#'), 
+                        'url_site': params.get('url_site', '#'), 
+                        'nome_sala': params.get('nome_sala', 'SALA PADRÃO').strip(),
+                        'http_apk': params.get('http_apk', 'http://localhost:5000'), 
+                        'http_vendas': params.get('http_vendas', 'http://localhost:5000'),
+                        'id_sala_param': g.id_sala,
+                        'tipo_cadastro_cliente': params.get('tipo_cadastro_cliente', default_config_cadastro), 
+                        'comissao_padrao': params.get('comissao_padrao', 20),
+                        'comissao_autoatendimento': params.get('comissao_autoatendimento', 10), 
+                        
+                        # Conversão explícita e Logada
+                        'limite_de_credito': limite_convertido,
+                        
+                        'tipo_cadastro_colaborador': params.get('tipo_cadastro_colaborador', {})
+                    }
+                    #print(f"[DEBUG] > Parâmetro Global Final 'limite_de_credito': {g.parametros_globais['limite_de_credito']}")
+                else:
+                    # Defaults se não achar parametros
+                    print(f"[DEBUG] AVISO: Nenhum parâmetro encontrado no banco. Usando DEFAULTS (Limite 100.0).")
+                    g.parametros_globais = {'tipo_cadastro_cliente': default_config_cadastro, 'comissao_padrao': 20, 'nome_sala': 'SALA (DEFAULT)', 'id_sala_param': g.id_sala, 'limite_de_credito': 100.00}
+
         except Exception as e:
-            print(f"🚨 ERRO ao carregar Parâmetros da coleção 'salas': {e}")
-            g.parametros_globais = {'tipo_cadastro_cliente': default_config_cadastro, 'comissao_padrao': 20, 'nome_sala': 'SALA (ERRO)', 'id_sala_param': g.id_sala}
-    
-    elif g.parametros_globais:
-        # Se já estava em cache, mostramos o log
-        print(f"[LOG] @before_request: Parâmetros globais já estavam em cache para '{g.parametros_globais.get('nome_sala', 'N/A')}'.") 
-    elif not g.db_status:
-        g.parametros_globais = {'tipo_cadastro_cliente': default_config_cadastro, 'comissao_padrao': 20, 'nome_sala': 'SALA (OFFLINE)', 'id_sala_param': g.id_sala}
-        print("[LOG] @before_request: DB de Controle offline, usando parâmetros default.")
+            print(f"Erro ao carregar parâmetros no before_request: {e}")
 
 
 @app.teardown_request
@@ -725,79 +691,99 @@ def login_page():
     return render_template('index.html', 
                            db_error=None, 
                            error=error,
-                           id_sala_exibicao=id_sala_param)
+                           id_sala_exibicao=id_sala_param,
+                           g=g) # <--- IMPORTANTE: Adicionar isto
 
 
 @app.route('/login', methods=['POST'])
 def login():
     
-    #print("[LOG] login (POST): Iniciando tentativa de login.") 
+    #print("\n=== [DEBUG] INÍCIO DO LOGIN ===")
     
-    nome_usuario = format_title_case(request.form.get('nome'))
-    senha = request.form.get('senha')
+    nome_raw = request.form.get('nome')
+    senha_raw = request.form.get('senha')
     
-    # --- AJUSTE ---
+    # Padroniza o nome para busca (Title Case)
+    nome_usuario = format_title_case(nome_raw)
+    
     id_sala_to_redirect = g.id_sala
-    #print(f"[LOG] login (POST): 'g.id_sala' (da sessão/padrão) é: {id_sala_to_redirect}")
-    
-    #print(f"[LOG] login (POST): Chamando get_vendas_db()...") 
     db = get_vendas_db()
     
     if db is None:
-        print(f"[LOG] login (POST): Conexão com 'db_vendas' FALHOU. Redirecionando...") 
-        error_message = ""
-        if g.db_control is None:
-             error_message = "Erro Crítico: Não foi possível conectar ao banco de dados MESTRE de controle."
-        elif not g.id_sala: 
-             error_message = "Acesso Negado: Parâmetro 'id_sala' ausente." # (Não deve acontecer com o default)
-        else:
-             error_message = f"Erro Crítico: Não foi possível conectar ao cluster de vendas da sala '{g.id_sala}'."
-             
-        if 'id_sala' in session: session.pop('id_sala', None)
-             
-        return redirect(url_for('login_page', 
-                                error=error_message,
-                                id_sala=id_sala_to_redirect)) # Passa o ID que falhou
+        return redirect(url_for('login_page', error="Erro de Conexão DB.", id_sala=id_sala_to_redirect))
 
-    #print(f"[LOG] login (POST): Conexão com 'db_vendas' SUCESSO. Autenticando...") 
-    
+    usuario = None
+    tipo_usuario = 'desconhecido'
+
     try:
+        # Busca em Colaboradores
         usuario = db.colaboradores.find_one({
-            '$or': [
-                {'nome_colaborador': nome_usuario},
-                {'nick': nome_usuario}
-            ]
+            '$or': [{'nome_colaborador': nome_usuario}, {'nick': nome_usuario}]
         })
-        tipo_usuario = 'colaborador'
         
-        if not usuario:
-            usuario = db.clientes.find_one({'nick': nome_usuario})
-            tipo_usuario = 'cliente'
-        
+        if usuario:
+            tipo_usuario = 'colaborador'
+        #else:
+            # Busca em Clientes
+            #usuario = db.clientes.find_one({'nick': nome_usuario})
+            #if usuario: tipo_usuario = 'cliente'
+
     except Exception as e:
-        print(f"🚨 ERRO NA BUSCA DO USUÁRIO (Colab/Cliente): {e}")
-        return redirect(url_for('login_page', 
-                                error="Erro interno ao acessar credenciais.",
-                                id_sala=id_sala_to_redirect))
+        print(f"🚨 [DEBUG] Erro busca usuário: {e}")
+        return redirect(url_for('login_page', error="Erro interno.", id_sala=id_sala_to_redirect))
     
     if usuario and 'senha' in usuario:
-        senha_formatada_login = senha.capitalize()
-        if bcrypt.checkpw(senha_formatada_login.encode('utf-8'), usuario['senha'].encode('utf-8')): 
-            
-            print(f"[LOG] login (POST): Autenticação BEM-SUCEDIDA para {tipo_usuario} {nome_usuario}.") 
+        senha_hash_banco = usuario.get('senha', '')
+        senha_limpa = senha_raw.strip() # Remove espaços
+        
+        # --- LÓGICA HÍBRIDA (NOVO + LEGADO) ---
+        autenticado = False
+        senha_eficaz = senha_limpa # Qual versão da senha funcionou?
+
+        # 1. Tenta EXATAMENTE como digitou (Para o futuro)
+        try:
+            if bcrypt.checkpw(senha_limpa.encode('utf-8'), senha_hash_banco.encode('utf-8')):
+                autenticado = True
+            else:
+                # 2. Se falhar, tenta o formato LEGADO (Capitalize) para usuários antigos
+                senha_legacy = senha_limpa.capitalize()
+                if bcrypt.checkpw(senha_legacy.encode('utf-8'), senha_hash_banco.encode('utf-8')):
+                    autenticado = True
+                    senha_eficaz = senha_legacy # Marca que a versão Capitalized foi a que funcionou
+        except Exception as e:
+            print(f"[DEBUG] Erro no bcrypt: {e}")
+
+        if autenticado:
             session['logged_in'] = True
-            print(f"🚨 tipo_usuario    : {tipo_usuario}")
- 
+            
+            # Configura Sessão
             if tipo_usuario == 'colaborador':
                 session['id_colaborador'] = usuario.get('id_colaborador') or str(usuario['_id'])
                 session['nivel'] = usuario.get('nivel', 1) 
                 session['nick'] = usuario.get('nick') or usuario.get('nome_colaborador')
+                session['tipo_usuario_logado'] = 'colaborador'
+            #else:
+                #session['id_cliente'] = usuario.get('id_cliente')
+                #session['nick'] = usuario.get('nick')
+                #session['nivel'] = 0
+                #session['tipo_usuario_logado'] = 'cliente'
+
+            # --- VERIFICAÇÃO DE SENHA PADRÃO ---
+            # Verifica se a senha que funcionou é "Senha" ou "senha"
+            if senha_eficaz.lower() == "senha" and tipo_usuario == 'colaborador':
+                #print("[DEBUG] Senha padrão detectada. Forçando troca.")
+                return render_template('trocar_senha_obrigatoria.html', id_sala=id_sala_to_redirect)
+            
+            # Redirecionamento Sucesso
+            if tipo_usuario == 'colaborador':
                 return redirect(url_for('menu_operacoes'))
-          
-    print(f"[LOG] login (POST): Autenticação FALHOU para {nome_usuario}.") 
-    return redirect(url_for('login_page', 
-                            error="Usuário ou senha inválidos.",
-                            id_sala=id_sala_to_redirect))
+            #else:
+                #return redirect(url_for('minha_carteira'))
+        else:
+            print(f"[DEBUG] Falha: Senha incorreta (Testado '{senha_limpa}' e '{senha_limpa.capitalize()}')")
+
+    return redirect(url_for('login_page', error="Usuário ou senha inválidos.", id_sala=id_sala_to_redirect))
+
 
 
 @app.route('/menu')
@@ -810,10 +796,11 @@ def menu_operacoes():
     error = request.args.get('error')
    
     return render_template('menu.html', 
-                           nivel=nivel, 
-                           logado=nome_logado, 
-                           db_status=db_status, 
-                           error=error) # Passa o erro para o template
+                           nivel=session.get('nivel', 1), 
+                           logado=session.get('nick', 'Colaborador'), 
+                           db_status=g.db_status, 
+                           error=error,
+                           g=g) # <--- IMPORTANTE: Adicionar isto
 
 
 @app.route('/submenu_eventos')
@@ -1080,174 +1067,156 @@ def gravar_colaborador():
     if db is None: return redirect(url_for('login'))
 
     if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso Negado. Nível 3 Requerido para Gravação."))
+        return redirect(url_for('menu_operacoes', error="Acesso Negado. Nível 3 Requerido."))
 
     id_colaborador_edicao = request.form.get('id_colaborador_edicao') 
 
     try:
-        # CORREÇÃO 1: 'True' e 'False' devem ser com letra maiúscula em Python
-        default_colab_config = {
-            "nome_colaborador": True, "nick": True, "telefone": True,
-            "cpf": False, "cidade": False, "chave_pix": True, "senha": True,
-            "nivel": True, "comissao": True 
-        }
+        default_colab_config = { "nome_colaborador": True, "nick": True, "telefone": True, "cpf": False, "cidade": False, "chave_pix": True, "senha": True, "nivel": True, "comissao": True }
         campos_config = g.parametros_globais.get('tipo_cadastro_colaborador', default_colab_config)
 
+        # Captura dos campos
         nome_colaborador = format_title_case(request.form.get('nome_colaborador'))
         nick = format_title_case(request.form.get('nick'))
         telefone = clean_numeric_string(request.form.get('telefone'))
         cpf_raw = request.form.get('cpf')
         cidade = format_title_case(request.form.get('cidade'))
-        chave_pix = request.form.get('chave_pix', '').strip()
-        confirma_chave_pix = request.form.get('confirma_chave_pix', '').strip()
+        chave_pix = request.form.get('chave_pix', '').strip().lower()
+        confirma_chave_pix = request.form.get('confirma_chave_pix', '').strip().lower()
         senha = request.form.get('senha')
         confirma_senha = request.form.get('confirma_senha') 
         nivel = int(request.form.get('nivel'))
         comissao = int(request.form.get('comissao', g.parametros_globais.get('comissao_padrao', 20)))
+        
+        # --- LIMITE DE CRÉDITO ---
+        padrao_global = g.parametros_globais.get('limite_de_credito', 100.00)
+        limite_credito_str = request.form.get('limite_credito')
+       
+        if limite_credito_str:
+            limite_credito = float(limite_credito_str.replace(',', '.'))
+        else:
+            limite_credito = float(padrao_global)
+        if limite_credito < 0:
+            raise ValueError("O Limite de Crédito não pode ser menor que zero.")
 
-        # 2. Validação Dinâmica
-        if campos_config.get("nivel") and not (1 <= nivel <= 3):
-            raise ValueError("Nível de acesso deve ser entre 1 e 3.")
-            
-        if campos_config.get("comissao") and not (0 <= comissao <= 30):
-             raise ValueError("Taxa de comissão deve ser entre 0 e 30.")
-
+        # VALIDAÇÕES BÁSICAS
         if campos_config.get("nome_colaborador") and not nome_colaborador:
             raise ValueError("O campo Nome do Colaborador é obrigatório.")
-
         if campos_config.get("nick") and not nick:
             raise ValueError("O campo Nick é obrigatório.")
+        
+        # Validação PIX Básica
+        if "chave_pix" in campos_config: 
+            if not chave_pix:
+                raise ValueError("A Chave PIX é obrigatória.")
+            if chave_pix != confirma_chave_pix:
+                raise ValueError("As chaves PIX não conferem.")
             
-        if "nome_colaborador" in campos_config and nome_colaborador.upper() == 'TECBIN':
-            return redirect(url_for('cadastro_colaborador', error="Este colaborador (TECBIN) não pode ser alterado.", view='listar'))
-
-        if "chave_pix" in campos_config and chave_pix != confirma_chave_pix:
-            raise ValueError("As chaves PIX não conferem.")
-
-        if campos_config.get("nome_colaborador") and nome_colaborador and not nome_colaborador[0].isalpha():
-            raise ValueError("O Nome do Colaborador deve começar com uma letra (não números ou símbolos).")
-
-        if campos_config.get("nick") and nick and not nick[0].isalpha():
-            raise ValueError("O Nick/Apelido deve começar com uma letra (não números ou símbolos).")
+            # 1. Monta a Query Regex
+            query_pix_colab = {
+                'chave_pix': {'$regex': f'^{re.escape(chave_pix)}$', '$options': 'i'}
+            }
             
-        if "senha" in campos_config:
-            if not id_colaborador_edicao and campos_config.get("senha") and (not senha or senha != confirma_senha):
-                raise ValueError("Senha e Confirmação de Senha não conferem ou estão vazias.")
-            elif id_colaborador_edicao and senha and (senha != confirma_senha):
-                raise ValueError("Senha e Confirmação de Senha não conferem.")
-        
-        # CORREÇÃO 3: Lógica do CPF (Opcional vs Obrigatório)
-        cpf_limpo = clean_numeric_string(cpf_raw)
-        
-        # Se estiver configurado como True (Obrigatório)
-        if campos_config.get("cpf") is True: 
-            if not cpf_raw or not validate_cpf(cpf_limpo):
-                raise ValueError("CPF é obrigatório e deve ser válido.")
-        
-        # Se for Opcional (False), mas o usuário digitou algo, validamos se é um CPF real
-        elif cpf_raw: 
-            if not validate_cpf(cpf_limpo):
-                raise ValueError("O CPF inserido não é válido.")
-        
-        query_exclusao = {}
-        if id_colaborador_edicao:
-            query_exclusao['id_colaborador'] = {'$ne': int(id_colaborador_edicao)}
-
-        # Validação do Nick (Duplicidade)
-        if "nick" in campos_config and nick:
-            query_nick = {'nick': nick}
-            query_nick.update(query_exclusao)
+            # 2. Adiciona filtro de ID se for edição
+            if id_colaborador_edicao:
+                try:
+                    id_exclude = int(id_colaborador_edicao)
+                    query_pix_colab['id_colaborador'] = {'$ne': id_exclude}
+                    print(f"[DEBUG PIX] Modo EDIÇÃO. Excluindo ID: {id_exclude}")
+                except:
+                    print(f"[DEBUG PIX] ERRO ao converter ID para exclusão: {id_colaborador_edicao}")
             
-            if db.colaboradores.find_one(query_nick):
-                 raise ValueError("Nick já está em uso por outro colaborador.")
+            # 3. Executa a busca
+            colaborador_existente = db.colaboradores.find_one(query_pix_colab)
+            
+            # --- TESTE DE PROVA REAL (DEBUG) ---
+            # Vamos listar todos os PIX que existem no banco para você ver se tem "sujeira"
+            if not colaborador_existente:
+                # Busca simples por qualquer coisa que contenha parte da string
+                parecidos = db.colaboradores.find({'chave_pix': {'$regex': re.escape(chave_pix), '$options': 'i'}})
+                for p in parecidos:
+                    print(f"   -> EXISTE NO BANCO: ID {p.get('id_colaborador')} | Pix: '{p.get('chave_pix')}'")
+            # -----------------------------------
+            
+            if colaborador_existente:
+                nick_encontrado = colaborador_existente.get('nick', 'Desconhecido')
+                raise ValueError(f"A Chave PIX '{chave_pix}' já está em uso pelo colaborador: {nick_encontrado}.")
 
-        # CORREÇÃO 2: Removido o bloco com erro de digitação (i#f)
-        # Se você quiser validar duplicidade de CPF apenas se ele foi preenchido:
-        if cpf_limpo:
-            query_cpf = {'cpf': cpf_limpo}
-            query_cpf.update(query_exclusao)
-            if db.colaboradores.find_one(query_cpf):
-                 raise ValueError("CPF já cadastrado para outro colaborador.")
+        # Montagem do Objeto
+        #dados_colaborador = {
+            #"nivel": nivel, 
+            #"comissao": comissao,
+            #"limite_credito": limite_credito 
+        #}
+        
+        #if "nome_colaborador" in campos_config: dados_colaborador["nome_colaborador"] = nome_colaborador
+        #if "nick" in campos_config: dados_colaborador["nick"] = nick
+        #if "telefone" in campos_config: dados_colaborador["telefone"] = telefone
+        #if "cidade" in campos_config: dados_colaborador["cidade"] = cidade
+        #if "chave_pix" in campos_config: dados_colaborador["chave_pix"] = chave_pix
+        #if "cpf" in campos_config: dados_colaborador["cpf"] = clean_numeric_string(cpf_raw)
 
         dados_colaborador = {
+            "nome_colaborador": nome_colaborador,
+            "nick": nick,
+            "telefone": telefone,
+            "cpf": clean_numeric_string(cpf_raw),
+            "cidade": cidade,
+            "chave_pix": chave_pix,
             "nivel": nivel, 
-            "comissao": comissao 
-        }
-        
-        if "nome_colaborador" in campos_config:
-            dados_colaborador["nome_colaborador"] = nome_colaborador
-        if "nick" in campos_config:
-            dados_colaborador["nick"] = nick
-        if "telefone" in campos_config:
-            dados_colaborador["telefone"] = telefone
-        if "cidade" in campos_config:
-            dados_colaborador["cidade"] = cidade
-        if "chave_pix" in campos_config:
-            dados_colaborador["chave_pix"] = chave_pix
-        
-        # Salva o CPF apenas se foi preenchido ou se a config exige
-        if "cpf" in campos_config:
-            dados_colaborador["cpf"] = cpf_limpo
-        
+            "comissao": comissao,
+            "limite_credito": limite_credito 
+        }        
+
         if "senha" in campos_config and senha:
-            senha_limpa = format_title_case(senha)
+            senha_limpa = senha.strip() 
             hashed_password = bcrypt.hashpw(senha_limpa.encode('utf-8'), bcrypt.gensalt())
             dados_colaborador['senha'] = hashed_password.decode('utf-8')
         
+        # GRAVAÇÃO
         if id_colaborador_edicao:
+            # Edição
             id_colaborador_int = int(id_colaborador_edicao)
             
             if id_colaborador_int == session.get('id_colaborador') and nivel < 3 and session.get('nivel') == 3 and db.colaboradores.count_documents({'nivel': 3}) == 1:
                 raise ValueError("Você é o único administrador. Não pode rebaixar seu próprio nível.")
-                 
-            if not senha and 'senha' in dados_colaborador:
-                 del dados_colaborador['senha']
+            
+            if not senha and 'senha' in dados_colaborador: 
+                del dados_colaborador['senha']
                  
             db.colaboradores.update_one({'id_colaborador': id_colaborador_int}, {'$set': dados_colaborador})
-            success_msg = f"Colaborador {nick} atualizado com sucesso!"
+            success_msg = f"Colaborador {nick} atualizado com sucesso! Limite: R$ {limite_credito:.2f}"
             
         else:
+            # Novo
             novo_id_colaborador_int = get_next_colaborador_sequence()
-            if novo_id_colaborador_int is None:
-                raise Exception("Falha ao gerar ID sequencial do colaborador.")
-
+            if novo_id_colaborador_int is None: raise Exception("Falha sequence.")
             dados_colaborador['id_colaborador'] = novo_id_colaborador_int
-
             dados_colaborador['status'] = 'ativo'
             
+            if 'senha' not in dados_colaborador:
+                 senha_padrao = "Senha"
+                 dados_colaborador['senha'] = bcrypt.hashpw(senha_padrao.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
             db.colaboradores.insert_one(dados_colaborador)
-            success_msg = f"Colaborador {nick} salvo com sucesso! ID: {novo_id_colaborador_int}."
+            success_msg = f"Colaborador {nick} salvo! ID: {novo_id_colaborador_int}"
         
         return redirect(url_for('cadastro_colaborador', success=success_msg, view='listar'))
 
     except ValueError as e:
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_colaborador_edicao else 'novo'
-        redirect_args = {
-            'error': f"Erro de Validação: {e}",
-            'view': view_redirect
-        }
-        if id_colaborador_edicao:
-            redirect_args['id_colaborador'] = id_colaborador_edicao
-            
+        redirect_args = {'error': f"Erro de Validação: {e}", 'view': view_redirect}
+        if id_colaborador_edicao: redirect_args['id_colaborador'] = id_colaborador_edicao
         return redirect(url_for('cadastro_colaborador', **redirect_args))
         
     except Exception as e:
-        print(f"ERRO CRÍTICO na gravação/atualização de colaborador: {e}")
-        # Log detalhado para você ver no terminal onde foi o erro
+        print(f"ERRO CRÍTICO colab: {e}")
         import traceback
         traceback.print_exc()
-        
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_colaborador_edicao else 'novo'
-        redirect_args = {
-            'error': "Erro interno ao gravar/atualizar colaborador.",
-            'view': view_redirect
-        }
-        if id_colaborador_edicao:
-            redirect_args['id_colaborador'] = id_colaborador_edicao
-
-        return redirect(url_for('cadastro_colaborador', **redirect_args))
+        return redirect(url_for('cadastro_colaborador', error="Erro interno.", view=view_redirect))
 
 
 @app.route('/colaborador/excluir/<int:id_colaborador>', methods=['POST'])
@@ -1930,8 +1899,6 @@ def cadastro_cliente():
                 clientes_cursor = db.clientes.find(query_filter)
                 clientes_lista = list(clientes_cursor) 
 
-
-
         except Exception as e:
             print(f"Erro ao buscar dados no MongoDB em cadastro_cliente: {e}")
             error = f"Erro crítico ao carregar dados do DB: {e}"
@@ -1975,243 +1942,165 @@ def cadastro_cliente():
     
     return render_template('cadastro_cliente.html', **context)
 
+
 @app.route('/gravar_cliente', methods=['POST'])
 @login_required
 def gravar_cliente():
     db = get_vendas_db()
-    if db is None: return redirect(url_for('login'))
-    
-    db_status = g.db_status
-    
-    next_url = request.form.get('next_url', 'menu_operacoes')
-    id_evento_retorno = request.form.get('id_evento_retorno') 
-    
-    id_cliente_edicao = request.form.get('id_cliente_edicao') 
+    if db is None:
+        return redirect(url_for('menu_operacoes', error="Erro DB."))
 
-    if not db_status:
-        view_redirect = 'alterar' if id_cliente_edicao else 'novo'
-        return redirect(url_for('cadastro_cliente', error="DB Offline. Gravação Crítica Falhou.", view=view_redirect, next=next_url, id_evento=id_evento_retorno))
+    # Captura e Logs Iniciais
+    id_cliente_raw = request.form.get('id_cliente')
+    next_page = request.form.get('next', 'menu_operacoes')
+    view_mode = 'novo' if not id_cliente_raw else 'alterar'
     
+    print(f"\n[DEBUG] --- INICIANDO GRAVAR CLIENTE ---")
+
     try:
-        # 1. Inicializa a variável de controle de foco
-        campo_com_erro = None
-
-        default_config = {} 
-        if hasattr(g, 'parametros_globais'):
-             default_config = g.parametros_globais.get('tipo_cadastro_cliente', {})
-        
-        campos_config = g.parametros_globais.get('tipo_cadastro_cliente', default_config)
+        # 1. Coleta de Dados
+        default_config = {
+            "nome_cliente": True, "nick": True, "telefone": True,
+            "cpf": False, "cidade": True, "chave_pix": True, "senha": True
+        }
+        campos_config = getattr(g, 'parametros_globais', {}).get('tipo_cadastro_cliente', default_config)
 
         nome_cliente = format_title_case(request.form.get('nome_cliente'))
         nick = format_title_case(request.form.get('nick'))
         telefone = clean_numeric_string(request.form.get('telefone'))
         cpf_raw = request.form.get('cpf')
         cidade = format_title_case(request.form.get('cidade'))
-        chave_pix = request.form.get('chave_pix', '').strip()
-        confirma_chave_pix = request.form.get('confirma_chave_pix', '').strip()
-        senha = format_title_case(request.form.get('senha'))
-        confirma_senha = format_title_case(request.form.get('confirma_senha'))
+        chave_pix = request.form.get('chave_pix', '').strip().lower()
+        observacao = request.form.get('observacao', '')
+        senha = request.form.get('senha', '')
+        confirma_senha = request.form.get('confirma_senha', '')
 
+        # 2. Validações Básicas
         if campos_config.get("nome_cliente") and not nome_cliente:
-            campo_com_erro = "nome_cliente"
             raise ValueError("O campo Nome Completo é obrigatório.")
-        
-        # --- VALIDAÇÕES DE CAMPOS OBRIGATÓRIOS ---
-        if campos_config.get("nick") and not nick:
-            campo_com_erro = "nick"
-            raise ValueError("O campo Nick/Apelido é obrigatório.")
-        
-        if campos_config.get("cidade") and not cidade:
-            campo_com_erro = "cidade"
-            raise ValueError("O campo Cidade é obrigatório.")
-        
-        if campos_config.get("chave_pix") and not chave_pix:
-            campo_com_erro = "chave_pix"
-            raise ValueError("O campo Chave PIX é obrigatório.")
+        if campos_config.get("telefone") and not telefone:
+            raise ValueError("O campo WhatsApp/Telefone é obrigatório.")
 
-        if campos_config.get("nome_cliente") and nome_cliente and not nome_cliente[0].isalpha():
-            campo_com_erro = "nome_cliente"
-            raise ValueError("O Nome do Cliente deve começar com uma letra (não números ou símbolos).")
-            
-        if campos_config.get("nick") and nick and not nick[0].isalpha():
-            campo_com_erro = "nick"
-            raise ValueError("O Nick/Apelido deve começar com uma letra (não números ou símbolos).")
-
+        # CPF
         cpf_limpo = clean_numeric_string(cpf_raw)
         if campos_config.get("cpf") == True: 
-            if not cpf_raw or not validate_cpf(cpf_limpo):
-                campo_com_erro = "cpf"
-                raise ValueError("CPF é obrigatório e deve ser válido.")
-        elif "cpf" in campos_config and cpf_raw and not validate_cpf(cpf_limpo):
-            campo_com_erro = "cpf"
-            raise ValueError("O CPF inserido não é válido.")
+            if not cpf_raw or not validate_cpf(cpf_limpo): raise ValueError("CPF inválido.")
+        elif cpf_raw and not validate_cpf(cpf_limpo): raise ValueError("CPF inválido.")
 
-        if "chave_pix" in campos_config and chave_pix != confirma_chave_pix:
-            campo_com_erro = "chave_pix"
-            raise ValueError("As chaves PIX não conferem.")
-        
-        if "senha" in campos_config:
-            if not id_cliente_edicao and campos_config.get("senha") and (not senha or senha != confirma_senha):
-               campo_com_erro = "senha" 
-               raise ValueError("Senha e Confirmação de Senha não conferem ou estão vazias.")
-            elif id_cliente_edicao and senha and (senha != confirma_senha):
-                campo_com_erro = "senha"
-                raise ValueError("Senha e Confirmação de Senha não conferem.")
-        
-        senha_final_raw = None
+        # --- VALIDAÇÃO TELEFONE (DEBUGADA) ---
+        cliente_tel = db.clientes.find_one({'telefone': telefone})
+        if cliente_tel:
+            id_banco = cliente_tel.get('id_cliente')
+            # Verifica se NÃO é o próprio (comparando strings para evitar erro de tipo)
+            if str(id_banco) != str(id_cliente_raw or ''):
+                 # Se for novo cadastro (id_cliente_raw é None), sempre entra aqui
+                 if not id_cliente_raw:
+                     raise ValueError(f"Telefone {telefone} já existe.")
+                 # Se for edição, entra se os IDs forem diferentes
+                 raise ValueError(f"Telefone {telefone} pertence a outro cliente (ID: {id_banco}).")
 
+        # --- VALIDAÇÃO NICK (AQUI ESTÁ O SEU PROBLEMA) ---
+        if campos_config.get("nick") and nick:
+           
+            # Busca ignorando maiúsculas/minúsculas
+            cliente_nick = db.clientes.find_one({'nick': {'$regex': f'^{re.escape(nick)}$', '$options': 'i'}})
+            
+            if cliente_nick:
+                id_encontrado = cliente_nick.get('id_cliente')
+                nome_encontrado = cliente_nick.get('nome_cliente')
+                # LÓGICA DE COMPARAÇÃO EXPLÍCITA
+                eh_o_mesmo = False
+                if id_cliente_raw: # Só compara se for edição
+                    eh_o_mesmo = str(id_encontrado) == str(id_cliente_raw)
+
+                if not eh_o_mesmo:
+                    raise ValueError(f"O Nick '{nick}' já está em uso.")
+
+        # --- VALIDAÇÃO PIX ---
+        if campos_config.get("chave_pix") and chave_pix:
+             print(f"[DEBUG PIX] passo 1.")
+
+             cliente_pix = db.clientes.find_one({'chave_pix': {'$regex': f'^{re.escape(chave_pix)}$', '$options': 'i'}})
+             if cliente_pix:
+                 print(f"[DEBUG PIX] passo 2.")
+                 id_pix = cliente_pix.get('id_cliente')
+                 if str(id_pix) != str(id_cliente_raw or ''):
+                     print(f"[DEBUG PIX] passo 3.")
+                     if id_cliente_raw or (not id_cliente_raw): # Bloqueia sempre se for outro ID ou novo cadastro
+                        dono = cliente_pix.get('nome_cliente') or 'Desconhecido'
+                        raise ValueError(f"Chave PIX já usada por: {dono}")
+
+        # --- MONTAGEM E GRAVAÇÃO ---
+        hashed_password = None
+        if not id_cliente_raw:
+            if campos_config.get("senha") and not senha:
+                raise ValueError("Senha obrigatória.")
+        
         if senha:
-            # Se o usuário digitou algo, usa o que foi digitado
-            senha_final_raw = senha
-            
-        elif not id_cliente_edicao: 
-            # Se é NOVO CLIENTE e o campo senha veio vazio...
-            
-            if not campos_config.get("senha"): 
-                # Se o campo senha está DESABILITADO na config, define o padrão "senha"
-                senha_final_raw = "senha" 
-            else:
-                # Fallback caso a validação falhe (embora o ValueError acima deva prevenir isso)
-                senha_final_raw = nick
+            if senha != confirma_senha: raise ValueError("Senhas não conferem.")
+            hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
-        # --- NOVA VALIDAÇÃO DE DUPLICIDADE (ATIVADA) ---
-        query_duplicidade = []
-        
-        # 1. Verifica Nick (se ativo na config)
-        if "nick" in campos_config and nick:
-            query_duplicidade.append({'nick': {'$regex': f'^{re.escape(nick)}$', '$options': 'i'}})
-            
-        # 2. Verifica Nome (se ativo na config) - DESCOMENTADO
-        #if "nome_cliente" in campos_config and nome_cliente:
-        #    query_duplicidade.append({'nome_cliente': {'$regex': f'^{re.escape(nome_cliente)}$', '$options': 'i'}})
-
-        if query_duplicidade:
-            final_query = {'$or': query_duplicidade}
-            
-            # Se for edição, exclui o próprio ID da verificação
-            if id_cliente_edicao:
-                final_query = {'$and': [
-                    {'id_cliente': {'$ne': int(id_cliente_edicao)}}, 
-                    final_query
-                ]}
-            
-            cliente_existente = db.clientes.find_one(final_query)
-            
-            if cliente_existente:
-                msg_erro = "Erro de Duplicidade: "
-                
-                # Prioridade de erro e foco
-                if "nick" in campos_config and cliente_existente.get('nick', '').lower() == nick.lower():
-                    msg_erro += f"O Nick '{nick}' já está em uso. "
-                    campo_com_erro = "nick" # Define o foco para o Nick
-                    
-                elif "nome_cliente" in campos_config and cliente_existente.get('nome_cliente', '').lower() == nome_cliente.lower():
-                    msg_erro += f"O Nome '{nome_cliente}' já está cadastrado."
-                    campo_com_erro = "nome_cliente" # Define o foco para o Nome
-                
-                raise ValueError(msg_erro)
-
-        # --- FIM DA NOVA VALIDAÇÃO ---         
-        
         dados_cliente = {
-            "id_colaborador": session.get('id_colaborador', 'N/A'),
+            "nome_cliente": nome_cliente,
+            "nick": nick,
+            "telefone": telefone,
+            "cpf": cpf_limpo,
+            "cidade": cidade,
+            "chave_pix": chave_pix,
+            "observacao": observacao,
+            "data_atualizacao": datetime.utcnow()
         }
-        
-        if "nome_cliente" in campos_config:
-            dados_cliente["nome_cliente"] = nome_cliente
-        if "nick" in campos_config:
-            dados_cliente["nick"] = nick
-        if "cpf" in campos_config:
-            dados_cliente["cpf"] = cpf_limpo
-        if "telefone" in campos_config:
-            dados_cliente["telefone"] = telefone
-        if "cidade" in campos_config:
-            dados_cliente["cidade"] = cidade
-        if "chave_pix" in campos_config:
-            dados_cliente["chave_pix"] = chave_pix
-        
-        if senha_final_raw: 
-            senha_formatada = senha_final_raw.capitalize()
-            hashed_password = bcrypt.hashpw(senha_formatada.encode('utf-8'), bcrypt.gensalt())
-            dados_cliente['senha'] = hashed_password.decode('utf-8')
+        if hashed_password: dados_cliente["senha"] = hashed_password
 
-        
-        novo_id_cliente_int = None
-        
-        if id_cliente_edicao:
-            id_cliente_int = int(id_cliente_edicao)
-            db.clientes.update_one({'id_cliente': id_cliente_int}, {'$set': dados_cliente})
-            success_msg = f"Cliente ID: CLI{id_cliente_int} atualizado com sucesso!"
-            
+        if id_cliente_raw:
+            # Edição
+            print(f"[DEBUG] Atualizando ID {id_cliente_raw}")
+            db.clientes.update_one({'id_cliente': int(id_cliente_raw)}, {'$set': dados_cliente})
+            success_msg = f"Cliente atualizado!"
         else:
-            novo_id_cliente_int = get_next_cliente_sequence()
-            if novo_id_cliente_int is None:
-                raise Exception("Falha ao gerar ID sequencial do cliente.")
-
-            dados_cliente.update({
-                "id_cliente": novo_id_cliente_int, 
-                "data_cadastro": datetime.utcnow(),
-                "data_ultimo_compra": None 
-            })
-            
+            # Novo
+            print(f"[DEBUG] Criando Novo Cliente")
+            novo_id = get_next_cliente_sequence()
+            if not novo_id: raise Exception("Erro Sequence ID.")
+            dados_cliente["id_cliente"] = novo_id
+            dados_cliente["id_colaborador"] = session.get('id_colaborador')
+            dados_cliente["data_cadastro"] = datetime.utcnow()
+            dados_cliente["origem"] = "interno"
             db.clientes.insert_one(dados_cliente)
-            success_msg = f"Cliente '{nick}' salvo com sucesso! ID: CLI{novo_id_cliente_int}."
+            success_msg = f"Cliente cadastrado! ID: CLI{novo_id}"
+
+        print(f"[DEBUG] Sucesso! Redirecionando...\n")
         
-        redirect_kwargs = {'success': success_msg}
+        return redirect(url_for('cadastro_cliente', view='listar', success=success_msg))
 
-        if next_url == 'nova_venda':
-            cliente_id_para_retorno = id_cliente_edicao if id_cliente_edicao else str(novo_id_cliente_int)
-            
-            if not cliente_id_para_retorno and "nick" in dados_cliente:
-                 redirect_kwargs['id_cliente_busca'] = dados_cliente['nick']
-            else:
-                 redirect_kwargs['id_cliente_busca'] = f"CLI{cliente_id_para_retorno}"
-
-            if id_evento_retorno:
-                redirect_kwargs['id_evento'] = id_evento_retorno
-        
-        if next_url != 'nova_venda':
-             next_url = 'cadastro_cliente'
-             redirect_kwargs['view'] = 'listar' 
-
-        return redirect(url_for(next_url, **redirect_kwargs))
-
-
-    except ValueError as e:
-        session['form_data'] = dict(request.form) 
-        view_redirect = 'alterar' if id_cliente_edicao else 'novo'
-        
-        redirect_args = {
-            'error': f"Erro de Validação: {e}",
-            'view': view_redirect,
-            'next': next_url,
-            'id_evento': id_evento_retorno
+    except ValueError as ve:
+        print(f"[DEBUG] ERRO DE VALIDAÇÃO: {ve}")
+        cliente_form = {
+            'id_cliente': id_cliente_raw, 'nome_cliente': nome_cliente, 'nick': nick,
+            'telefone': telefone, 'cpf': cpf_raw, 'cidade': cidade,
+            'chave_pix': request.form.get('chave_pix'), 'observacao': observacao
         }
+        return render_template('cadastro_cliente.html', 
+                               error=str(ve),
+                               cliente_edicao=cliente_form, 
+                               view=view_mode,
+                               nivel=session.get('nivel', 1),
+                               active_view=view_mode,
+                               colaborador={'nick': session.get('nick'), 'nivel': session.get('nivel', 1)},
+                               g=g)
 
-        # Adiciona o parâmetro de foco se houver um campo identificado
-        if campo_com_erro:
-            redirect_args['focus'] = campo_com_erro
-
-        if id_cliente_edicao:
-            redirect_args['id_cliente'] = id_cliente_edicao
-            
-        return redirect(url_for('cadastro_cliente', **redirect_args))
-        
     except Exception as e:
-        print(f"ERRO CRÍTICO na gravação/atualização de cliente: {e}")
-        session['form_data'] = dict(request.form) 
-        view_redirect = 'alterar' if id_cliente_edicao else 'novo'
-        
-        redirect_args = {
-            'error': "Erro interno ao gravar/atualizar cliente.",
-            'view': view_redirect,
-            'next': next_url,
-            'id_evento': id_evento_retorno
-        }
-        if id_cliente_edicao:
-            redirect_args['id_cliente'] = id_cliente_edicao
+        print(f"[DEBUG] ERRO CRÍTICO: {e}")
+        import traceback
+        traceback.print_exc()
+        return render_template('cadastro_cliente.html', 
+                               error=f"Erro interno: {e}",
+                               view=view_mode,
+                               nivel=session.get('nivel', 1),
+                               active_view=view_mode,
+                               colaborador={'nick': session.get('nick'), 'nivel': session.get('nivel', 1)},
+                               g=g)
 
-        return redirect(url_for('cadastro_cliente', **redirect_args))
 
 
 @app.route('/cliente/excluir/<int:id_cliente>', methods=['POST'])
@@ -2452,7 +2341,7 @@ def salvar_auto_cadastro():
 
 
 # --- ROTAS DE CADASTRO DE EVENTO (NOVO CRUD) ---
-# --- COLE ISSO ANTES DA FUNÇÃO cadastro_evento ---
+
 
 @app.route('/api/check_event_availability', methods=['GET'])
 @login_required
@@ -3049,7 +2938,11 @@ def excluir_evento(id_evento):
             nome_colecao_venda = f"vendas{id_evento}"
             if nome_colecao_venda in db.list_collection_names():
                 db[nome_colecao_venda].drop()
-                msg_extra = " e todas as vendas associadas foram removidas."
+                msg_extra = " e todas as vendas e sorte extra associadas foram removidas."
+
+            nome_colecao_cupons = f"vendas_sorte_extra{id_evento}"
+            if nome_colecao_cupons in db.list_collection_names():
+                db[nome_colecao_cupons].drop()
             
             nome_colecao_pgtos = f"pagamentos{id_evento}"
             if nome_colecao_pgtos in db.list_collection_names():
@@ -3902,7 +3795,7 @@ def reimprimir_comprovante_txt():
             if not vendas_cliente:
                 return jsonify({'status': 'error', 'message': 'Nenhuma venda encontrada para este cliente no evento.'})
 
-# --- Busca Chave PIX do Colaborador para o Comprovante ---           
+            # --- Busca Chave PIX do Colaborador para o Comprovante ---           
             idColaborador = vendas_cliente[0]['id_colaborador']
             chave_pix_colaborador = "Consulte o Colaborador"
             try:
@@ -4736,22 +4629,19 @@ def financeiro_evento():
     db = get_vendas_db()
     if db is None: return redirect(url_for('login'))
     
-    # Nível de acesso (Gerencial)
     if session.get('nivel', 0) < 3:
         return redirect(url_for('menu_operacoes', error="Acesso Negado."))
 
     id_evento_param = request.args.get('id_evento')
 
-    # SE NÃO TEM EVENTO SELECIONADO: MOSTRA LISTA DE EVENTOS ATIVOS/PARALISADOS
+    # SE NÃO TEM EVENTO SELECIONADO: MOSTRA LISTA
     if not id_evento_param:
         eventos = list(db.eventos.find(
             {'status': {'$in': ['ativo', 'paralizado', 'finalizado']}}
         ).sort('data_evento', -1))
         
-        # Formata data para a lista
         for e in eventos:
             e['_id'] = str(e['_id'])
-            # Tenta formatar data se for objeto
             if 'data_evento' in e:
                  try: e['data_fmt'] = e['data_evento'].strftime('%d/%m/%Y') if hasattr(e['data_evento'], 'strftime') else e['data_evento']
                  except: e['data_fmt'] = str(e['data_evento'])
@@ -4760,34 +4650,53 @@ def financeiro_evento():
 
     # SE TEM EVENTO: CALCULA O RELATÓRIO
     try:
-        # 1. Dados do Evento
         id_evento_int = int(id_evento_param)
         evento = db.eventos.find_one({'id_evento': id_evento_int})
         if not evento:
             return redirect(url_for('financeiro_evento', error="Evento não encontrado"))
 
-        # 2. Carrega Parâmetros de Comissão
+        # 1. Carrega Parâmetros e Mapas
         default_comissao = g.parametros_globais.get('comissao_padrao', 20)
         comissao_auto = g.parametros_globais.get('comissao_autoatendimento', 10)
         
-        # Mapa de comissões por colaborador
-        colabs = db.colaboradores.find({})
-        mapa_comissao = {c['id_colaborador']: c.get('comissao', default_comissao) for c in colabs}
-        mapa_nicks = {c['id_colaborador']: c.get('nick', f"ID {c['id_colaborador']}") for c in colabs} # Cache de Nicks
+        colabs = list(db.colaboradores.find({}))
+        mapa_comissao = {c.get('id_colaborador'): c.get('comissao', default_comissao) for c in colabs}
+        
+        # Mapa de Nicks Híbrido
+        #mapa_nicks = {}
 
-        # 3. Agregação de VENDAS (Por Colaborador e Origem)
+        # REGRA MANUAL: ID 0 usa a comissão de AutoAtendimento
+        mapa_comissao[0] = comissao_auto
+        mapa_comissao['0'] = comissao_auto
+        mapa_comissao[None] = comissao_auto
+
+        # --- MAPA DE NICKS (COM A NOVA REGRA) ---
+        # Inicializamos já com a regra do AutoAtendimento para ID 0 ou Nulo
+        mapa_nicks = {
+            0: 'AutoAtendimento',
+            '0': 'AutoAtendimento',
+            None: 'AutoAtendimento',
+            'None': 'AutoAtendimento'
+        }
+
+        for c in colabs:
+            cid = c.get('id_colaborador')
+            cnick = c.get('nick') or c.get('nome_colaborador') or f"ID {cid}"
+            mapa_nicks[cid] = cnick
+            mapa_nicks[str(cid)] = cnick
+
+        # 2. Definição das Coleções
         nome_col_vendas = f"vendas{id_evento_int}"
         nome_col_pagtos = f"pagamentos{id_evento_int}"
-        
+        nome_col_cupons = f"vendas_sorte_extra{id_evento_int}" # <--- NOVA TABELA
+
+        # 3. Agregação de VENDAS (BINGO)
         vendas_agg = []
         if nome_col_vendas in db.list_collection_names():
             pipeline = [
                 {
                     '$group': {
-                        '_id': {
-                            'id_colab': '$id_colaborador',
-                            'origem': '$origem' # Importante separar AUTO de NORMAL
-                        },
+                        '_id': { 'id_colab': '$id_colaborador', 'origem': '$origem' },
                         'total_qtd': {'$sum': '$quantidade_unidades'},
                         'total_val': {'$sum': '$valor_total'}
                     }
@@ -4795,7 +4704,21 @@ def financeiro_evento():
             ]
             vendas_agg = list(db[nome_col_vendas].aggregate(pipeline))
 
-        # 4. Agregação de PAGAMENTOS (Do Colaborador para a Central)
+        # 4. Agregação de SORTE EXTRA (NOVO)
+        cupons_agg = []
+        if nome_col_cupons in db.list_collection_names():
+            pipeline_cupons = [
+                {
+                    '$group': {
+                        '_id': '$id_colaborador', # Quem vendeu
+                        'total_qtd_cupons': {'$sum': '$qtd_cartelas'}, # Campo Int32
+                        'total_val_cupons': {'$sum': '$valor_total'}   # Campo Double
+                    }
+                }
+            ]
+            cupons_agg = list(db[nome_col_cupons].aggregate(pipeline_cupons))
+
+        # 5. Agregação de PAGAMENTOS
         pagtos_agg = {}
         if nome_col_pagtos in db.list_collection_names():
             pipeline_pagtos = [
@@ -4809,105 +4732,131 @@ def financeiro_evento():
             raw_pagtos = list(db[nome_col_pagtos].aggregate(pipeline_pagtos))
             pagtos_agg = {p['_id']: safe_float(p['total_pago']) for p in raw_pagtos}
 
-        # 5. Processamento e Consolidação
-        relatorio = {} # Chave: id_colaborador
+        # 6. Consolidação dos Dados
+        relatorio = {} 
         
-        # Processa Vendas e Calcula Comissões
+        # Processa Vendas BINGO
         for v in vendas_agg:
             id_colab = v['_id'].get('id_colab')
             origem = v['_id'].get('origem')
             qtd = v['total_qtd']
             valor = safe_float(v['total_val'])
             
-            # Define taxa
             taxa = comissao_auto if origem == 'terminal_cliente' else mapa_comissao.get(id_colab, default_comissao)
             valor_comissao = (valor * taxa) / 100.0
             
-            # Inicializa se não existir
             if id_colab not in relatorio:
                 relatorio[id_colab] = {
                     'id': id_colab,
-                    'nick': mapa_nicks.get(id_colab, 'Desconhecido') if id_colab != 'N/A' else 'Auto-Atendimento',
-                    'qtd': 0,
-                    'vendas': 0.0,
-                    'comissao': 0.0,
-                    'pago_central': 0.0,
-                    'recebido_colab': 0.0 # Placeholder
+                    'nick': mapa_nicks.get(id_colab, f'ID {id_colab}') if id_colab != 'N/A' else 'Auto-Atendimento',
+                    'qtd': 0, 'vendas': 0.0, 'comissao': 0.0, 
+                    'qtd_cupons': 0, 'vendas_cupons': 0.0, # Novos Campos
+                    'pago_central': 0.0
                 }
             
             relatorio[id_colab]['qtd'] += qtd
             relatorio[id_colab]['vendas'] += valor
             relatorio[id_colab]['comissao'] += valor_comissao
 
-        # Adiciona Pagamentos ao Relatório
+        # Processa SORTE EXTRA (NOVO)
+        for c in cupons_agg:
+            id_colab_cupom = c['_id']
+            qtd_c = c['total_qtd_cupons']
+            val_c = safe_float(c['total_val_cupons'])
+            
+            if id_colab_cupom not in relatorio:
+                relatorio[id_colab_cupom] = {
+                    'id': id_colab_cupom,
+                    'nick': mapa_nicks.get(id_colab_cupom, f'ID {id_colab_cupom}'),
+                    'qtd': 0, 'vendas': 0.0, 'comissao': 0.0,
+                    'qtd_cupons': 0, 'vendas_cupons': 0.0,
+                    'pago_central': 0.0
+                }
+            
+            relatorio[id_colab_cupom]['qtd_cupons'] += qtd_c
+            relatorio[id_colab_cupom]['vendas_cupons'] += val_c
+
+        # Processa Pagamentos
         for id_colab_pag, valor_pago in pagtos_agg.items():
             if id_colab_pag not in relatorio:
-                # Caso raro: Pagou mas não vendeu nada (adiantamento?)
                 relatorio[id_colab_pag] = {
                     'id': id_colab_pag,
-                    'nick': mapa_nicks.get(id_colab_pag, 'Desconhecido'),
+                    'nick': mapa_nicks.get(id_colab_pag, f'ID {id_colab_pag}'),
                     'qtd': 0, 'vendas': 0.0, 'comissao': 0.0,
-                    'pago_central': 0.0, 'recebido_colab': 0.0
+                    'qtd_cupons': 0, 'vendas_cupons': 0.0,
+                    'pago_central': 0.0
                 }
             relatorio[id_colab_pag]['pago_central'] += valor_pago
 
-        # 6. Calcula Totais Finais
+# 7. Totais Finais (COM ATUALIZAÇÃO DE PRÊMIOS DIVIDIDOS)
         lista_final = []
         totais = {
             'vendas': 0.0, 'qtd': 0, 'comissao': 0.0, 
+            'vendas_cupons': 0.0, 'qtd_cupons': 0, 
             'pago_central': 0.0, 'pendente_central': 0.0,
-            'premios_pagos': 0.0 # Placeholder
+            'premios_pagos': 0.0 
         }
 
         for dados in relatorio.values():
-            # Cálculo do Líquido
-            # Regra: O colaborador deve (Vendas - Comissão). O que ele pagou abata disso.
-            liquido_devido = dados['vendas'] - dados['comissao']
-            saldo_final = liquido_devido - dados['pago_central']
+            # Cálculo do Líquido Devido
+            liquido_bingo = dados['vendas'] - dados['comissao']
+            liquido_total_devido = liquido_bingo + dados['vendas_cupons']
+            
+            # Regra: AutoAtendimento já conta como pago
+            if dados['id'] in [0, '0', None, 'None']:
+                dados['pago_central'] = liquido_total_devido
+            
+            # Cálculo do Saldo Final (Dívida)
+            saldo_final = liquido_total_devido - dados['pago_central']
             
             dados['pendente'] = saldo_final if saldo_final > 0 else 0.0
             dados['a_receber_colab'] = abs(saldo_final) if saldo_final < 0 else 0.0
             
             lista_final.append(dados)
             
-            # Soma Totais
+            # Soma Totais Gerais
             totais['vendas'] += dados['vendas']
             totais['qtd'] += dados['qtd']
             totais['comissao'] += dados['comissao']
-            totais['pago_central'] += dados['pago_central']
+            totais['vendas_cupons'] += dados['vendas_cupons']
+            totais['qtd_cupons'] += dados['qtd_cupons']
+            totais['pago_central'] += dados['pago_central'] 
             totais['pendente_central'] += dados['pendente']
 
-        # Ordena por Nick
-        lista_final.sort(key=lambda x: x['nick'])
+        lista_final.sort(key=lambda x: str(x['nick']))
         
-        # 7. Dados do Evento (Prêmios)
-        premio_total = safe_float(evento.get('premio_total', 0))
-        # Se tivesse tabela de pagamento de prêmios, somaria aqui. 
-        # Por enquanto, assumimos pago = 0
+        # --- LÓGICA DE PRÊMIOS (BINGO + EXTRA) ---
+        premio_bingo = safe_float(evento.get('premio_total', 0)) # Campo original
+        premio_extra = safe_float(evento.get('premios_sorte_extra', 0)) # Novo Campo
+        
+        premio_total_geral = premio_bingo + premio_extra
+        
         premios_pagos = 0.0 
-        premios_pendentes = premio_total - premios_pagos
-
-        # Saldo do Evento (Visão da Casa)
-        # Saldo = (Vendas Líquidas que entraram) - Prêmios Pagos
-        # Ou Saldo Projetado = (Vendas Brutas - Comissões) - Prêmios Totais
-        saldo_evento_projetado = (totais['vendas'] - totais['comissao']) - premio_total
-
-        # Totais Financeiros Reais (Fluxo de Caixa)
-        total_recebido_real = totais['pago_central']
-        total_a_receber_real = totais['pendente_central']
+        premios_pendentes = premio_total_geral - premios_pagos
+        # -----------------------------------------
+        
+        # Saldo Projetado (Receita Líquida - Total de Prêmios)
+        receita_liquida_casa = (totais['vendas'] - totais['comissao']) + totais['vendas_cupons']
+        saldo_evento_projetado = receita_liquida_casa - premio_total_geral
 
         dados_painel = {
-            'total_vendas': totais['vendas'],
-            'total_qtd': totais['qtd'],
+            'total_vendas_bingo': totais['vendas'],
+            'total_vendas_cupons': totais['vendas_cupons'],
+            'receita_bruta_total': totais['vendas'] + totais['vendas_cupons'],
             'total_comissao': totais['comissao'],
-            'premio_total': premio_total,
+            
+            # Novos Dados de Prêmio para o Template
+            'premio_bingo': premio_bingo,
+            'premio_extra': premio_extra,
+            'premio_total_geral': premio_total_geral,
+            
             'saldo_projetado': saldo_evento_projetado,
-            'total_recebido': total_recebido_real,
-            'total_a_receber': total_a_receber_real,
+            'total_recebido': totais['pago_central'],
+            'total_a_receber': totais['pendente_central'],
             'premios_pagos': premios_pagos,
             'premios_pendentes': premios_pendentes
         }
-
+        
         return render_template('financeiro_evento.html', 
                                evento=evento, 
                                lista=lista_final, 
@@ -4968,6 +4917,57 @@ def limpar_tabela_dinamica(nome_tabela):
 
     except Exception as e:
         return jsonify({'status': 'error', 'msg': f'Erro interno: {e}'}), 500
+
+
+@app.route('/salvar_senha_obrigatoria', methods=['POST'])
+@login_required 
+def salvar_senha_obrigatoria():
+    db = get_vendas_db()
+    if db is None: 
+        return render_template('trocar_senha_obrigatoria.html', error="Erro de conexão com o banco.", id_sala=g.id_sala)
+
+    nova_senha = request.form.get('nova_senha', '').strip()
+    confirma_senha = request.form.get('confirma_senha', '').strip()
+    
+    if not nova_senha or not confirma_senha:
+        return render_template('trocar_senha_obrigatoria.html', error="Preencha os dois campos.", id_sala=g.id_sala)
+    
+    if nova_senha != confirma_senha:
+        return render_template('trocar_senha_obrigatoria.html', error="As senhas não conferem.", id_sala=g.id_sala)
+    
+    senha_formatada = nova_senha.capitalize()
+    if senha_formatada == "Senha":
+        return render_template('trocar_senha_obrigatoria.html', error="A nova senha NÃO pode ser a senha padrão 'Senha'.", id_sala=g.id_sala)
+
+    try:
+        hashed_password = bcrypt.hashpw(senha_formatada.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        
+        tipo = session.get('tipo_usuario_logado')
+        
+        if tipo == 'colaborador':
+            id_colab = session.get('id_colaborador')
+            query = {'id_colaborador': int(id_colab)} if str(id_colab).isdigit() else {'_id': try_object_id(id_colab)}
+            
+            db.colaboradores.update_one(query, {'$set': {'senha': hashed_password}})
+            return redirect(url_for('menu_operacoes'))
+            
+        # BLOCO DE CLIENTE REMOVIDO DAQUI
+            
+        else:
+            session.clear()
+            return redirect(url_for('login_page', error="Sessão inválida ou tipo de usuário não permitido para esta operação."))
+
+    except Exception as e:
+        print(f"Erro ao salvar nova senha: {e}")
+        return render_template('trocar_senha_obrigatoria.html', error=f"Erro interno: {e}", id_sala=g.id_sala)
+
+
+@app.route('/controle_sorte_extra')
+@login_required
+def controle_sorte_extra():
+    # Placeholder temporário
+    return "<h1>🍀 Tela de Controle Sorte Extra - Em Construção</h1><br><a href='/submenu_eventos'>Voltar</a>"
+
 
 
 if __name__ == '__main__':

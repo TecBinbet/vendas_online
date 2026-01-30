@@ -253,18 +253,36 @@
 
                     <div class="form-group password-group">
                         <label for="senha" class="{% if active_view != 'alterar' %}required-label{% endif %}">Senha:</label>
+                        
                         <button type="button" class="password-toggle" onclick="togglePasswordVisibility('senha')">👁️</button>
+                        
                         <input type="password" id="senha" name="senha" 
-                               {% if active_view != 'alterar' %}required{% endif %} 
-                               class="form-control" placeholder="{% if active_view == 'alterar' %}Deixe vazio para manter a senha atual{% endif %}" autocomplete="new-password">
+                               class="form-control {% if active_view != 'alterar' %}bg-gray-200 text-gray-500 cursor-not-allowed{% endif %}"
+                               autocomplete="new-password"
+                               {% if active_view != 'alterar' %}
+                                   value="Senha" 
+                                   readonly 
+                                   title="A senha padrão para novos cadastros é 'Senha'"
+                               {% else %}
+                                   placeholder="Deixe vazio para manter a senha atual"
+                               {% endif %}
+                        >
                     </div>
 
                     <div class="form-group password-group">
                         <label for="confirma_senha" class="{% if active_view != 'alterar' %}required-label{% endif %}">Confirmar Senha:</label>
+                        
                         <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirma_senha')">👁️</button>
+                        
                         <input type="password" id="confirma_senha" name="confirma_senha" 
-                               {% if active_view != 'alterar' %}required{% endif %} 
-                               class="form-control" placeholder="Repita a senha">
+                               class="form-control {% if active_view != 'alterar' %}bg-gray-200 text-gray-500 cursor-not-allowed{% endif %}"
+                               {% if active_view != 'alterar' %}
+                                   value="Senha" 
+                                   readonly
+                               {% else %}
+                                   placeholder="Repita a senha"
+                               {% endif %}
+                        >
                     </div>
                     
                     <div class="form-group">
@@ -272,6 +290,13 @@
                         <input type="number" id="comissao" name="comissao" required min="0" max="30" class="form-control"
                                value="{{ colab.get('comissao', default_comissao) }}">
                          <small class="text-sm font-bold text-red-500">De 0 à 30%</small>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="limite_credito" class="required-label">Limite de Crédito (R$):</label>
+                        <input type="number" id="limite_credito" name="limite_credito" required step="0.01" min="0" class="form-control border-blue-300 bg-blue-50"
+                               value="{{ colab.get('limite_credito', g.parametros_globais.get('limite_de_credito', 300)) }}">
+                         <small class="text-sm font-bold text-gray-500">Valor máximo de pendência permitido.</small>
                     </div>
 
                     <div class="form-group">
@@ -384,8 +409,6 @@
                                            <span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-bold ml-2">BLOQUEADO</span>
                                       {% endif %}
                                 </td>
-
-                                <td class="py-3 px-4 border-b text-sm">{{ colaborador.nome_colaborador }} ({{ colaborador.nick }})</td>
                                 <td class="py-3 px-4 border-b text-sm font-semibold">{{ colaborador.nivel }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ colaborador.telefone }}</td>
                                 
@@ -393,7 +416,7 @@
                                     {% if colaborador.nome_colaborador != 'Tecbin' %}
                                         
                                         <button type="button" 
-                                                onclick='confirmarGeracaoQR("{{ colaborador.id_colaborador }}", {{ colaborador.nick | tojson }})'
+                                                onclick='confirmarGeracaoQR("{{ colaborador.id_colaborador }}", {{ colaborador.nick | default("") | tojson }})'
                                                 class="action-link text-purple-600 hover:text-purple-800"
                                                 title="Gerar QR Code de Cadastro">
                                             📱 QR
@@ -405,7 +428,7 @@
                                               id="form-excluir-listar-{{ colaborador.id_colaborador }}"
                                               class="inline-block">
                                             <button type="button" 
-                                                    onclick='openDeleteModal("{{ colaborador.id_colaborador }}", {{ colaborador.nick | tojson }}, "listar")'
+                                                    onclick='openDeleteModal("{{ colaborador.id_colaborador }}", {{ colaborador.nick | default("") | tojson }}, "listar")'
                                                     class="action-link delete-link hover:text-red-600">Excluir</button>
                                         </form>
                                     {% endif %}

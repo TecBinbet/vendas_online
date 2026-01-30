@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Troca de Senha Obrigatória</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"> 
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F3F4F6; display: flex; justify-content: center; align-items: center; height: 100vh; }
+        .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); width: 100%; max-width: 400px; }
+        .btn-primary { background-color: #2563EB; color: white; font-weight: bold; padding: 0.75rem; border-radius: 0.375rem; width: 100%; margin-top: 1rem; }
+        .btn-primary:hover { background-color: #1D4ED8; }
+        
+        /* Classe específica para garantir que o texto não passe por cima do ícone */
+        .input-com-icone {
+            padding-right: 50px !important; /* Espaço seguro para o botão */
+        }
+    </style>
+</head>
+<body>
+
+    <div class="card">
+        <h2 class="text-2xl font-bold text-center text-red-500 mb-1 -mt-4">⚠️ Atenção</h2>
+        <p class="text-center text-gray-600 mb-4 text-sm">
+            Este é seu primeiro acesso ou sua senha foi redefinida. <br>
+            <strong>Por segurança, defina uma nova senha.</strong>
+        </p>
+
+        {% if error %}
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-2 text-sm text-center">
+                {{ error }}
+            </div>
+        {% endif %}
+
+        <form method="POST" action="{{ url_for('salvar_senha_obrigatoria') }}">
+            
+            {% if id_sala %}
+                <input type="hidden" name="id_sala" value="{{ id_sala }}">
+            {% endif %}
+
+            <div class="mb-2">
+                <label class="block text-gray-700 text-sm font-bold mb-1">Nova Senha:</label>
+                <div class="relative w-full">
+                    <input type="password" name="nova_senha" id="nova_senha" required 
+                           class="input-com-icone w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                           placeholder="Digite a nova senha">
+                    
+                    <button type="button" onclick="toggleSenha('nova_senha', this)" 
+                            class="absolute inset-y-0 right-0 px-3 flex items-center justify-center text-gray-500 hover:text-blue-600 focus:outline-none bg-transparent"
+                            style="width: 45px; height: 100%; border: none; cursor: pointer;">
+                        👁️
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-23">
+                <label class="block text-gray-700 text-sm font-bold mb-1">Confirmar Nova Senha:</label>
+                <div class="relative w-full">
+                    <input type="password" name="confirma_senha" id="confirma_senha" required 
+                           class="input-com-icone w-full p-2 border rounded focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                           placeholder="Repita a nova senha">
+                    
+                    <button type="button" onclick="toggleSenha('confirma_senha', this)" 
+                            class="absolute inset-y-0 right-0 px-3 flex items-center justify-center text-gray-500 hover:text-blue-600 focus:outline-none bg-transparent"
+                            style="width: 45px; height: 100%; border: none; cursor: pointer;">
+                        👁️
+                    </button>
+                </div>
+            </div>
+
+            <button type="submit" class="btn-primary transition duration-200">💾 Salvar e Acessar</button>
+        </form>
+    </div>
+
+    <script>
+        function toggleSenha(fieldId, btn) {
+            const input = document.getElementById(fieldId);
+            if (input.type === "password") {
+                input.type = "text";
+                btn.innerHTML = "🙈"; // Ícone de "ocultar"
+                btn.title = "Ocultar senha";
+            } else {
+                input.type = "password";
+                btn.innerHTML = "👁️"; // Ícone de "ver"
+                btn.title = "Visualizar senha";
+            }
+        }
+    </script>
+
+</body>
+</html>

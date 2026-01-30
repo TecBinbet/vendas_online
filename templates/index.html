@@ -99,7 +99,8 @@
         <!-- O backend envia 'id_sala_exibicao' se estiver disponível na sessão ou URL -->
         {% if id_sala_exibicao %}
             <div class="sala-info">
-                Acessando Sala ID: {{ id_sala_exibicao }}
+                Acessando Sala ID: {{ id_sala_exibicao }}<br>
+                <strong>{{ g.parametros_globais.get('nome_sala', '') }}</strong>
             </div>
         {% endif %}
 

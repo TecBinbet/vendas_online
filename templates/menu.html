@@ -8,7 +8,13 @@
 </head>
 <body>
     <div class="container">
-        <h4 class="text-sm mt-2">Olá, {{ logado }} </h4>
+        <h4 class="text-sm mt-2">
+            Olá, {{ logado }} 
+            {% if g.parametros_globais.get('nome_sala') %}
+                - <span style="color: #2563EB;">{{ g.parametros_globais.get('nome_sala') }}</span>
+            {% endif %}
+        </h4>
+
         <h2>🎯 Menu de Operações</h2>
         {% if error %}
             <div style="background-color: #FEE2E2; color: #991B1B; padding: 6px; border: 1px solid #FCA5A5; border-radius: 8px; margin-bottom: 10px; text-align: center; font-weight: bold;">
