@@ -4962,12 +4962,102 @@ def salvar_senha_obrigatoria():
         return render_template('trocar_senha_obrigatoria.html', error=f"Erro interno: {e}", id_sala=g.id_sala)
 
 
+#=====================================
+# Rotas da Sorte Extra
+#=====================================
 @app.route('/controle_sorte_extra')
 @login_required
 def controle_sorte_extra():
-    # Placeholder temporário
-    return "<h1>🍀 Tela de Controle Sorte Extra - Em Construção</h1><br><a href='/submenu_eventos'>Voltar</a>"
+    db = get_vendas_db()
+    if db is None: 
+        return redirect(url_for('menu_operacoes', error="Banco de Dados Offline"))
+    
+    # Busca eventos que não estão finalizados para o select
+    eventos_ativos = list(db.eventos.find(
+        {"status": {"$ne": "finalizado"}}, 
+        {"id_evento": 1, "descricao": 1, "data_evento": 1, "hora_evento": 1}
+    ).sort("data_evento", -1))
+    
+    # Busca a configuração atual (único registro)
+    config = db.sorte_extra_config.find_one({})
+    
+    # Tratamento para exibir valores decimais corretamente no template
+    if config:
+        for campo in ['preco_cupom', 'premio_maximo', 'premio_intermediario', 'premio_base', 'premio_minimo']:
+            if campo in config:
+                config[campo] = safe_float(config[campo])
 
+    return render_template('controle_sorte_extra_config.html', 
+                           eventos=eventos_ativos, 
+                           config=config,
+                           g=g)
+
+                       
+@app.route('/salvar_config_sorte_extra', methods=['POST'])
+@login_required
+def salvar_config_sorte_extra():
+    db = get_vendas_db()
+    if db is None: 
+        return redirect(url_for('menu_operacoes', error="Banco de Dados Offline"))
+
+    def validar_decimal(valor):
+        """
+        Limpa a string do formulário e garante que o Decimal128 
+        receba um valor numérico válido, evitando o erro ConversionSyntax.
+        """
+        if not valor:
+            return Decimal128("0.00")
+        
+        try:
+            # Remove R$, espaços e ajusta padrão brasileiro (1.000,00 -> 1000.00)
+            limpo = str(valor).replace('R$', '').replace(' ', '').replace('.', '').replace(',', '.')
+            
+            # Se após a limpeza sobrar apenas um ponto ou nada, retorna zero
+            if limpo == "." or not limpo:
+                return Decimal128("0.00")
+                
+            return Decimal128(limpo)
+        except Exception:
+            return Decimal128("0.00")
+
+    try:
+        id_evento_raw = request.form.get('id_evento')
+        if not id_evento_raw:
+            return redirect(url_for('controle_sorte_extra', error="Selecione um evento."))
+
+        id_evento = int(id_evento_raw)
+        
+        # Busca detalhes do evento para compor a string de exibição
+        evento_info = db.eventos.find_one({'id_evento': id_evento})
+        if not evento_info:
+            return redirect(url_for('controle_sorte_extra', error="Evento não localizado."))
+            
+        desc_completa = f"{evento_info.get('descricao')} - {evento_info.get('data_evento')} {evento_info.get('hora_evento')}"
+
+        # Montagem dos dados tratando cada campo individualmente
+        dados_config = {
+            "id_evento": id_evento,
+            "qtde_dezenas": int(request.form.get('qtde_dezenas', 5) or 5),
+            "qtde_tope_sorte_extra": int(request.form.get('qtde_tope_sorte_extra', 10) or 10),
+            "preco_cupom": validar_decimal(request.form.get('preco_cupom')),
+            "premio_maximo": validar_decimal(request.form.get('premio_maximo')),
+            "premio_intermediario": validar_decimal(request.form.get('premio_intermediario')),
+            "premio_base": validar_decimal(request.form.get('premio_base')),
+            "premio_minimo": validar_decimal(request.form.get('premio_minimo')),
+            "texto_regra_vitoria": request.form.get('texto_regra_vitoria', ''),
+            "data_hora_evento": desc_completa,
+            "status": request.form.get('status', 'paralisado'),
+            "data_atualizacao": datetime.utcnow()
+        }
+
+        # O MongoDB criará o campo 'premio_minimo' automaticamente aqui se ele não existir
+        db.sorte_extra_config.update_one({}, {"$set": dados_config}, upsert=True)
+
+        return redirect(url_for('controle_sorte_extra', success="Parâmetros da Sorte Extra salvos com sucesso!"))
+
+    except Exception as e:
+        print(f"Erro ao salvar config sorte extra: {e}")
+        return redirect(url_for('controle_sorte_extra', error=f"Erro na gravação: {str(e)}"))
 
 
 if __name__ == '__main__':

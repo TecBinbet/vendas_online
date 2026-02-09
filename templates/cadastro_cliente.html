@@ -37,18 +37,16 @@
 
         /* Estilos da Tabela */
         .list-header { background-color: #E5E7EB; color: #374151; font-weight: bold; }
-        .list-row:nth-child(even) { background-color: #DCFCE7; }  /* #F9FAFB     */
+        .list-row:nth-child(even) { background-color: #DCFCE7; }
         .action-link { text-decoration: none; font-weight: 600; margin-right: 10px; }
         .delete-link { color: #EF4444; }
         
         /* Grupo de Senha para o toggle */
-        .password-group {
-            position: relative;
-        }
+        .password-group { position: relative; }
         .password-toggle {
             position: absolute; 
             right: 5px; 
-            top: 35px; /* Ajustado para alinhar com o input */
+            top: 35px;
             padding: 5px 10px; 
             background: #e9ecef; 
             border: 1px solid #ced4da;
@@ -58,19 +56,14 @@
             color: #007bff;
             z-index: 10;
         }
-        .password-group input {
-            padding-right: 70px; /* Espaço para o botão */
-        }
+        .password-group input { padding-right: 70px; }
 
-        /* --- INÍCIO CSS DA MODAL DE EXCLUSÃO E RECARGA --- */
+        /* Modal Styles */
         .modal-overlay {
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
+            top: 0; left: 0; right: 0; bottom: 0;
             background-color: rgba(0, 0, 0, 0.75);
-            display: none; /* Começa escondido */
+            display: none;
             justify-content: center;
             align-items: center;
             z-index: 1000;
@@ -94,14 +87,12 @@
         .btn-danger:hover { background-color: #DC2626; }
         .btn-cancel { background-color: #D1D5DB; color: #374151; }
         .btn-cancel:hover { background-color: #B2B8C2; }
-        /* --- FIM CSS DA MODAL --- */
 
-        /* --- CSS DA LISTA DE RESULTADOS DE BUSCA --- */
         #search-results-list {
             position: absolute;
-            top: 100%; /* Logo abaixo do input */
+            top: 100%;
             left: 0;
-            right: 0; /* Mesma largura do container pai */
+            right: 0;
             background: white;
             border: 1px solid #D1D5DB;
             border-radius: 0 0 6px 6px;
@@ -109,7 +100,7 @@
             z-index: 50;
             max-height: 200px;
             overflow-y: auto;
-            display: none; /* Começa oculto */
+            display: none;
         }
         
         .search-result-item {
@@ -119,15 +110,12 @@
             transition: background-color 0.2s;
         }
         .search-result-item:last-child { border-bottom: none; }
-        .search-result-item:hover { background-color: #F0FDF4; } /* Verde claro */
+        .search-result-item:hover { background-color: #F0FDF4; }
         
-        .search-type-selector {
-            display: flex; gap: 15px; margin-bottom: 8px; font-size: 0.9rem; color: #4B5563;
-        }
+        .search-type-selector { display: flex; gap: 15px; margin-bottom: 8px; font-size: 0.9rem; color: #4B5563; }
         .search-type-selector label { font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px; }
         
-        .client-search-group { position: relative; } /* Necessário para posicionar a lista */
-
+        .client-search-group { position: relative; }
     </style>
 </head>
 <body>
@@ -163,14 +151,11 @@
             {% if nivel >= 3 %}  
                 <a href="{{ url_for('cadastro_cliente', view='bloqueio') }}" 
                      class="nav-link {% if active_view == 'bloqueio' %}bg-red-600 text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-red-700">
-                    🚫 Bloqueios de Termos (apelido)
+                    🚫 Bloqueios
                 </a>
             {% endif %}
 
             <input type="hidden" id="next_url_val" value="{{ next_url | default('menu_operacoes') }}">
-            {% if id_evento_retorno %}
-                <input type="hidden" id="id_evento_retorno_val" value="{{ id_evento_retorno }}">
-            {% endif %}
         </div>
 
         <div class="mb-1 -mt-2 p-1 bg-info text-white border border-blue-600 rounded-lg">
@@ -179,9 +164,7 @@
         
         {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
         <div id="view-novo" class="{% if not is_novo_alterar %}hidden{% endif %}">
-            
             {% set cliente = cliente_edicao if cliente_edicao is not none else {} %} 
-            
             <h3 class="text-xl font-semibold mb-2 {% if active_view == 'alterar' %}text-accent{% else %}text-primary{% endif %}">
                 {% if active_view == 'alterar' %}Alteração de Cliente (ID: CLI{{ cliente.get('id_cliente', 'N/A') }}){% else %}Cadastro de Novo Cliente{% endif %}
             </h3>
@@ -190,7 +173,6 @@
             {% set campos = g.parametros_globais.tipo_cadastro_cliente if (g.parametros_globais is defined and g.parametros_globais.tipo_cadastro_cliente is defined) else config_padrao %}
            
            <form method="POST" action="{{ url_for('gravar_cliente') }}" id="form-cadastro" class="space-y-4">
-                
                 {% if active_view == 'alterar' %}
                     <input type="hidden" name="id_cliente" value="{{ cliente.get('id_cliente', '') }}">
                 {% endif %}
@@ -199,76 +181,48 @@
                     <input type="hidden" name="id_evento_retorno" value="{{ id_evento_retorno }}">
                 {% endif %}
 
-
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-1">
-
                     <div class="form-group">
                         <label>ID Cliente:</label>
-                        <input type="text" 
-                               value="{% if active_view == 'alterar' %}CLI{{ cliente.get('id_cliente', 'N/A') }}{% else %}Gerado Automaticamente{% endif %}" 
-                               disabled class="form-control bg-gray-100">
+                        <input type="text" value="{% if active_view == 'alterar' %}CLI{{ cliente.get('id_cliente', 'N/A') }}{% else %}Gerado Automaticamente{% endif %}" disabled class="form-control bg-gray-100">
                     </div>
 
                     {% if "nome_cliente" in campos %}
                     <div class="form-group">
                         <label for="nome_cliente" class="{% if campos.get('nome_cliente') %}required-label{% endif %}">Nome Completo:</label>
-                        <input type="text" id="nome_cliente" name="nome_cliente" class="form-control" 
-                                 value="{{ cliente.get('nome_cliente', '') }}"
-                                 {% if campos.get('nome_cliente') %}required{% endif %}>
+                        <input type="text" id="nome_cliente" name="nome_cliente" class="form-control" value="{{ cliente.get('nome_cliente', '') }}" {% if campos.get('nome_cliente') %}required{% endif %}>
                     </div>
                     {% endif %}
                     
                     {% if "nick" in campos %}
                     <div class="form-group">
                          <label for="nick" class="{% if campos.get('nick') %}required-label{% endif %}">Nick/Apelido:</label>
-                         <input type="text" id="nick" name="nick" class="form-control"
-                                   value="{{ cliente.get('nick', '') }}"
-                                   {% if campos.get('nick') %}required{% endif %}>
+                         <input type="text" id="nick" name="nick" class="form-control" value="{{ cliente.get('nick', '') }}" {% if campos.get('nick') %}required{% endif %}>
                     </div>
                     {% endif %}
 
                     {% if "telefone" in campos %}
                     <div class="form-group">
-                        <label for="Telefone" class="{% if campos.get('telefone') %}required-label{% endif %}">WhatsApp (Telefone):</label>
-                        <input type="tel" id="telefone" name="telefone" class="form-control"
-                                  value="{{ cliente.get('telefone', '') }}"
-                                  {% if campos.get('telefone') %}required{% endif %}>
+                        <label for="telefone" class="{% if campos.get('telefone') %}required-label{% endif %}">WhatsApp (Telefone):</label>
+                        <input type="tel" id="telefone" name="telefone" class="form-control" value="{{ cliente.get('telefone', '') }}" {% if campos.get('telefone') %}required{% endif %}>
                     </div>
                     {% endif %}
                     
-                    {% if "cpf" in campos %}
-                    <div class="form-group">
-                        <label for="cpf" class="{% if campos.get('cpf') %}required-label{% endif %}">CPF:</label>
-                        <input type="text" id="cpf" name="cpf" class="form-control" placeholder="Apenas números"
-                                  value="{{ cliente.get('cpf', '') }}"
-                                  {% if campos.get('cpf') %}required{% endif %}>
-                    </div>
-                    {% endif %}
-
                     {% if "cidade" in campos %}
                     <div class="form-group">
                         <label for="cidade" class="{% if campos.get('cidade') %}required-label{% endif %}">Cidade:</label>
-                        <input type="text" id="cidade" name="cidade" class="form-control"
-                                  value="{{ cliente.get('cidade', '') }}"
-                                  {% if campos.get('cidade') %}required{% endif %}>
+                        <input type="text" id="cidade" name="cidade" class="form-control" value="{{ cliente.get('cidade', '') }}" {% if campos.get('cidade') %}required{% endif %}>
                     </div>
                     {% endif %}
 
                     {% if "chave_pix" in campos %}
                     <div class="form-group">
                        <label for="chave_pix" class="{% if campos.get('chave_pix') %}required-label{% endif %}">Chave PIX:</label>
-                       <input type="text" id="chave_pix" name="chave_pix" class="form-control"
-                           value="{{ cliente.get('chave_pix', '') }}" 
-                           autocomplete="off"
-                           {% if campos.get('chave_pix') %}required{% endif %}>
+                       <input type="text" id="chave_pix" name="chave_pix" class="form-control" value="{{ cliente.get('chave_pix', '') }}" autocomplete="off" {% if campos.get('chave_pix') %}required{% endif %}>
                     </div>
-                    
                     <div class="form-group">
                         <label for="confirma_chave_pix" class="{% if campos.get('chave_pix') %}required-label{% endif %}">Confirmar Chave PIX:</label>
-                       <input type="text" id="confirma_chave_pix" name="confirma_chave_pix" class="form-control"
-                           value="{{ cliente.get('chave_pix', '') }}" 
-                           autocomplete="off"
-                           {% if campos.get('chave_pix') %}required{% endif %}>
+                       <input type="text" id="confirma_chave_pix" name="confirma_chave_pix" class="form-control" value="{{ cliente.get('chave_pix', '') }}" autocomplete="off" {% if campos.get('chave_pix') %}required{% endif %}>
                     </div>
                     {% endif %}
 
@@ -276,33 +230,14 @@
                     <div class="form-group password-group">
                         <label for="senha" class="{% if campos.get('senha') and active_view != 'alterar' %}required-label{% endif %}">Senha:</label>
                         <button type="button" class="password-toggle" onclick="togglePasswordVisibility('senha')">👁️</button>
-                        <input type="password" id="senha" name="senha" 
-                                  class="form-control" 
-                                  autocomplete="new-password"       
-                                  placeholder="{% if active_view == 'alterar' %}Deixe em branco para não alterar{% else %}Digite a senha{% endif %}"
-                                  {% if campos.get('senha') and active_view != 'alterar' %}required{% endif %}>
-                     </div>
-
-                     <div class="form-group password-group">
-                        <label for="confirma_senha" class="{% if campos.get('senha') and active_view != 'alterar' %}required-label{% endif %}">Confirmar Senha:</label>
-                        <button type="button" class="password-toggle" onclick="togglePasswordVisibility('confirma_senha')">👁️</button>
-                        <input type="password" id="confirma_senha" name="confirma_senha" 
-                                  class="form-control" 
-                                  autocomplete="new-password"       
-                                  placeholder="Repita a senha"
-                                  {% if campos.get('senha') and active_view != 'alterar' %}required{% endif %}>
+                        <input type="password" id="senha" name="senha" class="form-control" autocomplete="new-password" placeholder="{% if active_view == 'alterar' %}Deixe em branco{% else %}Senha{% endif %}" {% if campos.get('senha') and active_view != 'alterar' %}required{% endif %}>
                      </div>
                     {% endif %}
-                    
                 </div>
                 
                 <div class="mt-2 flex justify-end space-x-2">
                     <button type="submit" class="btn-submit btn-save">
-                        {% if active_view == 'alterar' %}
-                            ✓ Salvar Alterações
-                        {% else %}
-                            💾 Salvar Cliente
-                        {% endif %}
+                        {% if active_view == 'alterar' %}✓ Salvar Alterações{% else %}💾 Salvar Cliente{% endif %}
                     </button>
                     {% if active_view == 'alterar' %}
                         <a href="{{ url_for('cadastro_cliente', view='listar', next=next_url) }}" class="nav-link bg-gray-400 text-white hover:bg-gray-500">Cancelar</a>
@@ -317,186 +252,123 @@
             <form method="GET" action="{{ url_for('cadastro_cliente') }}" class="mb-4 space-y-2" id="form-consulta">
                 <input type="hidden" name="view" value="consulta">
                 <input type="hidden" name="next" value="{{ next_url }}">
-                <input type="hidden" name="id_evento_retorno" value="{{ id_evento_retorno }}">
-                
-                <label for="consulta_termo" class="form-group">Buscar por Nick, Nome ou ID:</label>
                 
                 <div class="search-type-selector">
-                    <label><input type="radio" name="search_type" value="nick" checked onchange="clearSearch()"> Nick (Apelido)</label>
+                    <label><input type="radio" name="search_type" value="nick" checked onchange="clearSearch()"> Nick</label>
                     <label><input type="radio" name="search_type" value="nome" onchange="clearSearch()"> Nome</label>
                     <label><input type="radio" name="search_type" value="id" onchange="clearSearch()"> ID</label>
                 </div>
 
                 <div class="flex space-x-2 client-search-group">
-                    <input type="text" id="consulta_termo" name="query" 
-                           value="{{ query | default('') }}" 
-                           placeholder="Digite o termo de busca..." 
-                           class="form-control mb-0"
-                           autocomplete="off"
-                           onkeyup="handleSearchInput(this)">
-                           
+                    <input type="text" id="consulta_termo" name="query" value="{{ query | default('') }}" placeholder="Digite o termo..." class="form-control mb-0" autocomplete="off" onkeyup="handleSearchInput(this)">
                     <button type="submit" class="nav-link bg-accent text-white hover:opacity-90 min-w-[100px]">Buscar</button>
-                    
                     <div id="search-results-list"></div>
                 </div>
             </form>
             
             <div class="p-1 border rounded-lg bg-gray-200 -mt-2">
                 {% if active_view == 'consulta' and query and clientes_lista|length > 0 %}
-                    <h4 class="font-bold -mb-1">{{ clientes_lista | length }} Resultado(s) para "{{ query }}"</h4>
-                    
                     {% for cliente in clientes_lista %}
                         <div class="border-b pb-3 mb-1 last:border-b-0 last:mb-0 bg-gray-300 p-3 rounded shadow-sm">
                             <div class="flex justify-between items-start">
                                 <div>
                                     <p><strong>{{ cliente.id_cliente }}</strong> | <span class="text-primary font-bold">{{ cliente.nick }}</span></p>
-                                    <p class="text-[10px] text-gray-600"> <strong>{{ cliente.nome_cliente }}</strong></p>
-                                    <p class="text-[12px] text-gray-500">{{ cliente.cidade | default('N/A') }}</p>
+                                    <p class="text-[12px] text-gray-500">{{ cliente.nome_cliente }} | {{ cliente.cidade | default('N/A') }}</p>
                                 </div>
-                                
                                 <div class="text-right">
-                                    <p class="text-xs text-gray-500 uppercase font-bold">Saldo Atual</p>
-                                    {% if cliente.saldo_float < 0 %}
-                                        <span class="text-lg font-black text-red-600">R$ {{ cliente.saldo_float | format_moeda }}</span>
-                                    {% else %}
-                                        <span class="text-lg font-black text-blue-600">R$ {{ cliente.saldo_float | format_moeda }}</span>
-                                    {% endif %}
+                                    <p class="text-xs text-gray-500 uppercase font-bold">Saldo</p>
+                                    <span class="text-lg font-black {{ 'text-red-600' if cliente.saldo_float < 0 else 'text-blue-600' }}">R$ {{ cliente.saldo_float | format_moeda }}</span>
                                 </div>
                             </div>
-
                             <div class="mt-1 flex flex-wrap gap-2 items-center">
+                                <button type="button" onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}')" class="px-2 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm shadow-sm">💰 + Crédito</button>
+                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="px-2 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold">✏️ Alterar</a>
                                 
-                                <button type="button" 
-                                        onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}')"
-                                        class="px-1 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm flex items-center gap-1 shadow-sm">
-                                    💰 + Crédito
-                                </button>
-
-                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" 
-                                   class="px-1 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold">
-                                   ✏️ Alterar
-                                </a>
-                                
-                                <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" 
-                                      id="form-excluir-consulta-{{ cliente.id_cliente }}"
-                                      class="inline-block">
-                                    <button type="button" 
-                                            onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta")'
-                                            class="px-1 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">
-                                        🗑️ Excluir
-                                    </button>
+                                <!-- TRAVA DE SEGURANÇA: EXCLUIR SÓ PARA NÍVEL 3 -->
+                                {% if nivel >= 3 %}
+                                <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" id="form-excluir-consulta-{{ cliente.id_cliente }}" class="inline-block">
+                                    <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta")' class="px-2 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">🗑️ Excluir</button>
                                 </form>
+                                {% endif %}
                             </div>
                         </div>
                     {% endfor %}
-
-                {% elif active_view == 'consulta' and query and clientes_lista|length == 0 %}
-                    <p class="text-center text-red-500 font-bold">❌ Nenhum cliente encontrado para o termo "{{ query }}".</p>
+                {% elif active_view == 'consulta' and query %}
+                    <p class="text-center text-red-500 font-bold">❌ Nenhum cliente encontrado.</p>
                 {% else %}
-                    <p class="text-gray-500 text-center">Utilize o campo acima para buscar um cliente.</p>
+                    <p class="text-gray-500 text-center py-4 text-sm">Realize uma busca para visualizar os dados.</p>
                 {% endif %}
             </div>
         </div>
 
         <div id="view-listar" class="{% if active_view != 'listar' %}hidden{% endif %}">
-            <h3 class="text-xl font-semibold mb-2 text-gray-700">Lista de Clientes (Ordenada por Nick)</h3>
-            
+            <h3 class="text-xl font-semibold mb-2 text-gray-700">Lista Geral (Ordenada por Nick)</h3>
             <div class="overflow-x-auto shadow-md rounded-lg">
                 <table class="min-w-full bg-white border border-gray-200">
                     <thead>
-                        <tr class="list-header">
-                            <th class="py-0 px-4 border-b text-left">ID</th>
-                            <th class="py-0 px-4 border-b text-left">Nick (Nomek)</th>
-                            <th class="py-0 px-4 border-b text-left">Cidade</th>
-                            <th class="py-0 px-4 border-b text-left">Telefone</th>
-                            <th class="py-0 px-4 border-b text-left">Ações</th>
+                        <tr class="list-header text-xs md:text-sm uppercase tracking-wider">
+                            <th class="py-3 px-4 border-b text-left">ID</th>
+                            <th class="py-3 px-4 border-b text-left">Nick (Nome)</th>
+                            <th class="py-3 px-4 border-b text-left">Cidade</th>
+                            <th class="py-3 px-4 border-b text-left">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
                         {% if active_view == 'listar' and clientes_lista %}
                             {% for cliente in clientes_lista %}
-                            <tr class="list-row hover:bg-green-200 transition duration-150">
-                                <td class="py-3 px-4 border-b text-sm">{{ cliente.id_cliente }}</td>
-                                <td class="py-3 px-4 border-b text-sm font-bold">{{ cliente.nick }} ({{ cliente.nome_cliente }})</td>
+                            <tr class="list-row hover:bg-green-100 transition duration-150">
+                                <td class="py-3 px-4 border-b text-sm font-mono">{{ cliente.id_cliente }}</td>
+                                <td class="py-3 px-4 border-b text-sm font-bold">{{ cliente.nick }} <span class="text-xs font-normal text-gray-500">({{ cliente.nome_cliente }})</span></td>
                                 <td class="py-3 px-4 border-b text-sm">{{ cliente.cidade }}</td>
-                                <td class="py-3 px-4 border-b text-sm">{{ cliente.telefone }}</td>
-                                <td class="py-3 px-4 border-b text-sm whitespace-nowrap">
+                                <td class="py-3 px-4 border-b text-sm">
                                     <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
                                     
-                                    <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" 
-                                          id="form-excluir-listar-{{ cliente.id_cliente }}"
-                                          class="inline-block">
-                                        <button type="button" 
-                                                onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "listar")'
-                                                class="action-link delete-link hover:text-red-600">Excluir</button>
+                                    <!-- TRAVA DE SEGURANÇA: EXCLUIR SÓ PARA NÍVEL 3 -->
+                                    {% if nivel >= 3 %}
+                                    <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" id="form-excluir-listar-{{ cliente.id_cliente }}" class="inline-block">
+                                        <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "listar")' class="action-link delete-link hover:text-red-600">Excluir</button>
                                     </form>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
                         {% else %}
-                            <tr><td colspan="5" class="py-8 text-center text-gray-500 font-bold">Nenhum cliente cadastrado.</td></tr>
+                            <tr><td colspan="4" class="py-8 text-center text-gray-500 font-bold">Nenhum cliente cadastrado.</td></tr>
                         {% endif %}
                     </tbody>
                 </table>
             </div>
         </div>
         
-
-<div id="view-bloqueio" class="{% if active_view != 'bloqueio' %}hidden{% endif %}">
-    <h3 class="text-xl font-semibold mb-4 text-red-700 flex items-center gap-2">
-        🚫 Gerenciamento de Termos Proibidos
-    </h3>
-    
-    <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 shadow-sm">
-        <label class="text-sm font-bold text-red-800 mb-1 block">Adicionar novo termo proibido:</label>
-        <form action="{{ url_for('adicionar_bloqueio') }}" method="POST" class="flex gap-2">
-            <input type="text" name="termo" placeholder="Ex: ofensivo, palavrão..." required
-                   class="form-control mb-0" style="margin-bottom: 0 !important; max-width: 300px;">
-            <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700 transition">
-                Bloquear
-            </button>
-        </form>
-        <p class="text-xs text-gray-500 mt-2">
-            * Clientes não poderão criar Nicks que contenham estas palavras.
-        </p>
-    </div>
-
-    <h4 class="font-bold text-gray-700 mb-3 border-b pb-2">
-        Termos Cadastrados ({{ lista_bloqueio|length }})
-    </h4>
-    
-    {% if lista_bloqueio %}
-        <div class="flex flex-wrap gap-2">
-            {% for palavra in lista_bloqueio %}
-                <form action="{{ url_for('remover_bloqueio') }}" method="POST" class="inline-block" 
-                      onsubmit="return confirm('Liberar o termo {{ palavra }}?');">
+        <!-- Bloqueios (Apenas Admin) -->
+        {% if nivel >= 3 %}
+        <div id="view-bloqueio" class="{% if active_view != 'bloqueio' %}hidden{% endif %}">
+            <h3 class="text-xl font-semibold mb-4 text-red-700 flex items-center gap-2">🚫 Nicks Proibidos</h3>
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 shadow-sm">
+                <form action="{{ url_for('adicionar_bloqueio') }}" method="POST" class="flex gap-2">
+                    <input type="text" name="termo" placeholder="Ex: ofensivo..." required class="form-control mb-0" style="max-width: 300px;">
+                    <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700">Bloquear</button>
+                </form>
+            </div>
+            <div class="flex flex-wrap gap-2">
+                {% for palavra in lista_bloqueio %}
+                <form action="{{ url_for('remover_bloqueio') }}" method="POST" onsubmit="return confirm('Liberar {{ palavra }}?');">
                     <input type="hidden" name="termo" value="{{ palavra }}">
-                    <button type="submit" 
-                            class="group flex items-center gap-2 px-3 py-1 bg-white border border-gray-300 rounded-full text-gray-700 hover:bg-red-50 hover:border-red-300 transition shadow-sm"
-                            title="Clique para remover este bloqueio">
-                        <span class="font-medium">{{ palavra }}</span>
-                        <span class="text-red-300 group-hover:text-red-600 font-bold text-xs ml-1">✕</span>
+                    <button type="submit" class="px-3 py-1 bg-white border rounded-full hover:bg-red-50 transition shadow-sm">
+                        <span class="font-medium">{{ palavra }}</span> <span class="text-red-300 ml-1">✕</span>
                     </button>
                 </form>
-            {% endfor %}
+                {% endfor %}
+            </div>
         </div>
-    {% else %}
-        <div class="p-10 text-center bg-gray-50 rounded-lg border border-dashed border-gray-300">
-            <p class="text-gray-500 text-lg">Nenhum termo proibido cadastrado ainda.</p>
-        </div>
-    {% endif %}
-</div>
-
-
-
+        {% endif %}
     </div>
     
+    <!-- Modais -->
     <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
             <h3 class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
-            <p class="mb-4">Tem a certeza que deseja excluir este cliente? Esta ação é irreversível.</p>
-            <p class="mb-4"><strong>ID:</strong> <span id="modal-delete-id" class="font-bold">...</span></p>
-            <p class="mb-4"><strong>Nick:</strong> <span id="modal-delete-nick" class="font-bold">...</span></p>
+            <p class="mb-4 text-sm text-gray-600">Deseja realmente excluir <strong id="modal-delete-nick">...</strong> (ID: <span id="modal-delete-id"></span>)?</p>
             <div class="flex justify-end space-x-2 mt-6">
                 <button type="button" class="modal-btn btn-cancel" onclick="closeDeleteModal()">Cancelar</button>
                 <button type="button" id="modal-btn-confirm-delete" class="modal-btn btn-danger">Confirmar Exclusão</button>
@@ -507,21 +379,16 @@
     <div id="recarga-modal" class="modal-overlay" onclick="closeRecargaModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
             <h3 class="text-xl font-bold mb-2 text-green-700">💰 Adicionar Crédito</h3>
-            <p class="text-sm text-gray-600 mb-4">Adicionar saldo para: <strong id="modal-recarga-nick" class="text-lg text-black">...</strong></p>
-            
+            <p class="text-sm text-gray-600 mb-4">Adicionar saldo para: <strong id="modal-recarga-nick">...</strong></p>
             <form method="POST" action="{{ url_for('adicionar_credito_cliente') }}">
                 <input type="hidden" name="id_cliente" id="modal-recarga-id">
-                
-                <div class="mb-4 text-left">
-                    <label class="block text-gray-700 font-bold mb-1">Valor da Recarga (R$):</label>
-                    <input type="number" name="valor_recarga" step="0.01" min="0.01" required 
-                           class="w-full p-3 border border-green-300 rounded text-xl font-bold text-center text-green-800 focus:ring-2 focus:ring-green-500 outline-none"
-                           placeholder="0,00">
+                <div class="mb-4">
+                    <label class="block text-gray-700 font-bold mb-1">Valor (R$):</label>
+                    <input type="number" name="valor_recarga" step="0.01" min="0.01" required class="w-full p-3 border border-green-300 rounded text-xl font-bold text-center text-green-800 outline-none">
                 </div>
-
-                <div class="flex justify-end space-x-2 mt-4">
+                <div class="flex justify-end space-x-2">
                     <button type="button" class="modal-btn btn-cancel" onclick="closeRecargaModal()">Cancelar</button>
-                    <button type="submit" class="modal-btn bg-green-600 text-white hover:bg-green-700 shadow">✅ Confirmar Recarga</button>
+                    <button type="submit" class="modal-btn bg-green-600 text-white hover:bg-green-700">✅ Confirmar</button>
                 </div>
             </form>
         </div>
@@ -530,34 +397,9 @@
     <script>
         let searchTimeout = null;
 
-        function handleEnterKey(event) {
-            if (event.key === 'Enter') {
-                event.preventDefault(); 
-                const form = event.target.form;
-                if (!form) return true;
-
-                const elements = Array.from(form.elements);
-                const index = elements.indexOf(event.target);
-                
-                for (let i = index + 1; i < elements.length; i++) {
-                    const element = elements[i];
-                    if (element.type !== 'hidden' && !element.disabled && 
-                        !element.classList.contains('password-toggle') && element.name) {
-                        element.focus();
-                        return false; 
-                    }
-                }
-                const submitButton = form.querySelector('button[type="submit"]');
-                if (submitButton) submitButton.focus();
-                return false; 
-            }
-            return true; 
-        }
-
         function togglePasswordVisibility(fieldId) {
             const passwordInput = document.getElementById(fieldId);
             const toggleButton = passwordInput.previousElementSibling; 
-            
             if (passwordInput.type === 'password') {
                 passwordInput.type = 'text';
                 toggleButton.textContent = '🙈';
@@ -567,29 +409,20 @@
             }
         }
         
-        // Lógica de Busca Dinâmica
         function handleSearchInput(inputElement) {
             const termo = inputElement.value.trim();
             const resultsDiv = document.getElementById('search-results-list');
-            
             if (searchTimeout) clearTimeout(searchTimeout);
-
             if (termo.length < 2) {
                 resultsDiv.style.display = 'none';
-                resultsDiv.innerHTML = '';
                 return;
             }
-
-            searchTimeout = setTimeout(() => {
-                executarBusca(termo);
-            }, 400);
+            searchTimeout = setTimeout(() => { executarBusca(termo); }, 400);
         }
         
         function getSearchType() {
             const radios = document.getElementsByName('search_type');
-            for (let radio of radios) {
-                if (radio.checked) return radio.value;
-            }
+            for (let radio of radios) { if (radio.checked) return radio.value; }
             return 'nick'; 
         }
         
@@ -602,127 +435,52 @@
         async function executarBusca(termo) {
             const tipo = getSearchType();
             const resultsDiv = document.getElementById('search-results-list');
-            
             resultsDiv.style.display = 'block';
-            resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center">Buscando...</div>';
+            resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center text-xs">Buscando...</div>';
 
             try {
                 const response = await fetch(`/buscar_clientes?termo=${encodeURIComponent(termo)}&tipo=${tipo}`);
                 const data = await response.json();
-
                 resultsDiv.innerHTML = ''; 
-
                 if (data.clientes && data.clientes.length > 0) {
                     data.clientes.forEach(cli => {
                         const div = document.createElement('div');
                         div.className = 'search-result-item';
-                        div.innerHTML = `
-                            <div class="font-bold text-gray-800">${cli.nick || cli.nome}</div>
-                            <div class="text-sm  font-semibold text-gray-600">${cli.nome} |  ID: ${cli.id} |  ${cli.cidade}</div>
-                        `;
-                        // Ao clicar, redireciona para alterar
-                        div.onclick = () => selecionarClienteParaEdicao(cli);
+                        div.innerHTML = `<div class="font-bold text-gray-800">${cli.nick}</div><div class="text-[10px] text-gray-500">${cli.nome} | ID: ${cli.id}</div>`;
+                        div.onclick = () => { window.location.href = `{{ url_for('cadastro_cliente', view='alterar') }}&id_cliente=${cli.id}`; };
                         resultsDiv.appendChild(div);
                     });
                 } else {
-                    resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center">Nenhum cliente encontrado.</div>';
+                    resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center text-xs">Nenhum resultado.</div>';
                 }
-            } catch (err) {
-                console.error(err);
-                resultsDiv.innerHTML = '<div class="p-2 text-red-500 text-center">Erro na busca.</div>';
-            }
+            } catch (err) { resultsDiv.innerHTML = '<div class="p-2 text-red-500 text-center text-xs">Erro na busca.</div>'; }
         }
 
-        function selecionarClienteParaEdicao(cliente) {
-            const nextUrl = "{{ next_url }}";
-            const idEvento = "{{ id_evento_retorno }}";
-            let url = `{{ url_for('cadastro_cliente', view='alterar') }}&id_cliente=${cliente.id}`;
-            
-            if (nextUrl) url += `&next=${nextUrl}`;
-            if (idEvento) url += `&id_evento=${idEvento}`;
-            
-            window.location.href = url;
-        }
-
-        // Lógica da Modal de Exclusão
+        // Modais
         const deleteModal = document.getElementById('delete-modal');
         const modalDeleteId = document.getElementById('modal-delete-id');
         const modalDeleteNick = document.getElementById('modal-delete-nick');
         const btnConfirmDelete = document.getElementById('modal-btn-confirm-delete');
-        
         let formIdParaExcluir = null; 
 
         function openDeleteModal(id, nick, view) {
-            if (!deleteModal) return;
             formIdParaExcluir = `form-excluir-${view}-${id}`;
             modalDeleteId.textContent = id;
             modalDeleteNick.textContent = nick; 
             deleteModal.style.display = 'flex';
         }
+        function closeDeleteModal() { deleteModal.style.display = 'none'; }
+        if (btnConfirmDelete) { btnConfirmDelete.onclick = function() { if (formIdParaExcluir) document.getElementById(formIdParaExcluir).submit(); }; }
 
-        function closeDeleteModal() {
-            if (!deleteModal) return;
-            formIdParaExcluir = null;
-            deleteModal.style.display = 'none';
-        }
-
-        if (btnConfirmDelete) {
-            btnConfirmDelete.onclick = function() {
-                if (formIdParaExcluir) {
-                    const form = document.getElementById(formIdParaExcluir);
-                    if (form) {
-                        form.submit(); 
-                    } else {
-                        console.error('Formulário de exclusão não encontrado:', formIdParaExcluir);
-                    }
-                }
-                closeDeleteModal(); 
-            };
-        }
-
-    document.addEventListener('DOMContentLoaded', (event) => {
-        // Verifica se existe o parâmetro 'focus' na URL
-        const urlParams = new URLSearchParams(window.location.search);
-        const focusId = urlParams.get('focus');
-
-        if (focusId) {
-            const element = document.getElementById(focusId);
-            if (element) {
-                // Dá um pequeno delay para garantir que a aba/view esteja visível
-                setTimeout(() => {
-                    element.focus();
-                    // Opcional: Adiciona um efeito visual temporário (ex: borda vermelha piscando)
-                    element.classList.add('border-red-500', 'ring-2', 'ring-red-300');
-                    setTimeout(() => {
-                        element.classList.remove('border-red-500', 'ring-2', 'ring-red-300');
-                    }, 3000);
-                }, 100);
-            }
-        }
-    });
-
-       // --- FUNÇÕES DA MODAL DE RECARGA ---
         const recargaModal = document.getElementById('recarga-modal');
         const recargaNick = document.getElementById('modal-recarga-nick');
         const recargaId = document.getElementById('modal-recarga-id');
-
         function openRecargaModal(id, nick) {
-            if (!recargaModal) return;
             recargaId.value = id;
             recargaNick.textContent = nick;
             recargaModal.style.display = 'flex';
-            
-            // Foca no input de valor automaticamente
-            setTimeout(() => {
-                const inputVal = recargaModal.querySelector('input[name="valor_recarga"]');
-                if(inputVal) inputVal.focus();
-            }, 100);
         }
-
-        function closeRecargaModal() {
-            if (recargaModal) recargaModal.style.display = 'none';
-        }
-
+        function closeRecargaModal() { recargaModal.style.display = 'none'; }
     </script>
 </body>
 </html>
