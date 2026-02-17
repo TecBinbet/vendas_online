@@ -28,7 +28,7 @@
         .form-control { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px; }
         .required-label::after { content: ' *'; color: #EF4444; }
 
-        .btn-submit { padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: all 0.3s; color: white; border: none; }
+        .btn-submit { padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; color: white; border: none; }
         .btn-save { background-color: #059669; } 
         .btn-save:hover { background-color: #047857; }
 
@@ -40,15 +40,19 @@
         .action-link { text-decoration: none; font-weight: 600; margin-right: 10px; }
         .delete-link { color: #EF4444; }
         
+        /* Visibilidade controlada por Jinja */
         .view-content { display: none; }
         .view-content.active-view-show { display: block !important; }
 
         /* --- CSS DA MODAL DE EXCLUSÃO --- */
         .modal-overlay {
             position: fixed;
-            top: 0; left: 0; right: 0; bottom: 0;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
             background-color: rgba(0, 0, 0, 0.75);
-            display: none; 
+            display: none; /* Começa escondido */
             justify-content: center;
             align-items: center;
             z-index: 1000;
@@ -70,8 +74,11 @@
         }
         .btn-danger { background-color: #EF4444; color: white; }
         .btn-danger:hover { background-color: #DC2626; }
+        
+        /* Botão danger crítico (quando há vendas) */
         .btn-critical { background-color: #991B1B; color: white; border: 2px solid #7F1D1D; }
         .btn-critical:hover { background-color: #7F1D1D; }
+
         .btn-cancel { background-color: #D1D5DB; color: #374151; }
         .btn-cancel:hover { background-color: #B2B8C2; }
         
@@ -85,8 +92,7 @@
             margin-bottom: 10px;
             font-size: 0.95rem;
         }
-
-        /* --- ESTILO DO LOADING --- */
+/* --- ESTILO DO LOADING (Igual ao de Colaboradores) --- */
         #loading-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -101,9 +107,10 @@
         .hidden { display: none !important; }
         
         .spinner {
-            width: 60px; height: 60px;
+            width: 60px;
+            height: 60px;
             border: 6px solid #E5E7EB;
-            border-top-color: #059669;
+            border-top-color: #059669; /* Verde */
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -118,13 +125,19 @@
 
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
     </style>
 </head>
 <body>
 
    <div id="loading-overlay" class="hidden">
         <div class="spinner"></div>
-        <p class="loading-text" id="loading-message">Processando, aguarde...</p>
+        <p class="loading-text">Processando, aguarde...</p>
+        
+        <button type="button" onclick="document.getElementById('loading-overlay').classList.add('hidden')" 
+                class="mt-6 text-xs text-gray-500 underline hover:text-red-600 cursor-pointer transition-colors">
+            Travou? Clique aqui para fechar
+        </button>
     </div>
 
     <div class="container">
@@ -165,10 +178,8 @@
                 {% if active_view == 'alterar' %}Alteração de Evento (ID: {{ evento.get('id_evento', 'N/A') }}){% else %}Cadastro de Novo Evento{% endif %}
             </h3>
 
-            <!-- CORREÇÃO: onsubmit corrigido para chamar a nova lógica -->
-            <form method="POST" action="{{ url_for('gravar_evento') }}" 
+            <form method="POST" action="{{ url_for('gravar_evento') }}" onsubmit="ativarLoading() 
                   id="form-cadastro" class="space-y-4" 
-                  onsubmit="return tratarSubmissao(this)"
                   onkeydown="return preventDefaultOnEnter(event)">
                 
                 {% if active_view == 'alterar' %}
@@ -186,13 +197,18 @@
                     <div class="form-group">
                         <label for="data_evento" class="required-label">Data do Evento:</label>
                         <input type="date" id="data_evento" name="data_evento" required class="form-control" 
-                               value="{{ evento.get('data_evento', '') }}">
+                               value="{{ evento.get('data_evento', '') }}"
+                               {% if active_view == 'alterar' and evento.get('data_evento') %}
+                                   value="{{ evento.get('data_evento') }}"
+                               {% endif %}
+                               >
                     </div>
 
                     <div class="form-group">
                         <label for="hora_evento" class="required-label">Hora do Evento (hh:mm):</label>
                        <input type="time" id="hora_evento" name="hora_evento" required class="form-control"
                               value="{{ evento.get('hora_evento', '20:00') }}">
+    
                        <span id="hora-availability-msg" class="text-xs font-bold mt-1 block h-4"></span>
                     </div>
 
@@ -268,7 +284,7 @@
                     </div>
                     <div class="form-group">
                         <label for="minimo_de_venda">Mínimo de Venda Necessário (Qtde):</label>
-                        <input type="text" id="minimo_de_venda" name="minimo_de_venda" disabled class="form-control bg-green-200 font-bold"
+                        <input type="text" id="minimo_de_venda" name="minimo_de_venda" disabled class="form-control bg-green-200  font-bold"
                                value="{{ evento.get('minimo_de_venda', 0) }}">
                     </div>
                     <div class="form-group">
@@ -411,7 +427,6 @@
         
     </div>
 
-    <!-- Modais -->
     <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
             <h3 id="modal-title" class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
@@ -440,66 +455,27 @@
             </div>
         </div>
     </div>
-
     <script>
-        /**
-         * NOVA FUNÇÃO: trata a submissão do formulário, ativa loading e desativa botões.
-         */
-        function tratarSubmissao(form) {
-            // 1. Ativa o overlay de carregamento
+        
+        function ativarLoading() {
             const overlay = document.getElementById('loading-overlay');
-            if (overlay) overlay.classList.remove('hidden');
-
-            // 2. Localiza o botão que disparou a ação para feedback visual
-            const btnSubmit = form.querySelector('button[type="submit"]');
-            if (btnSubmit) {
-                btnSubmit.innerText = "A processar...";
+            if (overlay) {
+                overlay.classList.remove('hidden');
+                setTimeout(() => {
+                    overlay.classList.add('hidden');
+                }, 15000);
             }
-
-            // 3. Desativa TODOS os botões de ação para impedir múltiplos cliques
-            const allButtons = document.querySelectorAll('button, .nav-link');
-            allButtons.forEach(btn => {
-                btn.disabled = true;
-                btn.style.pointerEvents = 'none'; // Bloqueia cliques em links também
-                btn.classList.add('opacity-50', 'cursor-not-allowed');
-            });
-
-            // 4. Se houver um timeout de segurança (opcional)
-            setTimeout(() => {
-                if (overlay) overlay.classList.add('hidden');
-                allButtons.forEach(btn => {
-                    btn.disabled = false;
-                    btn.style.pointerEvents = 'auto';
-                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                });
-            }, 15000);
-
-            return true; // Continua com o envio do formulário
-        }
-
-        /**
-         * NOVA FUNÇÃO: Especifica para o botão de exclusão da modal
-         */
-        function ativarLoadingModal(btn) {
-            const overlay = document.getElementById('loading-overlay');
-            if (overlay) overlay.classList.remove('hidden');
-            
-            btn.innerText = "Excluindo...";
-            btn.disabled = true;
-            btn.classList.add('opacity-50', 'cursor-not-allowed');
-            
-            const cancelBtn = document.querySelector('.btn-cancel');
-            if (cancelBtn) cancelBtn.classList.add('hidden');
-            
+            // Retorna true para permitir que o formulário continue o envio
             return true;
         }
 
-        window.addEventListener('pageshow', function(event) {
+       window.addEventListener('pageshow', function(event) {
             const overlay = document.getElementById('loading-overlay');
             if (overlay) {
                 overlay.classList.add('hidden');
             }
         });
+
 
         document.addEventListener('DOMContentLoaded', (event) => {
             calculatePremioTotal();
@@ -521,6 +497,7 @@
             const faltaum = parseFloat(document.getElementById('premio_faltaum')?.value) || 0;
             const bingo = parseFloat(document.getElementById('premio_bingo')?.value) || 0;
             const segundobingo = parseFloat(document.getElementById('premio_segundobingo')?.value) || 0;
+            const acumulado = parseFloat(document.getElementById('premio_acumulado')?.value) || 0; 
             const valor_unidade = parseFloat(document.getElementById('valor_de_venda')?.value) || 0;
             const unidade_venda = parseInt(document.getElementById('unidade_de_venda')?.value) || 1;
             const totalLinha = linhas_qtde * linha_valor;
@@ -553,13 +530,14 @@
             }
         }
         
-        // --- LÓGICA DA MODAL DE EXCLUSÃO ---
+        // --- LÓGICA DA MODAL DE EXCLUSÃO (ATUALIZADA) ---
         
         const deleteModal = document.getElementById('delete-modal');
         const modalDeleteId = document.getElementById('modal-delete-id');
         const modalDeleteDescricao = document.getElementById('modal-delete-descricao');
         const btnConfirmDelete = document.getElementById('modal-btn-confirm-delete');
         
+        // Novos elementos da modal crítica
         const modalNormalMsg = document.getElementById('modal-normal-msg');
         const modalCriticalMsg = document.getElementById('modal-critical-msg');
         const modalQtdVendas = document.getElementById('modal-qtd-vendas');
@@ -567,6 +545,13 @@
         
         let formIdParaExcluir = null; 
 
+        /**
+         * Abre a modal e configura avisos baseados na quantidade de vendas.
+         * @param {string} id - O ID do evento
+         * @param {string} descricao - A descrição do evento
+         * @param {string} view - 'listar' ou 'consulta'
+         * @param {int} qtdVendas - Quantidade de vendas existentes (0 se nulo)
+         */
         function openDeleteModal(id, descricao, view, qtdVendas) {
             if (!deleteModal) return;
 
@@ -577,16 +562,21 @@
             const quantidade = parseInt(qtdVendas) || 0;
 
             if (quantidade > 0) {
+                // MODO CRÍTICO: TEM VENDAS
                 modalNormalMsg.style.display = 'none';
                 modalCriticalMsg.style.display = 'block';
                 modalQtdVendas.textContent = quantidade;
+                
+                // Estilo visual de perigo extremo
                 modalTitle.textContent = "⚠️ EXCLUSÃO CRÍTICA";
                 btnConfirmDelete.textContent = "CONFIRMAR E APAGAR VENDAS";
                 btnConfirmDelete.classList.remove('btn-danger');
                 btnConfirmDelete.classList.add('btn-critical');
             } else {
+                // MODO NORMAL: SEM VENDAS
                 modalNormalMsg.style.display = 'block';
                 modalCriticalMsg.style.display = 'none';
+                
                 modalTitle.textContent = "Confirmar Exclusão";
                 btnConfirmDelete.textContent = "Confirmar Exclusão";
                 btnConfirmDelete.classList.remove('btn-critical');
@@ -607,39 +597,53 @@
                 if (formIdParaExcluir) {
                     const form = document.getElementById(formIdParaExcluir);
                     if (form) {
-                        ativarLoadingModal(btnConfirmDelete);
+                        ativarLoading()
                         form.submit(); 
+                    } else {
+                        console.error('Formulário de exclusão não encontrado:', formIdParaExcluir);
                     }
                 }
+                closeDeleteModal(); 
             };
         }
         
+        // Recebe os limites (que agora vêm com padrão 72000 e 90000 do Python)
         const cartelaLimits = {{ cartela_limits | tojson }};
 
         function updateNumeroMaximo() {
             const tipoSelect = document.getElementById('tipo_de_cartela');
             const maxInput = document.getElementById('numero_maximo');
+            
+            // Novos campos para controlar
             const faltaUmInput = document.getElementById('premio_faltaum');
             const qtdLinhasInput = document.getElementById('quantidade_de_linhas');
             
             if (tipoSelect) {
-                const tipo = tipoSelect.value.toString(); 
+                const tipo = tipoSelect.value.toString(); // '15' ou '25'
+                
+                // 1. Atualiza Número Máximo
                 if (maxInput && cartelaLimits[tipo]) {
                     maxInput.value = cartelaLimits[tipo];
                 }
 
+                // 2. Aplica Regras de Bloqueio (25 Números)
                 if (tipo === '25') {
+                    // Regra: Falta Um zerado e bloqueado
                     if (faltaUmInput) {
                         faltaUmInput.value = "0.00";
                         faltaUmInput.disabled = true;
-                        faltaUmInput.classList.add('bg-gray-200', 'text-gray-500'); 
+                        faltaUmInput.classList.add('bg-gray-200', 'text-gray-500'); // Visual 'apagado'
                     }
+                    
+                    // Regra: Linhas forçado em 1 e bloqueado
                     if (qtdLinhasInput) {
                         qtdLinhasInput.value = "1";
                         qtdLinhasInput.disabled = true;
                         qtdLinhasInput.classList.add('bg-gray-200', 'text-gray-500');
                     }
-                } else {
+                } 
+                // 3. Libera campos (15 Números)
+                else {
                     if (faltaUmInput) {
                         faltaUmInput.disabled = false;
                         faltaUmInput.classList.remove('bg-gray-200', 'text-gray-500');
@@ -649,10 +653,13 @@
                         qtdLinhasInput.classList.remove('bg-gray-200', 'text-gray-500');
                     }
                 }
+                
+                // Recalcula o Prêmio Total (pois zeramos valores acima)
                 calculatePremioTotal();
             }
         }
 
+    // Variável para armazenar o timeout e evitar chamadas excessivas
     let checkTimeout = null;
 
     function checkAvailability() {
@@ -661,16 +668,22 @@
         const msgSpan = document.getElementById('hora-availability-msg');
         const btnSubmit = document.querySelector('.btn-submit');
         
+        // Pega o ID da edição se existir (campo hidden)
         const idEdicaoInput = document.querySelector('input[name="id_evento_edicao"]');
         const excludeId = idEdicaoInput ? idEdicaoInput.value : '';
 
+        // Limpa mensagem anterior
         msgSpan.textContent = '';
-        msgSpan.className = 'text-xs font-bold mt-1 block h-4'; 
+        msgSpan.className = 'text-xs font-bold mt-1 block h-4'; // Reseta classes
 
-        if (!dataInput.value || !horaInput.value) return;
+        if (!dataInput.value || !horaInput.value) {
+            return; // Só checa se ambos estiverem preenchidos
+        }
 
+        // Debounce: Aguarda 500ms após o usuário parar de digitar
         clearTimeout(checkTimeout);
         checkTimeout = setTimeout(() => {
+            
             msgSpan.textContent = 'Verificando disponibilidade...';
             msgSpan.classList.add('text-blue-500');
 
@@ -680,34 +693,53 @@
                 .then(response => response.json())
                 .then(data => {
                     if (data.exists) {
+                        // CONFLITO ENCONTRADO
                         msgSpan.textContent = `⛔ ${data.msg}`;
                         msgSpan.classList.remove('text-blue-500');
                         msgSpan.classList.add('text-red-600');
+                        
+                        // Trava o botão de salvar
                         if(btnSubmit) {
                             btnSubmit.disabled = true;
                             btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+                            btnSubmit.title = "Resolva o conflito de horário para salvar";
                         }
                     } else {
+                        // DISPONÍVEL
                         msgSpan.textContent = '✅ Horário Disponível';
                         msgSpan.classList.remove('text-blue-500', 'text-red-600');
                         msgSpan.classList.add('text-green-600');
+
+                        // Libera o botão
                         if(btnSubmit) {
                             btnSubmit.disabled = false;
                             btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+                            btnSubmit.title = "";
                         }
-                        setTimeout(() => { if(msgSpan.textContent.includes('Disponível')) msgSpan.textContent = ''; }, 3000);
+                        
+                        // Limpa a mensagem de "disponível" após 3 segundos para limpar o visual
+                        setTimeout(() => {
+                            if(msgSpan.textContent.includes('Disponível')) msgSpan.textContent = '';
+                        }, 3000);
                     }
                 })
-                .catch(err => { console.error('Erro:', err); msgSpan.textContent = ''; });
-        }, 500); 
+                .catch(err => {
+                    console.error('Erro ao verificar disponibilidade:', err);
+                    msgSpan.textContent = '';
+                });
+
+        }, 500); // Delay de meio segundo
     }
 
+    // Adiciona os ouvintes de evento assim que a página carrega
     document.addEventListener('DOMContentLoaded', () => {
         const dataInput = document.getElementById('data_evento');
         const horaInput = document.getElementById('hora_evento');
+
         if(dataInput) dataInput.addEventListener('change', checkAvailability);
-        if(horaInput) horaInput.addEventListener('input', checkAvailability);
+        if(horaInput) horaInput.addEventListener('input', checkAvailability); // 'input' pega digitação em tempo real
     });
+
 
     </script>
 </body>
