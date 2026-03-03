@@ -25,7 +25,7 @@
         .container { max-width: 900px; margin: 20px auto; padding: 30px; background-color: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
         .nav-link { padding: 10px 20px; border-radius: 6px; font-weight: bold; transition: background-color 0.3s; text-decoration: none; display: inline-block; text-align: center; }
         .form-group label { font-weight: 600; display: block; margin-bottom: 5px; color: #374151; }
-        .form-control { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; margin-bottom: 10px; }
         .required-label::after { content: ' *'; color: #EF4444; }
 
         .btn-submit { padding: 10px 20px; border-radius: 6px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; color: white; border: none; }
@@ -116,16 +116,57 @@
         .search-type-selector label { font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px; }
         
         .client-search-group { position: relative; }
+
+        /* --- CSS DO SPINNER --- */
+        .spinner-overlay {
+            position: fixed;
+            inset: 0; /* top: 0, right: 0, bottom: 0, left: 0 */
+            background-color: rgba(17, 24, 39, 0.75); /* Fundo escuro semi-transparente */
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .spinner-visible {
+            display: flex;
+        }
+
+        .spinner-animation {
+            animation: spin 1s linear infinite;
+            border-radius: 9999px; /* Círculo perfeito */
+            height: 5rem; /* Tamanho ajustado */
+            width: 5rem;
+            
+            /* Estilo da borda */
+            border-width: 4px;
+            border-style: solid;
+            border-color: rgba(255, 255, 255, 0.1); /* Fundo quase transparente */
+            border-top-color: #3B82F6; /* Cor azul apenas no topo */
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
+
+    <!-- Estrutura do Spinner -->
+    <div id="loading-spinner" class="spinner-overlay">
+        <div class="flex flex-col items-center">
+            <div class="spinner-animation"></div>
+            <p id="spinner-text" class="text-white mt-4 font-bold animate-pulse uppercase tracking-widest text-sm">Processando...</p>
+        </div>
+    </div>
 
     <div class="container">
         <div class="flex justify-center -mt-3 mb-1">
             <a href="{{ url_for(next_url | default('menu_operacoes', true), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
         </div>
 
-         <h2 class="text-xl mb-1 text-blue-800 text-center font-bold">Gestão de Clientes</h2>
+         <h2 class="text-xl mb-1 text-blue-800 text-center font-bold uppercase tracking-tight">Gestão de Clientes</h2>
 
         {% if error %}
             <div class="alert-danger">{{ error }}</div>
@@ -158,8 +199,9 @@
             <input type="hidden" id="next_url_val" value="{{ next_url | default('menu_operacoes') }}">
         </div>
 
-        <div class="mb-1 -mt-2 p-1 bg-info text-white border border-blue-600 rounded-lg">
-            Total de Clientes Cadastrados: <strong id="total-clientes">{{ total_clientes | default(0) }}</strong>.
+        <div class="mb-1 -mt-2 p-1 bg-info text-white border border-blue-600 rounded-lg flex justify-between px-3">
+            <span>Controle Ativo</span>
+            <span>Total: <strong id="total-clientes">{{ total_clientes | default(0) }}</strong></span>
         </div>
         
         {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
@@ -172,7 +214,7 @@
             {% set config_padrao = {'nome_cliente': True, 'nick': True, 'telefone': True, 'cpf': False, 'cidade': True, 'chave_pix': True, 'senha': True} %}
             {% set campos = g.parametros_globais.tipo_cadastro_cliente if (g.parametros_globais is defined and g.parametros_globais.tipo_cadastro_cliente is defined) else config_padrao %}
            
-           <form method="POST" action="{{ url_for('gravar_cliente') }}" id="form-cadastro" class="space-y-4">
+           <form method="POST" action="{{ url_for('gravar_cliente') }}" id="form-cadastro" class="space-y-4" onsubmit="return ativarLoading(this, 'Gravando dados do cliente...')">
                 {% if active_view == 'alterar' %}
                     <input type="hidden" name="id_cliente" value="{{ cliente.get('id_cliente', '') }}">
                 {% endif %}
@@ -181,7 +223,7 @@
                     <input type="hidden" name="id_evento_retorno" value="{{ id_evento_retorno }}">
                 {% endif %}
 
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-1">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
                     <div class="form-group">
                         <label>ID Cliente:</label>
                         <input type="text" value="{% if active_view == 'alterar' %}CLI{{ cliente.get('id_cliente', 'N/A') }}{% else %}Gerado Automaticamente{% endif %}" disabled class="form-control bg-gray-100">
@@ -204,7 +246,12 @@
                     {% if "telefone" in campos %}
                     <div class="form-group">
                         <label for="telefone" class="{% if campos.get('telefone') %}required-label{% endif %}">WhatsApp (Telefone):</label>
-                        <input type="tel" id="telefone" name="telefone" class="form-control" value="{{ cliente.get('telefone', '') }}" {% if campos.get('telefone') %}required{% endif %}>
+                        <input type="tel" id="telefone_input" name="telefone" class="form-control" 
+                               value="{{ cliente.get('telefone', '') }}" 
+                               {% if campos.get('telefone') %}required{% endif %}
+                               onblur="checarDuplicidadeTelefone(this)">
+                        <!-- Span para feedback visual do nome registrado -->
+                        <span id="tel-feedback" class="block h-4 leading-tight"></span>
                     </div>
                     {% endif %}
                     
@@ -235,19 +282,19 @@
                     {% endif %}
                 </div>
                 
-                <div class="mt-2 flex justify-end space-x-2">
-                    <button type="submit" class="btn-submit btn-save">
-                        {% if active_view == 'alterar' %}✓ Salvar Alterações{% else %}💾 Salvar Cliente{% endif %}
-                    </button>
+                <div class="mt-4 flex justify-end space-x-2 border-t pt-4">
                     {% if active_view == 'alterar' %}
                         <a href="{{ url_for('cadastro_cliente', view='listar', next=next_url) }}" class="nav-link bg-gray-400 text-white hover:bg-gray-500">Cancelar</a>
                     {% endif %}
+                    <button type="submit" id="btn-submit-main" class="btn-submit btn-save px-10 shadow-lg">
+                        {% if active_view == 'alterar' %}✓ Salvar Alterações{% else %}💾 Salvar Cliente{% endif %}
+                    </button>
                 </div>
             </form>
         </div>
 
         <div id="view-consulta" class="{% if active_view != 'consulta' %}hidden{% endif %}">
-            <h3 class="text-xl font-semibold text-accent">Consulta de Cliente</h3>
+            <h3 class="text-xl font-semibold text-accent mb-2">🔎 Localizar Cliente</h3>
             
             <form method="GET" action="{{ url_for('cadastro_cliente') }}" class="mb-4 space-y-2" id="form-consulta">
                 <input type="hidden" name="view" value="consulta">
@@ -261,79 +308,107 @@
 
                 <div class="flex space-x-2 client-search-group">
                     <input type="text" id="consulta_termo" name="query" value="{{ query | default('') }}" placeholder="Digite o termo..." class="form-control mb-0" autocomplete="off" onkeyup="handleSearchInput(this)">
-                    <button type="submit" class="nav-link bg-accent text-white hover:opacity-90 min-w-[100px]">Buscar</button>
+                    <button type="submit" class="nav-link bg-accent text-white hover:opacity-90 min-w-[100px] shadow">Buscar</button>
                     <div id="search-results-list"></div>
                 </div>
             </form>
             
-            <div class="p-1 border rounded-lg bg-gray-200 -mt-2">
+            <div class="space-y-2">
                 {% if active_view == 'consulta' and query and clientes_lista|length > 0 %}
                     {% for cliente in clientes_lista %}
-                        <div class="border-b pb-3 mb-1 last:border-b-0 last:mb-0 bg-gray-300 p-3 rounded shadow-sm">
+                        <div class="bg-white border-2 border-gray-100 p-1 rounded-xl shadow-sm hover:border-accent transition-all">
                             <div class="flex justify-between items-start">
                                 <div>
-                                    <p><strong>{{ cliente.id_cliente }}</strong> | <span class="text-primary font-bold">{{ cliente.nick }}</span></p>
-                                    <p class="text-[12px] text-gray-500">{{ cliente.nome_cliente }} | {{ cliente.cidade | default('N/A') }}</p>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-bold">CLI: {{ cliente.id_cliente }}</span>
+                                        <span class="text-lg font-black text-gray-800 uppercase tracking-tight">{{ cliente.nick }}</span>
+                                    </div>
+                                    <p class="text-xs text-gray-700 font-medium">{{ cliente.nome_cliente }} | {{ cliente.cidade | default('N/A') }}</p>
                                 </div>
                                 <div class="text-right">
-                                    <p class="text-xs text-gray-500 uppercase font-bold">Saldo</p>
-                                    <span class="text-lg font-black {{ 'text-red-600' if cliente.saldo_float < 0 else 'text-blue-600' }}">R$ {{ cliente.saldo_float | format_moeda }}</span>
+                                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</p>
+                                    <span class="text-xl font-black {{ 'text-red-600' if cliente.saldo_float < 0 else 'text-blue-600' }}">R$ {{ cliente.saldo_float | format_moeda }}</span>
                                 </div>
                             </div>
-                            <div class="mt-1 flex flex-wrap gap-2 items-center">
-                                <button type="button" onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}')" class="px-2 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm shadow-sm">💰 + Crédito</button>
-                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="px-2 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold">✏️ Alterar</a>
+                            <div class="mt-4 flex flex-wrap gap-2 items-center">
+                                <button type="button" onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}')" class="px-4 py-3 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm shadow">💰 + Crédito</button>
+                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="px-4 py-3 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold">✏️ Alterar</a>
                                 
-                                <!-- TRAVA DE SEGURANÇA: EXCLUIR SÓ PARA NÍVEL 3 -->
                                 {% if nivel >= 3 %}
-                                <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" id="form-excluir-consulta-{{ cliente.id_cliente }}" class="inline-block">
-                                    <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta")' class="px-2 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">🗑️ Excluir</button>
+                                <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" id="form-excluir-consulta-{{ cliente.id_cliente }}" class="inline-block" onsubmit="return ativarLoading(this, 'Excluindo cliente...')">
+                                    <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta")' class="px-4 py-3 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">🗑️ Excluir</button>
                                 </form>
                                 {% endif %}
                             </div>
                         </div>
                     {% endfor %}
                 {% elif active_view == 'consulta' and query %}
-                    <p class="text-center text-red-500 font-bold">❌ Nenhum cliente encontrado.</p>
+                    <p class="text-center text-red-500 font-bold bg-red-50 p-4 rounded-xl">❌ Nenhum cliente encontrado.</p>
                 {% else %}
-                    <p class="text-gray-500 text-center py-4 text-sm">Realize uma busca para visualizar os dados.</p>
+                    <p class="text-gray-500 text-center py-10 bg-gray-50 rounded-xl border border-dashed border-gray-200 italic">Realize uma busca para visualizar os dados.</p>
                 {% endif %}
             </div>
         </div>
 
         <div id="view-listar" class="{% if active_view != 'listar' %}hidden{% endif %}">
-            <h3 class="text-xl font-semibold mb-2 text-gray-700">Lista Geral (Ordenada por Nick)</h3>
-            <div class="overflow-x-auto shadow-md rounded-lg">
-                <table class="min-w-full bg-white border border-gray-200">
+            
+            <!-- BLOCO DE MANUTENÇÃO (Nível 3) -->
+            {% if nivel >= 8 %}
+            <div class="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-xl flex flex-col md:flex-row justify-between items-center gap-4 shadow-sm">
+                <div class="flex items-center gap-4">
+                    <div class="bg-amber-100 p-3 rounded-xl text-2xl">🛠️</div>
+                    <div>
+                        <h4 class="text-amber-800 font-black text-sm uppercase tracking-wider">Manutenção de Segurança</h4>
+                        <p class="text-xs text-amber-600 font-medium italic">Corrigir clientes antigos que não possuem o campo de senha definida.</p>
+                    </div>
+                </div>
+                <a href="{{ url_for('corrigir_senhas_faltantes') }}" 
+                   onclick="return confirm('Deseja aplicar a senha padrão (Senha) em todos os registros que estão sem senha?')"
+                   class="w-full md:w-auto bg-amber-600 hover:bg-amber-700 text-white text-xs font-black py-3 px-6 rounded-xl transition-all shadow-md active:scale-95 text-center">
+                    EXECUTAR CORREÇÃO
+                </a>
+            </div>
+            {% endif %}
+
+            <h3 class="text-xl font-bold mb-4 text-gray-700 uppercase tracking-widest flex items-center gap-2">
+                <span class="bg-gray-200 w-2 h-6 rounded-full inline-block"></span> Lista Geral
+            </h3>
+            
+            <div class="overflow-x-auto border border-gray-100 rounded-2xl shadow-sm">
+                <table class="min-w-full bg-white">
                     <thead>
-                        <tr class="list-header text-xs md:text-sm uppercase tracking-wider">
-                            <th class="py-3 px-4 border-b text-left">ID</th>
-                            <th class="py-3 px-4 border-b text-left">Nick (Nome)</th>
-                            <th class="py-3 px-4 border-b text-left">Cidade</th>
-                            <th class="py-3 px-4 border-b text-left">Ações</th>
+                        <tr class="list-header bg-gray-50 text-[11px] font-black text-gray-400 uppercase tracking-widest text-left">
+                            <th class="py-4 px-6 border-b">ID</th>
+                            <th class="py-4 px-6 border-b">Nick / Nome</th>
+                            <th class="py-4 px-6 border-b">Cidade</th>
+                            <th class="py-4 px-6 border-b text-right">Ações</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody class="text-sm">
                         {% if active_view == 'listar' and clientes_lista %}
                             {% for cliente in clientes_lista %}
-                            <tr class="list-row hover:bg-green-100 transition duration-150">
-                                <td class="py-3 px-4 border-b text-sm font-mono">{{ cliente.id_cliente }}</td>
-                                <td class="py-3 px-4 border-b text-sm font-bold">{{ cliente.nick }} <span class="text-xs font-normal text-gray-500">({{ cliente.nome_cliente }})</span></td>
-                                <td class="py-3 px-4 border-b text-sm">{{ cliente.cidade }}</td>
-                                <td class="py-3 px-4 border-b text-sm">
-                                    <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
-                                    
-                                    <!-- TRAVA DE SEGURANÇA: EXCLUIR SÓ PARA NÍVEL 3 -->
-                                    {% if nivel >= 3 %}
-                                    <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" id="form-excluir-listar-{{ cliente.id_cliente }}" class="inline-block">
-                                        <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "listar")' class="action-link delete-link hover:text-red-600">Excluir</button>
-                                    </form>
-                                    {% endif %}
+                            <tr class="list-row hover:bg-green-50/50 transition duration-150">
+                                <td class="py-4 px-6 border-b font-mono text-xs text-gray-400">CLI{{ cliente.id_cliente }}</td>
+                                <td class="py-4 px-6 border-b">
+                                    <div class="font-bold text-gray-800 uppercase tracking-tighter">{{ cliente.nick }}</div>
+                                    <div class="text-[10px] text-gray-400">{{ cliente.nome_cliente }}</div>
+                                </td>
+                                <td class="py-4 px-6 border-b text-gray-500 font-medium">{{ cliente.cidade | default('—') }}</td>
+                                <td class="py-4 px-6 border-b text-right">
+                                    <div class="flex justify-end gap-3">
+                                        <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="text-blue-500 font-bold hover:underline">Editar</a>
+                                        
+                                        {% if nivel >= 3 %}
+                                        <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" id="form-excluir-listar-{{ cliente.id_cliente }}" class="inline-block" onsubmit="return ativarLoading(this, 'Excluindo cliente...')">
+                                            <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "listar")' class="text-red-500 font-bold hover:underline">Excluir</button>
+                                        </form>
+                                        {% endif %}
+                                    </div>
                                 </td>
                             </tr>
                             {% endfor %}
                         {% else %}
-                            <tr><td colspan="4" class="py-8 text-center text-gray-500 font-bold">Nenhum cliente cadastrado.</td></tr>
+                            <tr><td colspan="4" class="py-10 text-center text-gray-400 font-bold italic">Nenhum cliente cadastrado.</td></tr>
                         {% endif %}
                     </tbody>
                 </table>
@@ -343,19 +418,20 @@
         <!-- Bloqueios (Apenas Admin) -->
         {% if nivel >= 3 %}
         <div id="view-bloqueio" class="{% if active_view != 'bloqueio' %}hidden{% endif %}">
-            <h3 class="text-xl font-semibold mb-4 text-red-700 flex items-center gap-2">🚫 Nicks Proibidos</h3>
-            <div class="bg-red-50 border border-red-200 rounded-lg p-4 mb-6 shadow-sm">
-                <form action="{{ url_for('adicionar_bloqueio') }}" method="POST" class="flex gap-2">
-                    <input type="text" name="termo" placeholder="Ex: ofensivo..." required class="form-control mb-0" style="max-width: 300px;">
-                    <button type="submit" class="bg-red-600 text-white px-4 py-2 rounded font-bold hover:bg-red-700">Bloquear</button>
+            <h3 class="text-xl font-bold mb-4 text-red-700 flex items-center gap-2">🚫 Nicks Proibidos</h3>
+            <div class="bg-white border border-red-100 rounded-2xl p-6 shadow-sm mb-6">
+                <form action="{{ url_for('adicionar_bloqueio') }}" method="POST" class="flex gap-2" onsubmit="return ativarLoading(this, 'Bloqueando termo...')">
+                    <input type="text" name="termo" placeholder="Ex: ofensivo..." required class="form-control mb-0 focus:ring-2 focus:ring-red-500 outline-none" style="max-width: 300px;">
+                    <button type="submit" class="bg-red-600 text-white px-8 py-2 rounded-lg font-bold hover:bg-red-700 shadow">Bloquear</button>
                 </form>
             </div>
             <div class="flex flex-wrap gap-2">
                 {% for palavra in lista_bloqueio %}
                 <form action="{{ url_for('remover_bloqueio') }}" method="POST" onsubmit="return confirm('Liberar {{ palavra }}?');">
                     <input type="hidden" name="termo" value="{{ palavra }}">
-                    <button type="submit" class="px-3 py-1 bg-white border rounded-full hover:bg-red-50 transition shadow-sm">
-                        <span class="font-medium">{{ palavra }}</span> <span class="text-red-300 ml-1">✕</span>
+                    <button type="submit" class="group flex items-center gap-2 px-4 py-2 bg-white border border-gray-200 rounded-full hover:bg-red-50 hover:border-red-200 transition-all shadow-sm">
+                        <span class="font-black text-xs text-gray-600 group-hover:text-red-600">{{ palavra }}</span> 
+                        <span class="text-gray-300 group-hover:text-red-400">✕</span>
                     </button>
                 </form>
                 {% endfor %}
@@ -364,37 +440,120 @@
         {% endif %}
     </div>
     
-    <!-- Modais -->
+    <!-- Modal Exclusão -->
     <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
-            <h3 class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
-            <p class="mb-4 text-sm text-gray-600">Deseja realmente excluir <strong id="modal-delete-nick">...</strong> (ID: <span id="modal-delete-id"></span>)?</p>
+            <h3 class="text-xl font-black mb-2 text-danger">⚠️ Confirmar Exclusão</h3>
+            <p class="mb-4 text-sm text-gray-600 leading-relaxed">Deseja realmente excluir <b><span id="modal-delete-nick">...</span></b> (ID: CLI<span id="modal-delete-id"></span>)? Esta ação não poderá ser desfeita.</p>
             <div class="flex justify-end space-x-2 mt-6">
-                <button type="button" class="modal-btn btn-cancel" onclick="closeDeleteModal()">Cancelar</button>
-                <button type="button" id="modal-btn-confirm-delete" class="modal-btn btn-danger">Confirmar Exclusão</button>
+                <button type="button" class="px-6 py-2.5 bg-gray-100 text-gray-500 rounded-lg font-bold hover:bg-gray-200 transition" onclick="closeDeleteModal()">Cancelar</button>
+                <button type="button" id="modal-btn-confirm-delete" class="px-6 py-2.5 bg-danger text-white rounded-lg font-bold shadow hover:brightness-110 transition">Excluir Agora</button>
             </div>
         </div>
     </div>
 
+    <!-- Modal Recarga -->
     <div id="recarga-modal" class="modal-overlay" onclick="closeRecargaModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
-            <h3 class="text-xl font-bold mb-2 text-green-700">💰 Adicionar Crédito</h3>
-            <p class="text-sm text-gray-600 mb-4">Adicionar saldo para: <strong id="modal-recarga-nick">...</strong></p>
-            <form method="POST" action="{{ url_for('adicionar_credito_cliente') }}">
+            <h3 class="text-xl2 font-semibold mb-1 text-primary">💰 Adicionar Crédito</h3>
+            <p class="text-xl text-gray-400 mb-2 uppercase tracking-widest font-bold">Destino: <span id="modal-recarga-nick" class="text-gray-800">...</span></p>
+            <form method="POST" action="{{ url_for('adicionar_credito_cliente') }}" onsubmit="return ativarLoading(this, 'Processando recarga...')">
                 <input type="hidden" name="id_cliente" id="modal-recarga-id">
                 <div class="mb-4">
-                    <label class="block text-gray-700 font-bold mb-1">Valor (R$):</label>
-                    <input type="number" name="valor_recarga" step="0.01" min="0.01" required class="w-full p-3 border border-green-300 rounded text-xl font-bold text-center text-green-800 outline-none">
+                    <label class="block text-[12px] font-black text-gray-400 uppercase mb-1 tracking-widest">Valor da Recarga (R$)</label>
+                    <input type="number" name="valor_recarga" step="0.01" min="0.01" required 
+                           class="w-full p-1 border-2 border-primary/20 rounded-xl text-3xl font-black text-center text-primary focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all bg-primary/5">
                 </div>
-                <div class="flex justify-end space-x-2">
-                    <button type="button" class="modal-btn btn-cancel" onclick="closeRecargaModal()">Cancelar</button>
-                    <button type="submit" class="modal-btn bg-green-600 text-white hover:bg-green-700">✅ Confirmar</button>
+                <div class="flex gap-2">
+                    <button type="button" class="flex-1 py-3 bg-red-200 text-gray-700 rounded-xl font-bold hover:bg-red-400" onclick="closeRecargaModal()">Cancelar</button>
+                    <button type="submit" class="flex-1 py-3 bg-primary text-white rounded-xl font-bold shadow-lg hover:brightness-110 active:scale-95 transition-all">Confirmar</button>
                 </div>
             </form>
         </div>
     </div>
 
     <script>
+        /**
+         * Ativa o overlay de carregamento e desativa o botão de submissão
+         */
+        function ativarLoading(form, mensagem) {
+            const spinner = document.getElementById('loading-spinner');
+            const spinnerText = document.getElementById('spinner-text');
+            
+            if (spinnerText && mensagem) {
+                spinnerText.innerText = mensagem;
+            }
+            
+            if (spinner) {
+                spinner.classList.add('spinner-visible');
+            }
+
+            // Desativa o botão submit para impedir múltiplos cliques
+            const btn = form.querySelector('button[type="submit"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+                btn.innerHTML = "Processando...";
+            }
+            
+            // Bloqueia cliques em toda a página
+            document.body.style.pointerEvents = 'none';
+
+            return true; 
+        }
+
+        /**
+         * Realiza checagem dinâmica de telefone para mostrar nome registrado
+         */
+        async function checarDuplicidadeTelefone(el) {
+            const tel = el.value.replace(/\D/g, ''); // Limpa caracteres não numéricos
+            const feedback = document.getElementById('tel-feedback');
+            
+            // Só checa se tiver pelo menos 10 dígitos
+            if (tel.length < 10) {
+                feedback.innerHTML = "";
+                return;
+            }
+
+            try {
+                const idEdicao = document.querySelector('input[name="id_cliente"]')?.value || '';
+                // Usamos a rota de busca existente passando o tipo telefone
+                const response = await fetch(`/buscar_clientes?termo=${tel}&tipo=tel`);
+                const data = await response.json();
+                
+                if (data.clientes && data.clientes.length > 0) {
+                    const cli = data.clientes[0]; // Pega o primeiro resultado
+                    
+                    // Se não for o próprio cliente em edição
+                    if (cli.id.toString() !== idEdicao.toString()) {
+                        feedback.innerHTML = `⚠️ Número de: <b class="text-danger uppercase">${cli.nome}</b> (Nick: ${cli.nick})`;
+                        feedback.className = "text-[10px] font-bold text-danger mt-1 italic animate-pulse";
+                        // Opcional: Destaca a borda do input
+                        el.classList.add('border-danger', 'ring-danger/20');
+                    } else {
+                        feedback.innerHTML = "";
+                        el.classList.remove('border-danger', 'ring-danger/20');
+                    }
+                } else {
+                    feedback.innerHTML = "";
+                    el.classList.remove('border-danger', 'ring-danger/20');
+                }
+            } catch (e) {
+                console.error("Erro na validação de telefone:", e);
+            }
+        }
+
+        /**
+         * Previne o travamento do spinner caso o usuário use o botão voltar
+         */
+        window.onpageshow = function(event) {
+            const spinner = document.getElementById('loading-spinner');
+            if (spinner) {
+                spinner.classList.remove('spinner-visible');
+            }
+            document.body.style.pointerEvents = 'auto';
+        };
+
         let searchTimeout = null;
 
         function togglePasswordVisibility(fieldId) {
@@ -446,14 +605,14 @@
                     data.clientes.forEach(cli => {
                         const div = document.createElement('div');
                         div.className = 'search-result-item';
-                        div.innerHTML = `<div class="font-bold text-gray-800">${cli.nick}</div><div class="text-[10px] text-gray-500">${cli.nome} | ID: ${cli.id}</div>`;
+                        div.innerHTML = `<div class=\"font-bold text-gray-800\">${cli.nick}</div><div class=\"text-[10px] text-gray-500\">${cli.nome} | ID: ${cli.id}</div>`;
                         div.onclick = () => { window.location.href = `{{ url_for('cadastro_cliente', view='alterar') }}&id_cliente=${cli.id}`; };
                         resultsDiv.appendChild(div);
                     });
                 } else {
-                    resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center text-xs">Nenhum resultado.</div>';
+                    resultsDiv.innerHTML = '<div class=\"p-2 text-gray-500 text-center text-xs\">Nenhum resultado.</div>';
                 }
-            } catch (err) { resultsDiv.innerHTML = '<div class="p-2 text-red-500 text-center text-xs">Erro na busca.</div>'; }
+            } catch (err) { resultsDiv.innerHTML = '<div class=\"p-2 text-red-500 text-center text-xs\">Erro na busca.</div>'; }
         }
 
         // Modais
@@ -470,17 +629,33 @@
             deleteModal.style.display = 'flex';
         }
         function closeDeleteModal() { deleteModal.style.display = 'none'; }
-        if (btnConfirmDelete) { btnConfirmDelete.onclick = function() { if (formIdParaExcluir) document.getElementById(formIdParaExcluir).submit(); }; }
+        
+        if (btnConfirmDelete) { 
+            btnConfirmDelete.onclick = function() { 
+                if (formIdParaExcluir) {
+                    const form = document.getElementById(formIdParaExcluir);
+                    ativarLoading(form, 'Excluindo registro...');
+                    form.submit(); 
+                }
+            }; 
+        }
 
         const recargaModal = document.getElementById('recarga-modal');
         const recargaNick = document.getElementById('modal-recarga-nick');
         const recargaId = document.getElementById('modal-recarga-id');
         function openRecargaModal(id, nick) {
+            if (!recargaModal) return;
             recargaId.value = id;
             recargaNick.textContent = nick;
             recargaModal.style.display = 'flex';
+            
+            // Foca no input de valor automaticamente
+            setTimeout(() => {
+                const inputVal = recargaModal.querySelector('input[name=\"valor_recarga\"]');
+                if(inputVal) inputVal.focus();
+            }, 100);
         }
-        function closeRecargaModal() { recargaModal.style.display = 'none'; }
+        function closeRecargaModal() { if(recargaModal) recargaModal.style.display = 'none'; }
     </script>
 </body>
 </html>

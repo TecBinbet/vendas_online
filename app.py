@@ -1136,25 +1136,10 @@ def gravar_colaborador():
                 parecidos = db.colaboradores.find({'chave_pix': {'$regex': re.escape(chave_pix), '$options': 'i'}})
                 for p in parecidos:
                     print(f"   -> EXISTE NO BANCO: ID {p.get('id_colaborador')} | Pix: '{p.get('chave_pix')}'")
-            # -----------------------------------
             
             if colaborador_existente:
                 nick_encontrado = colaborador_existente.get('nick', 'Desconhecido')
                 raise ValueError(f"A Chave PIX '{chave_pix}' já está em uso pelo colaborador: {nick_encontrado}.")
-
-        # Montagem do Objeto
-        #dados_colaborador = {
-            #"nivel": nivel, 
-            #"comissao": comissao,
-            #"limite_credito": limite_credito 
-        #}
-        
-        #if "nome_colaborador" in campos_config: dados_colaborador["nome_colaborador"] = nome_colaborador
-        #if "nick" in campos_config: dados_colaborador["nick"] = nick
-        #if "telefone" in campos_config: dados_colaborador["telefone"] = telefone
-        #if "cidade" in campos_config: dados_colaborador["cidade"] = cidade
-        #if "chave_pix" in campos_config: dados_colaborador["chave_pix"] = chave_pix
-        #if "cpf" in campos_config: dados_colaborador["cpf"] = clean_numeric_string(cpf_raw)
 
         dados_colaborador = {
             "nome_colaborador": nome_colaborador,
@@ -1987,59 +1972,40 @@ def gravar_cliente():
             if not cpf_raw or not validate_cpf(cpf_limpo): raise ValueError("CPF inválido.")
         elif cpf_raw and not validate_cpf(cpf_limpo): raise ValueError("CPF inválido.")
 
-        # --- VALIDAÇÃO TELEFONE (DEBUGADA) ---
+        # 3. Validação de Duplicidade (Telefone e Nick)
         cliente_tel = db.clientes.find_one({'telefone': telefone})
-        if cliente_tel:
-            id_banco = cliente_tel.get('id_cliente')
-            # Verifica se NÃO é o próprio (comparando strings para evitar erro de tipo)
-            if str(id_banco) != str(id_cliente_raw or ''):
-                 # Se for novo cadastro (id_cliente_raw é None), sempre entra aqui
-                 if not id_cliente_raw:
-                     raise ValueError(f"Telefone {telefone} já existe.")
-                 # Se for edição, entra se os IDs forem diferentes
-                 raise ValueError(f"Telefone {telefone} pertence a outro cliente (ID: {id_banco}).")
+        if cliente_tel and str(cliente_tel.get('id_cliente')) != str(id_cliente_raw or ''):
+            raise ValueError(f"Telefone {telefone} já pertence ao cliente ID: {cliente_tel.get('id_cliente')} - {cliente_tel.get('nick')}.")
 
-        # --- VALIDAÇÃO NICK (AQUI ESTÁ O SEU PROBLEMA) ---
         if campos_config.get("nick") and nick:
-           
-            # Busca ignorando maiúsculas/minúsculas
             cliente_nick = db.clientes.find_one({'nick': {'$regex': f'^{re.escape(nick)}$', '$options': 'i'}})
-            
-            if cliente_nick:
-                id_encontrado = cliente_nick.get('id_cliente')
-                nome_encontrado = cliente_nick.get('nome_cliente')
-                # LÓGICA DE COMPARAÇÃO EXPLÍCITA
-                eh_o_mesmo = False
-                if id_cliente_raw: # Só compara se for edição
-                    eh_o_mesmo = str(id_encontrado) == str(id_cliente_raw)
+            if cliente_nick and str(cliente_nick.get('id_cliente')) != str(id_cliente_raw or ''):
+                raise ValueError(f"O Nick '{nick}' já está em uso.")
 
-                if not eh_o_mesmo:
-                    raise ValueError(f"O Nick '{nick}' já está em uso.")
-
-        # --- VALIDAÇÃO PIX ---
-        if campos_config.get("chave_pix") and chave_pix:
-             print(f"[DEBUG PIX] passo 1.")
-
-             cliente_pix = db.clientes.find_one({'chave_pix': {'$regex': f'^{re.escape(chave_pix)}$', '$options': 'i'}})
-             if cliente_pix:
-                 print(f"[DEBUG PIX] passo 2.")
-                 id_pix = cliente_pix.get('id_cliente')
-                 if str(id_pix) != str(id_cliente_raw or ''):
-                     print(f"[DEBUG PIX] passo 3.")
-                     if id_cliente_raw or (not id_cliente_raw): # Bloqueia sempre se for outro ID ou novo cadastro
-                        dono = cliente_pix.get('nome_cliente') or 'Desconhecido'
-                        raise ValueError(f"Chave PIX já usada por: {dono}")
-
-        # --- MONTAGEM E GRAVAÇÃO ---
+        # --- NOVA LÓGICA DE SENHA (CORREÇÃO) ---
         hashed_password = None
-        if not id_cliente_raw:
-            if campos_config.get("senha") and not senha:
-                raise ValueError("Senha obrigatória.")
         
-        if senha:
-            if senha != confirma_senha: raise ValueError("Senhas não conferem.")
-            hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+        if not id_cliente_raw:  # NOVO CADASTRO
+            # Se não digitou senha, define o padrão "senha"
+            senha_final = senha if senha else "Senha"
+            
+            # Se ele digitou algo, validamos a confirmação
+            if senha and senha != confirma_senha:
+                raise ValueError("As senhas não conferem.")
+                
+            # Criptografa a senha (seja a digitada ou a padrão "senha")
+            hashed_password = bcrypt.hashpw(senha_final.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+            print(f"[DEBUG] Definindo senha para novo cliente: {'Padrão' if not senha else 'Manual'}")
+            
+        else:  # EDIÇÃO
+            # Na edição, só processamos se o campo de senha não estiver vazio
+            if senha:
+                if senha != confirma_senha:
+                    raise ValueError("As senhas não conferem.")
+                hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+                print("[DEBUG] Atualizando senha do cliente (Manual)")
 
+        # 4. Montagem do dicionário de dados
         dados_cliente = {
             "nome_cliente": nome_cliente,
             "nick": nick,
@@ -2050,27 +2016,35 @@ def gravar_cliente():
             "observacao": observacao,
             "data_atualizacao": datetime.utcnow()
         }
-        if hashed_password: dados_cliente["senha"] = hashed_password
+        
+        # Só adicionamos a chave "senha" ao dicionário se ela foi gerada
+        if hashed_password:
+            dados_cliente["senha"] = hashed_password
 
+        # 5. Gravação no Banco
         if id_cliente_raw:
             # Edição
             print(f"[DEBUG] Atualizando ID {id_cliente_raw}")
             db.clientes.update_one({'id_cliente': int(id_cliente_raw)}, {'$set': dados_cliente})
-            success_msg = f"Cliente atualizado!"
+            success_msg = f"Cliente {nick} atualizado com sucesso!"
         else:
             # Novo
             print(f"[DEBUG] Criando Novo Cliente")
             novo_id = get_next_cliente_sequence()
             if not novo_id: raise Exception("Erro Sequence ID.")
-            dados_cliente["id_cliente"] = novo_id
-            dados_cliente["id_colaborador"] = session.get('id_colaborador')
-            dados_cliente["data_cadastro"] = datetime.utcnow()
-            dados_cliente["origem"] = "interno"
+            
+            dados_cliente.update({
+                "id_cliente": novo_id,
+                "id_colaborador": session.get('id_colaborador'),
+                "data_cadastro": datetime.utcnow(),
+                "origem": "interno",
+                "saldo_atual": Decimal128("0.00") # Inicializa saldo
+            })
+            
             db.clientes.insert_one(dados_cliente)
-            success_msg = f"Cliente cadastrado! ID: CLI{novo_id}"
+            success_msg = f"Cliente {nick} cadastrado! ID: CLI{novo_id}"
 
         print(f"[DEBUG] Sucesso! Redirecionando...\n")
-        
         return redirect(url_for('cadastro_cliente', view='listar', success=success_msg))
 
     except ValueError as ve:
@@ -2084,8 +2058,8 @@ def gravar_cliente():
                                error=str(ve),
                                cliente_edicao=cliente_form, 
                                view=view_mode,
-                               nivel=session.get('nivel', 1),
                                active_view=view_mode,
+                               nivel=session.get('nivel', 1),
                                colaborador={'nick': session.get('nick'), 'nivel': session.get('nivel', 1)},
                                g=g)
 
@@ -2096,11 +2070,10 @@ def gravar_cliente():
         return render_template('cadastro_cliente.html', 
                                error=f"Erro interno: {e}",
                                view=view_mode,
-                               nivel=session.get('nivel', 1),
                                active_view=view_mode,
+                               nivel=session.get('nivel', 1),
                                colaborador={'nick': session.get('nick'), 'nivel': session.get('nivel', 1)},
                                g=g)
-
 
 
 @app.route('/cliente/excluir/<int:id_cliente>', methods=['POST'])
@@ -5058,6 +5031,50 @@ def salvar_config_sorte_extra():
     except Exception as e:
         print(f"Erro ao salvar config sorte extra: {e}")
         return redirect(url_for('controle_sorte_extra', error=f"Erro na gravação: {str(e)}"))
+
+
+@app.route('/admin/corrigir_senhas_faltantes')
+@login_required
+def corrigir_senhas_faltantes():
+    """
+    Localiza clientes sem o campo 'senha' no banco de dados da sala atual 
+    e define a senha padrão como 'Senha' (com S maiúsculo) via bcrypt.
+    """
+    # 1. Segurança: Permite acesso apenas para administradores nível 3
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso negado. Nível 3 requerido."))
+
+    # 2. Obtém a conexão com o banco de dados dinâmico da sala ativa
+    db = get_vendas_db()
+    if db is None:
+        return redirect(url_for('cadastro_cliente', error="Erro de conexão com o banco de dados."))
+
+    try:
+        # 3. Gera o hash para a string "Senha"
+        # O salt é gerado automaticamente pelo bcrypt.gensalt()
+        senha_padrao = "Senha"
+        hashed = bcrypt.hashpw(senha_padrao.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        # 4. Filtro para encontrar documentos onde o campo 'senha' NÃO existe
+        filtro = {"senha": {"$exists": False}}
+        
+        # 5. Executa a atualização em massa (update_many)
+        # O operador $set criará o campo para quem não tem
+        resultado = db.clientes.update_many(
+            filtro,
+            {"$set": {"senha": hashed}}
+        )
+
+        # 6. Retorna para a listagem com a contagem de quantos foram corrigidos
+        msg = f"Manutenção concluída! {resultado.modified_count} clientes foram atualizados com a senha 'Senha'."
+        print(f"[MANUTENÇÃO] Admin {session.get('nick')} corrigiu senhas na sala {g.id_sala}.")
+        
+        return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
+
+    except Exception as e:
+        # Log de erro caso algo falhe no processo de banco ou criptografia
+        print(f"Erro na manutenção de senhas: {e}")
+        return redirect(url_for('cadastro_cliente', error=f"Erro interno na correção: {e}"))
 
 
 if __name__ == '__main__':

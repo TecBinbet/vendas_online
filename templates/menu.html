@@ -5,8 +5,52 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Menu de Operações</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        /* --- CSS DO SPINNER --- */
+        .spinner-overlay {
+            position: fixed;
+            inset: 0; /* top: 0, right: 0, bottom: 0, left: 0 */
+            background-color: rgba(17, 24, 39, 0.75); /* Fundo escuro semi-transparente */
+            display: none; /* Inicia oculto */
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .spinner-visible {
+            display: flex;
+        }
+
+        .spinner-animation {
+            animation: spin 1s linear infinite;
+            border-radius: 9999px;
+            height: 5rem;
+            width: 5rem;
+            border-width: 4px;
+            border-style: solid;
+            border-color: rgba(255, 255, 255, 0.1);
+            border-top-color: #3B82F6; /* Azul no topo */
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        /* Ajuste fino para o container do menu */
+        .container { position: relative; }
+    </style>
 </head>
 <body>
+
+    <!-- Estrutura do Spinner -->
+    <div id="loading-spinner" class="spinner-overlay">
+        <div class="flex flex-col items-center">
+            <div class="spinner-animation"></div>
+            <p id="spinner-text" style="color: white; margin-top: 1rem; font-weight: bold; text-transform: uppercase; letter-spacing: 0.1em;">Carregando módulo...</p>
+        </div>
+    </div>
+
     <div class="container">
         <h4 class="text-sm mt-2">
             Olá, {{ logado }} 
@@ -16,36 +60,70 @@
         </h4>
 
         <h2>🎯 Menu de Operações</h2>
+        
         {% if error %}
             <div style="background-color: #FEE2E2; color: #991B1B; padding: 6px; border: 1px solid #FCA5A5; border-radius: 8px; margin-bottom: 10px; text-align: center; font-weight: bold;">
                 {{ error }}
             </div>
         {% endif %}
-        <a href="{{ url_for('nova_venda') }}" class="menu-item menu-item-venda">⭐ Nova Venda</a>
-        <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" class="menu-item">🗓️ Consulta de Eventos Ativos</a>
-        <a href="{{ url_for('consulta_vendas') }}" class="menu-item">
+
+        <a href="{{ url_for('nova_venda') }}" onclick="ativarSpinner('Abrindo Terminal de Venda...')" class="menu-item menu-item-venda">⭐ Nova Venda</a>
+        
+        <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" onclick="ativarSpinner('Consultando Eventos...')" class="menu-item">🗓️ Consulta de Eventos Ativos</a>
+        
+        <a href="{{ url_for('consulta_vendas') }}" onclick="ativarSpinner('Carregando Relatório...')" class="menu-item">
              <span class="emoji">📊</span>
              <span class="menu-text">Consultar Vendas</span>
         </a>
-        <a href="{{ url_for('consulta_resultados') }}" class="menu-item">🏆 Consulta de Resultados</a>
-        <a href="{{ url_for('cadastro_cliente', view='novo', next='menu_operacoes') }}" class="menu-item">👥 Cadastro de Clientes</a>
-        <a href="{{ url_for('minha_conta', view='novo', next='menu_operacoes') }}" class="menu-item">🛠️ Minha Conta</a>
+        
+        <a href="{{ url_for('consulta_resultados') }}" onclick="ativarSpinner('Buscando Resultados...')" class="menu-item">🏆 Consulta de Resultados</a>
+        
+        <a href="{{ url_for('cadastro_cliente', view='novo', next='menu_operacoes') }}" onclick="ativarSpinner('Módulo de Clientes...')" class="menu-item">👥 Cadastro de Clientes</a>
+        
+        <a href="{{ url_for('minha_conta', view='novo', next='menu_operacoes') }}" onclick="ativarSpinner('Acessando sua Conta...')" class="menu-item">🛠️ Minha Conta</a>
        
         {% if nivel >= 3 %} 
             <hr class="my-0 ">
-             <a href="{{ url_for('monitor_saques') }}" class="menu-item gerencial-item">
+             <a href="{{ url_for('monitor_saques') }}" onclick="ativarSpinner('Acessando Financeiro...')" class="menu-item gerencial-item">
                   <span class="emoji">💸</span>
                   <span class="menu-text">Monitor de Saques</span>
              </a>
-             <a href="{{ url_for('submenu_eventos') }}" class="menu-item gerencial-item">
+             <a href="{{ url_for('submenu_eventos') }}" onclick="ativarSpinner('Gestão de Eventos...')" class="menu-item gerencial-item">
                  🎉 Menu Eventos
             </a>
-            <a href="{{ url_for('cadastro_colaborador', view='listar') }}" class="menu-item gerencial-item">
+            <a href="{{ url_for('cadastro_colaborador', view='listar') }}" onclick="ativarSpinner('Gestão de Equipe...')" class="menu-item gerencial-item">
                  🛠️ Cadastro de Colaboradores
             </a>
         {% endif %}
         
+        <!-- Botão Sair sem spinner conforme solicitado -->
         <a href="{{ url_for('login_page') }}" class="-mt-10 menu-item menu-item-exit">🚪 Sair</a>
     </div>
+
+    <script>
+        /**
+         * Ativa o overlay de carregamento e personaliza a mensagem
+         */
+        function ativarSpinner(mensagem) {
+            const spinner = document.getElementById('loading-spinner');
+            const text = document.getElementById('spinner-text');
+            if (text && mensagem) text.innerText = mensagem;
+            if (spinner) spinner.classList.add('spinner-visible');
+            
+            // Bloqueia cliques adicionais na página
+            document.body.style.pointerEvents = 'none';
+        }
+
+        /**
+         * Previne o travamento do spinner caso o usuário utilize o botão 'Voltar' do navegador
+         */
+        window.onpageshow = function(event) {
+            if (event.persisted) {
+                const spinner = document.getElementById('loading-spinner');
+                if (spinner) spinner.classList.remove('spinner-visible');
+                document.body.style.pointerEvents = 'auto';
+            }
+        };
+    </script>
 </body>
 </html>

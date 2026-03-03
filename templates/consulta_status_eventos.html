@@ -61,22 +61,59 @@
         .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 4px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #FCA5A5; }
         .alert-success { background-color: #D1FAE5; color: #065F46; padding: 4px; border-radius: 8px; margin-bottom: 10px; border: 1px solid #6EE7B7; }
 
-        /* Estilos dos Botões de Filtro */
         .filter-btn {
             padding: 8px 16px; border-radius: 20px; border: 1px solid #D1D5DB; font-weight: 600; font-size: 0.9rem;
             cursor: pointer; transition: all 0.2s; background-color: white; color: #4B5563;
         }
         .filter-btn:hover { background-color: #F3F4F6; }
         
-        /* Estados Ativos dos Filtros */
         .filter-btn.active-ativo { background-color: #3B82F6; color: white; border-color: #6B7280; } 
         .filter-btn.active-paralizado { background-color: #3B82F6; color: white; border-color: #6B7280; } 
         .filter-btn.active-finalizado { background-color: #3B82F6; color: white; border-color: #6B7280; } 
         .filter-btn.active-todos { background-color: #3B82F6; color: white; border-color: #3B82F6; }
 
+        /* --- CSS DO SPINNER --- */
+        .spinner-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(17, 24, 39, 0.75);
+            display: none; 
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .spinner-visible {
+            display: flex;
+        }
+
+        .spinner-animation {
+            animation: spin 1s linear infinite;
+            border-radius: 9999px;
+            height: 5rem;
+            width: 5rem;
+            border-width: 4px;
+            border-style: solid;
+            border-color: rgba(255, 255, 255, 0.1);
+            border-top-color: #3B82F6;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
     </style>
 </head>
 <body>
+
+    <!-- Estrutura do Spinner -->
+    <div id="loading-spinner" class="spinner-overlay">
+        <div class="flex flex-col items-center">
+            <div class="spinner-animation"></div>
+            <p id="spinner-text" class="text-white mt-4 font-bold animate-pulse uppercase tracking-widest text-sm">Processando...</p>
+        </div>
+    </div>
 
     <div class="container">
         <div class="flex justify-center -mt-5 mb-1">
@@ -216,7 +253,22 @@
     </form>
 
     <script>
-        // --- CONTROLE DOS BOTÕES DE FILTRO ---
+        function ativarSpinner(mensagem) {
+            const spinner = document.getElementById('loading-spinner');
+            const text = document.getElementById('spinner-text');
+            if (text) text.innerText = mensagem || "Processando...";
+            if (spinner) spinner.classList.add('spinner-visible');
+            document.body.style.pointerEvents = 'none';
+        }
+
+        window.onpageshow = function(event) {
+            if (event.persisted) {
+                const spinner = document.getElementById('loading-spinner');
+                if (spinner) spinner.classList.remove('spinner-visible');
+                document.body.style.pointerEvents = 'auto';
+            }
+        };
+
         const currentFilters = "{{ filtro_atual }}".split(',');
 
         function updateButtonStates() {
@@ -224,7 +276,6 @@
             if (currentFilters.includes('paralizado')) document.getElementById('btn-paralizado').classList.add('active-paralizado');
             if (currentFilters.includes('finalizado')) document.getElementById('btn-finalizado').classList.add('active-finalizado');
             
-            // Botão Todos só ativa se tiver os 3
             if (currentFilters.includes('ativo') && currentFilters.includes('paralizado') && currentFilters.includes('finalizado')) {
                 document.getElementById('btn-todos').classList.add('active-todos');
             }
@@ -232,25 +283,20 @@
 
         function toggleFilter(status) {
             let newFilters = [...currentFilters];
-            
-            // Se clicar e já estiver 'todos', remove todos e deixa só o clicado? 
-            // Ou apenas remove/adiciona? Vamos na lógica de toggle simples.
-            
             if (newFilters.includes(status)) {
-                // Remove (se não for o último, para não ficar lista vazia)
                 if (newFilters.length > 1) {
                     newFilters = newFilters.filter(item => item !== status);
                 }
             } else {
-                // Adiciona
                 newFilters.push(status);
             }
-            
+            ativarSpinner("Filtrando eventos...");
             reloadWithFilters(newFilters.join(','));
         }
 
         function setFilter(status) {
             if (status === 'todos') {
+                ativarSpinner("Carregando todos os eventos...");
                 reloadWithFilters('todos');
             }
         }
@@ -261,11 +307,8 @@
             window.location.href = url.toString();
         }
 
-        // Inicializa botões ao carregar
         updateButtonStates();
 
-
-        // --- MENU DROPDOWN ---
         function toggleMenu(menuId) {
             document.querySelectorAll('.dropdown-menu').forEach(function(menu) {
                 if (menu.id !== menuId) menu.classList.add('hidden');
@@ -277,6 +320,7 @@
         function confirmChangeStatus(idEvento, novoStatus, currentMode) {
             var msg = `Tem certeza que deseja alterar o status do evento EVE${idEvento} para '${novoStatus.toUpperCase()}'?`;
             if (window.confirm(msg)) {
+                ativarSpinner("Alterando status do evento...");
                 document.getElementById('form_id_evento_int').value = idEvento;
                 document.getElementById('form_novo_status').value = novoStatus;
                 document.getElementById('form_current_mode').value = currentMode;
@@ -284,12 +328,11 @@
             }
         }
         
-        // --- FUNÇÃO DE CONFIRMAÇÃO DE EXCLUSÃO ---
         function confirmDelete(idEvento) {
             var msg = `⚠️ ATENÇÃO: EXCLUSÃO DE EVENTO!\n\nVocê tem certeza que deseja EXCLUIR DEFINITIVAMENTE o evento ${idEvento}?\n\nIsso apagará todas as vendas e registros financeiros associados.\nEsta ação não pode ser desfeita.`;
             if (window.confirm(msg)) {
-                // Pede confirmação dupla
                 if (window.confirm("Confirmação final: Deseja realmente excluir?")) {
+                    ativarSpinner("Excluindo dados do evento...");
                     document.getElementById('form-excluir-' + idEvento).submit();
                 }
             }

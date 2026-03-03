@@ -28,13 +28,53 @@
             transform: translateY(-3px); 
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
         }
-        .card-cadastro { border-left-color: #059669; } /* Verde Primary */
-        .card-status { border-left-color: #F59E0B; } /* Amber Accent */
-        .card-financeiro { border-left-color: #2563EB; } /* Blue 600 */
-        .card-extra { border-left-color: #9333EA; } /* Purple 600 (Novo) */
+        .card-cadastro { border-left-color: #059669; }
+        .card-status { border-left-color: #F59E0B; }
+        .card-financeiro { border-left-color: #2563EB; }
+        .card-extra { border-left-color: #9333EA; }
+
+        /* --- CSS DO SPINNER --- */
+        .spinner-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(17, 24, 39, 0.75);
+            display: none; /* Começa oculto */
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .spinner-visible {
+            display: flex;
+        }
+
+        .spinner-animation {
+            animation: spin 1s linear infinite;
+            border-radius: 9999px;
+            height: 5rem;
+            width: 5rem;
+            border-width: 4px;
+            border-style: solid;
+            border-color: rgba(255, 255, 255, 0.1);
+            border-top-color: #3B82F6;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
+
+    <!-- Estrutura do Spinner -->
+    <div id="loading-spinner" class="spinner-overlay">
+        <div class="flex flex-col items-center">
+            <div class="spinner-animation"></div>
+            <p class="text-white mt-4 font-bold animate-pulse uppercase tracking-widest text-sm">Carregando módulo...</p>
+        </div>
+    </div>
+
     <div class="min-h-screen flex items-center justify-center p-4">
         <div class="bg-gray-300 rounded-xl shadow-lg w-full max-w-2xl overflow-hidden">
             
@@ -45,7 +85,8 @@
 
             <div class="p-2 grid gap-2 md:grid-cols-2">
                 
-                <a href="{{ url_for('cadastro_evento', view='listar') }}" 
+                <!-- Cadastro -->
+                <a href="{{ url_for('cadastro_evento', view='listar') }}" onclick="ativarSpinner()"
                    class="menu-card card-cadastro bg-gray-50 hover:bg-green-50 p-1 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center text-center group no-underline">
                     <div class="bg-green-100 p-2 rounded-full mb-1 group-hover:bg-green-200 transition">
                         <span class="text-2xl">🗓️</span>
@@ -54,7 +95,8 @@
                     <p class="text-sm text-gray-500 -mt-1">Criar, alterar, excluir e listar eventos da casa.</p>
                 </a>
 
-                <a href="{{ url_for('consulta_status_eventos', mode='detailed') }}" 
+                <!-- Status -->
+                <a href="{{ url_for('consulta_status_eventos', mode='detailed') }}" onclick="ativarSpinner()"
                    class="menu-card card-status bg-gray-50 hover:bg-amber-50 p-1 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center text-center group no-underline">
                     <div class="bg-amber-100 p-2 rounded-full mb-1 group-hover:bg-amber-200 transition">
                         <span class="text-2xl">💰</span>
@@ -63,7 +105,8 @@
                     <p class="text-sm text-gray-500 -mt-1">Acompanhar vendas, saldo e liberar eventos.</p>
                 </a>
 
-                <a href="{{ url_for('financeiro_evento') }}" 
+                <!-- Financeiro -->
+                <a href="{{ url_for('financeiro_evento') }}" onclick="ativarSpinner()"
                    class="menu-card card-financeiro bg-gray-50 hover:bg-blue-50 p-1 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center text-center group no-underline">
                     <div class="bg-blue-100 p-2 rounded-full mb-1 group-hover:bg-blue-200 transition">
                         <span class="text-2xl">📊</span>
@@ -72,7 +115,8 @@
                     <p class="text-sm text-gray-500 -mt-1">Fechamento, comissões, saldos e prêmios.</p>
                 </a>
 
-                <a href="{{ url_for('controle_sorte_extra') }}" 
+                <!-- Sorte Extra -->
+                <a href="{{ url_for('controle_sorte_extra') }}" onclick="ativarSpinner()"
                    class="menu-card card-extra bg-gray-50 hover:bg-purple-50 p-1 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center text-center group no-underline">
                     <div class="bg-purple-100 p-2 rounded-full mb-1 group-hover:bg-purple-200 transition">
                         <span class="text-2xl">🍀</span>
@@ -84,11 +128,31 @@
             </div>
 
             <div class="bg-gray-100 p-2 text-center border-t border-gray-200">
-                <a href="{{ url_for('menu_operacoes') }}" class="inline-flex items-center justify-center px-6 py-2 border border-gray-300 shadow-sm text-base font-medium font-semibold rounded-md text-gray-700 bg-green-200 hover:bg-green-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+                <a href="{{ url_for('menu_operacoes') }}" onclick="ativarSpinner()" class="inline-flex items-center justify-center px-6 py-2 border border-gray-300 shadow-sm text-base font-medium font-semibold rounded-md text-gray-700 bg-green-200 hover:bg-green-400">
                     ⬅️ Voltar ao Menu Principal
                 </a>
             </div>
         </div>
     </div>
+
+    <script>
+        function ativarSpinner() {
+            const spinner = document.getElementById('loading-spinner');
+            if (spinner) {
+                spinner.classList.add('spinner-visible');
+            }
+            // Bloqueia interações na página para evitar cliques múltiplos durante a transição
+            document.body.style.pointerEvents = 'none';
+        }
+
+        // Garante que se o usuário usar o botão 'Voltar' do navegador, o spinner não fique travado
+        window.onpageshow = function(event) {
+            if (event.persisted) {
+                const spinner = document.getElementById('loading-spinner');
+                if (spinner) spinner.classList.remove('spinner-visible');
+                document.body.style.pointerEvents = 'auto';
+            }
+        };
+    </script>
 </body>
 </html>
