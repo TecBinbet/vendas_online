@@ -163,10 +163,10 @@
 
     <div class="container">
         <div class="flex justify-center -mt-3 mb-1">
-            <a href="{{ url_for(next_url | default('menu_operacoes', true), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+            <a href="{{ url_for(next_url | default('menu_operacoes', true), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
         </div>
 
-         <h2 class="text-xl mb-1 text-blue-800 text-center font-bold uppercase tracking-tight">Gestão de Clientes</h2>
+         <h2 class="text-xl mb-2 -mt-2 text-blue-800 text-center font-bold uppercase tracking-tight">Gestão de Clientes</h2>
 
         {% if error %}
             <div class="alert-danger">{{ error }}</div>

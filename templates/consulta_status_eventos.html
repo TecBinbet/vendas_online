@@ -30,7 +30,7 @@
             border-radius: 10px; 
             padding: 10px; 
             transition: transform 0.2s, box-shadow 0.2s;
-            border: 1px solid #E5E7EB;
+            border: 2px solid #E5E7EB; /* Aumentado para 2px para bordas coloridas aparecerem melhor */
         }
         .card:hover { transform: translateY(-3px); box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1); }
         
@@ -83,9 +83,7 @@
             z-index: 9999;
         }
         
-        .spinner-visible {
-            display: flex;
-        }
+        .spinner-visible { display: flex; }
 
         .spinner-animation {
             animation: spin 1s linear infinite;
@@ -102,7 +100,6 @@
             from { transform: rotate(0deg); }
             to { transform: rotate(360deg); }
         }
-
     </style>
 </head>
 <body>
@@ -116,8 +113,8 @@
     </div>
 
     <div class="container">
-        <div class="flex justify-center -mt-5 mb-1">
-            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
+        <div class="flex justify-center -mt-5 mb">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
         </div>
 
         <h2 class="text-xl font-semibold text-blue-800 text-center mb-4">
@@ -143,7 +140,13 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                 
                 {% for evento in eventos_status %}
+                    {# Lógica de definição de cor do cartão #}
                     {% set bg_color = 'bg-active-bg border-primary' if evento.is_ativo else 'bg-default-bg border-gray-300' %}
+                    
+                    {% if evento.status == 'ativo' and evento.tipo_de_evento == 'Especial' %}
+                        {% set bg_color = 'bg-yellow-300 border-yellow-600' %}
+                    {% endif %}
+
                     {% if evento.status == 'paralizado' %}
                         {% set bg_color = 'bg-paralized-bg border-accent' %}
                     {% elif evento.status == 'finalizado' %}
@@ -153,7 +156,12 @@
                     <div class="card {{ bg_color }}">
                         
                         <div class="flex justify-between items-start mb-1">
-                            <h3 class="text-xl font-semibold text-gray-800 leading-tight">{{ evento.descricao }}</h3>                         
+                            <div>
+                                <h3 class="text-xl font-semibold text-gray-800 leading-tight">{{ evento.descricao }}</h3>
+                                {% if evento.tipo_de_evento == 'Especial' %}
+                                    <span class="text-[10px] bg-blue-600 text-white px-6 py-0.5 rounded font-bold uppercase tracking-tighter shadow-sm">⭐ Especial</span>
+                                {% endif %}
+                            </div>                         
                             
                             {% if mode != 'simple' %}
                                 <div class="relative inline-block text-left">
@@ -195,7 +203,7 @@
                         
                         <div class="font-semibold text-sm text-gray-600 mb-0 border-b pb-2 -space-y-0.5 -mt-1 ">
                             <p>ID: {{ evento.id_evento }}</p>
-                            <p>🗓️ Data: <span class="text-md font-bold text-gray-800">**{{ evento.data_hora }}**</span></p>
+                            <p>🗓️ Data: <span class="text-md font-bold text-gray-800">**{{ evento.data_evento }}**</span></p>
                             <p>💰 Unidade: <span class="font-bold text-gray-800">{{ evento.valor_venda_unit }}</span></p>
                             <p>⏳ Início Vendas: <span class=" font-bold text-gray-800">{{ evento.data_ativacao }}</span></p>
                         </div>

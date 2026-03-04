@@ -249,34 +249,45 @@
         </div>
     </div>
     
-    <!-- MODAL DE EVENTOS (Mantida igual) -->
+    <!-- MODAL DE SELEÇÃO DE EVENTOS -->
     <div id="event-selector-modal" class="modal">
-        <div class="modal-content  bg-blue-200 p-3 w-full md:w-3/4 lg:w-1/2">
+        <div class="modal-content bg-blue-200 p-3 w-full md:w-3/4 lg:w-1/2">
             <h3 class="text-lg font-semibold text-gray-700 border-b pb-1 -mb-1 -mt-2">Selecione o Evento Ativo</h3>
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-1 max-h-110 overflow-y-auto pr-2">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-110 overflow-y-auto pr-2 mt-2">
                 {% for evento in eventos %}
-                    <div class="event-card shadow-md flex flex-col justify-between"
+                    {# Lógica de Cores para o Cartão de Seleção #}
+                    {% set is_especial = evento.tipo_de_evento == 'Especial' %}
+                    {% set bg_class = 'bg-yellow-100 border-yellow-400' if is_especial else 'bg-white border-transparent' %}
+
+                    <div class="event-card shadow-md flex flex-col justify-between {{ bg_class }}"
                         data-id="{{ evento._id }}"
                         data-descricao="{{ evento.descricao }}"
                         data-valor="{{ '%.2f' | format(evento.valor_de_venda_float) }}"
                         data-unidade="{{ evento.unidade_de_venda }}"
                         onclick="selectEvent(this)">
                         <div>
-                            <p class="text-md font-bold text-primary -mt-3 ">{{ evento.descricao }} ( {{ evento.id_evento }} )</p>
-                            <p class="text-md font-bold text-blue-700 ">{{ evento.data_evento }}   às   {{ evento.hora_evento }}</p>
+                             {% if is_especial %}
+                                 <p class="text-[9px] bg-yellow-600 text-white text-center px-1.5 py-0.5 mb-3 -mt-3 rounded font-black uppercase">Especial</p>
+                             {% endif %}
+                             <div class="flex justify-between items-start -mt-3">
+                                <p class="text-md font-bold text-primary">{{ evento.descricao }} ( {{ evento.id_evento }} )</p>
+                            </div>
+                            <p class="text-md font-bold text-blue-700 ">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
                             <div class="-mt-1 text-md font-semibold">
-                                <p>💰 R$ {{ '%.2f' | format(evento.valor_de_venda_float) }} / Unidade</p>
+                                <p>💰 R$ {{ '%.2f' | format(evento.valor_de_venda_float) }} / Kit</p>
                             </div>
                         </div>
-                        <div class="pt-1 border-t border-dashed">
-                            <button class="py-3 btn btn-primary btn-small w-full mt-0 -mb-2 bg-green-600 hover:bg-green-800">Selecionar</button>
+                        <div class="pt-1 border-t border-dashed mt-1">
+                            <button class="py-2 btn btn-primary btn-small w-full mt-0 -mb-2 {{ 'bg-yellow-600 hover:bg-yellow-500' if is_especial else 'bg-green-600 hover:bg-green-800' }}">
+                                Selecionar
+                            </button>
                         </div>
                     </div>
                 {% else %}
                     <p class="text-center text-gray-500 md:col-span-2">Nenhum evento ativo.</p>
                 {% endfor %}
             </div>
-            <button onclick="closeEventSelector()" class="btn bg-gray-400 text-white hover:bg-green-600 mt-2 w-full">Fechar</button>
+            <button onclick="closeEventSelector()" class="btn bg-gray-400 text-white hover:bg-red-500 mt-4 w-full">Fechar Janela</button>
         </div>
     </div>
 

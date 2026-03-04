@@ -888,6 +888,7 @@ def consulta_status_eventos():
                 'descricao': evento.get('descricao'),
                 'data_hora': f"{evento.get('data_evento', 'N/A')} às {evento.get('hora_evento', 'N/A')}",
                 'status': evento.get('status').lower(), 
+                'tipo_de_evento': evento.get('tipo_de_evento', 'Normal'),
                 'valor_venda_unit': format_currency(evento.get('valor_de_venda')),
                 'data_ativacao': data_ativado_formatada,
                 'total_vendido': total_unidades,
@@ -2379,9 +2380,10 @@ def cadastro_evento():
     error = request.args.get('error')
     success = request.args.get('success')
 
+    # Adicionado 'premio_faltaum' à lista de campos float
     numeric_float_fields = [
         'valor_de_venda', 'premio_quadra', 'premio_linha', 'premio_bingo', 
-        'premio_segundobingo', 'premio_acumulado', 'minimo_de_venda', 'premio_total'
+        'premio_segundobingo', 'premio_acumulado', 'minimo_de_venda', 'premio_total', 'premio_faltaum'
     ]
     numeric_int_fields = [
         'unidade_de_venda', 'numero_inicial', 'numero_maximo', 'tipo_de_cartela',
@@ -2448,7 +2450,7 @@ def cadastro_evento():
             total_eventos = db.eventos.count_documents({})
             
             if active_view == 'listar':
-                eventos_cursor = db.eventos.find({}).sort([("data_evento", pymongo.ASCENDING), ("hora_evento", pymongo.ASCENDING)])
+                eventos_cursor = db.eventos.find({}).sort([("data_evento", pymongo.DESCENDING), ("hora_evento", pymongo.DESCENDING)])
                 eventos_lista = list(eventos_cursor)
             
             elif active_view == 'consulta' and search_term:
@@ -2463,7 +2465,7 @@ def cadastro_evento():
                             {'data_evento': {'$regex': regex_term}}
                         ]
                     }
-                eventos_cursor = db.eventos.find(query_filter).sort("data_evento", pymongo.ASCENDING)
+                eventos_cursor = db.eventos.find(query_filter).sort("data_evento", pymongo.DESCENDING)
                 eventos_lista = list(eventos_cursor) 
 
         except Exception as e:
@@ -2495,7 +2497,6 @@ def cadastro_evento():
                 if 'arquivo_cartela_25' in param_doc:
                     cartela_limits['25'] = int(param_doc['arquivo_cartela_25'])
                 
-                # Novos campos
                 if 'acumulado' in param_doc:
                     default_acumulado = safe_float(param_doc['acumulado'])
                 if 'tope' in param_doc:
@@ -2504,7 +2505,6 @@ def cadastro_evento():
         except Exception as e:
             print(f"Aviso parametros: {e}")
 
-
     context = {
         'total_eventos': total_eventos,
         'eventos_lista': eventos_lista,
@@ -2515,201 +2515,8 @@ def cadastro_evento():
         'success': success,
         'g': g,
         'cartela_limits': cartela_limits,
-        'default_acumulado': default_acumulado, # Enviando para template
-        'default_tope': default_tope            # Enviando para template
-    }
-    
-    return render_template('cadastro_evento.html', **context)
-
-
-
-@app.route('/cadastro_eventb', methods=['GET'])
-@login_required
-def cadastro_eventob():
-    db = get_vendas_db()
-    if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
-    
-    db_status = g.db_status
-    form_data_erro = session.pop('form_data', None)
-    
-    active_view = request.args.get('view', 'novo')
-    search_term = request.args.get('query', '').strip()
-    id_evento_edicao = request.args.get('id_evento', None)
-    
-    evento_edicao = None 
-    eventos_lista = []
-    total_eventos = 0
-    
-    error = request.args.get('error')
-    success = request.args.get('success')
-
-    numeric_float_fields = [
-        'valor_de_venda', 'premio_quadra', 'premio_linha', 'premio_bingo', 
-        'premio_segundobingo', 'premio_acumulado', 'minimo_de_venda', 'premio_total'
-    ]
-    numeric_int_fields = [
-        'unidade_de_venda', 'numero_inicial', 'numero_maximo', 'tipo_de_cartela',
-        'quantidade_de_linhas', 'bola_tope_acumulado'
-    ]
-    all_numeric_fields = numeric_float_fields + numeric_int_fields
-
-    # --- BLOCO 1: RECUPERAÇÃO DE ERRO DE FORMULÁRIO ---
-    if form_data_erro:
-        evento_edicao = form_data_erro
-        
-        # Define a view baseada se existe ID no formulário
-        if 'id_evento_edicao' in form_data_erro and form_data_erro['id_evento_edicao']:
-             active_view = 'alterar'
-             id_evento_edicao = form_data_erro['id_evento_edicao']
-        else:
-             active_view = 'novo'
-        
-        # CORREÇÃO DE ALINHAMENTO:
-        # Estas conversões devem acontecer sempre que houver erro no form,
-        # independente se é novo ou alterar. Por isso, recue para alinhar com o 'if/else' acima.
-        
-        # 1. Trata campos de MOEDA (Float)
-        for key in numeric_float_fields:
-             if key in evento_edicao: 
-                  evento_edicao[key] = safe_float(evento_edicao.get(key, 0.0))
-
-        # 2. Trata campos de QUANTIDADE (Int)
-        for key in numeric_int_fields:
-             if key in evento_edicao:
-                  valor = evento_edicao.get(key, 0)
-                  
-                  # Se for Decimal128 do Mongo, extrai o valor
-                  if isinstance(valor, Decimal128):
-                      valor = valor.to_decimal()
-                  
-                  try:
-                      # Converte para float primeiro (pra aceitar '10.0') e depois para int
-                      evento_edicao[key] = int(float(str(valor)))
-                  except (ValueError, TypeError):
-                      evento_edicao[key] = 0
-             
-    # --- BLOCO 2: CARREGAR DADOS PARA EDIÇÃO (SE NÃO HOUVER ERRO DE FORM) ---
-    elif active_view == 'alterar' and id_evento_edicao and db_status:
-        try:
-            id_evento_int = int(id_evento_edicao)
-            evento_edicao = db.eventos.find_one({'id_evento': id_evento_int})
-            
-            if evento_edicao:
-                if '_id' in evento_edicao: evento_edicao['_id'] = str(evento_edicao['_id'])
-
-                data_evento_db = evento_edicao.get('data_evento') 
-                if data_evento_db and isinstance(data_evento_db, str):
-                    try:
-                        dt_obj = datetime.strptime(data_evento_db, '%d/%m/%Y')
-                        evento_edicao['data_evento'] = dt_obj.strftime('%Y-%m-%d')
-                    except ValueError:
-                        pass 
-                
-                # Aplica a correção de inteiros/floats na leitura do banco também
-                for key in numeric_float_fields:
-                    if key in evento_edicao:
-                        evento_edicao[key] = safe_float(evento_edicao.get(key, 0.0))
-                
-                for key in numeric_int_fields:
-                    if key in evento_edicao:
-                        valor = evento_edicao.get(key, 0)
-                        if isinstance(valor, Decimal128): valor = valor.to_decimal()
-                        try: evento_edicao[key] = int(float(str(valor)))
-                        except: evento_edicao[key] = 0
-
-            else:
-                 # CORREÇÃO DE ALINHAMENTO: O else deve estar alinhado com o if evento_edicao
-                 error = f"Evento ID {id_evento_int} não encontrado para edição."
-                 active_view = 'listar'
-                 
-        except (ValueError, TypeError):
-            error = "ID de Evento inválido para edição."
-            active_view = 'listar'
-            
-    # --- BLOCO 3: LISTAGEM E CONSULTA ---
-    if db_status:
-        try:
-            total_eventos = db.eventos.count_documents({})
-            
-            if active_view == 'listar':
-                eventos_cursor = db.eventos.find({}).sort([("data_evento", pymongo.ASCENDING), ("hora_evento", pymongo.ASCENDING)])
-                eventos_lista = list(eventos_cursor)
-            
-            elif active_view == 'consulta' and search_term:
-                query_filter = {}
-                
-                if search_term.isdigit(): 
-                    query_filter = {'id_evento': int(search_term)}
-                
-                if not query_filter:
-                    regex_term = re.compile(re.escape(search_term), re.IGNORECASE)
-                    query_filter = {
-                        '$or': [
-                            {'descricao': {'$regex': regex_term}},
-                            {'data_evento': {'$regex': regex_term}}
-                        ]
-                    }
-                    
-                eventos_cursor = db.eventos.find(query_filter).sort("data_evento", pymongo.ASCENDING)
-                eventos_lista = list(eventos_cursor) 
-
-        except Exception as e:
-            print(f"Erro ao buscar dados no MongoDB em cadastro_evento: {e}")
-            error = f"Erro crítico ao carregar dados do DB: {e}"
-
-    # Processamento final da lista para exibição
-    for evento in eventos_lista:
-        if '_id' in evento: evento['_id'] = str(evento['_id'])
-        
-        # Contagem de vendas
-        id_evento_atual = evento.get('id_evento')
-        nome_colecao_venda = f"vendas{id_evento_atual}"
-        qtd_vendas = 0
-        if nome_colecao_venda in db.list_collection_names():
-            qtd_vendas = db[nome_colecao_venda].count_documents({})
-        evento['qtd_vendas'] = qtd_vendas
-        
-        # Garante floats na lista para exibição correta de moeda
-        for key in all_numeric_fields:
-            if key in evento:
-                evento[key] = safe_float(evento.get(key, 0.0))
-
-    # --- NOVO: BUSCA LIMITES DAS CARTELAS NOS PARAMETROS ---
-    cartela_limits = {'15': 72000, '25': 90000} # Valores padrão de segurança
-    default_acumulado = 0.0
-    default_tope = 0
-
-    if db_status:
-        try:
-            param_doc = db.parametros.find_one({})
-            if param_doc:
-                # Carrega se existir, senão mantém o padrão 72000
-                if 'arquivo_cartela_15' in param_doc:
-                    cartela_limits['15'] = int(param_doc['arquivo_cartela_15'])
-                if 'arquivo_cartela_25' in param_doc:
-                    cartela_limits['25'] = int(param_doc['arquivo_cartela_25'])
-                # Carrega Padrões de Acumulado (NOVO)
-                # Usa safe_float para converter Decimal128
-                if 'acumulado' in param_doc:
-                    default_acumulado = safe_float(param_doc['acumulado'])
-                if 'tope' in param_doc:
-                    default_tope = int(param_doc['tope'])
-
-        except Exception as e:
-            print(f"Aviso: Não foi possível carregar limites de cartela: {e}")
-
-    context = {
-        'total_eventos': total_eventos,
-        'eventos_lista': eventos_lista,
-        'active_view': active_view,
-        'query': search_term, 
-        'evento_edicao': evento_edicao, 
-        'error': error,
-        'success': success,
-        'g': g,
-        'cartela_limits': cartela_limits,
-        'default_acumulado': default_acumulado, # <--- Passando para o template
-        'default_tope': default_tope            # <--- Passando para o template
+        'default_acumulado': default_acumulado,
+        'default_tope': default_tope
     }
     
     return render_template('cadastro_evento.html', **context)
@@ -2719,10 +2526,10 @@ def cadastro_eventob():
 @login_required
 def gravar_evento():
     db = get_vendas_db()
-    if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
+    if db is None: return redirect(url_for('login'))
 
     if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso Negado. Nível 3 Requerido para Gravação."))
+        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
 
     id_evento_edicao = request.form.get('id_evento_edicao') 
     
@@ -2734,86 +2541,60 @@ def gravar_evento():
         return float(value_raw.replace(',', '.'))
 
     try:
-        data_evento_str = request.form.get('data_evento') # YYYY-MM-DD
+        data_evento_str = request.form.get('data_evento')
         hora_evento = request.form.get('hora_evento')
         descricao = format_title_case(request.form.get('descricao'))
         unidade_de_venda = int(request.form.get('unidade_de_venda', 1))
         tipo_de_cartela = int(request.form.get('tipo_de_cartela', 15)) 
-        #numero_maximo = int(request.form.get('numero_maximo', 72000))
-        #quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
-        #premio_faltaum = clean_float_input('premio_faltaum')
-        # --- LÓGICA DE BLOQUEIO E PADRÕES (NOVO) ---
-        if tipo_de_cartela == 25:
-            # Se for 25 números, FORÇA as regras:
-            premio_faltaum = 0.0
-            quantidade_de_linhas = 1
-            # Padrão 90.000 se não achar no banco
-            numero_maximo_default = 90000 
-            
-            # Busca do banco parametro especifico de 25
-            try:
-                param_doc = db.parametros.find_one({})
-                numero_maximo = int(param_doc.get('arquivo_cartela_25', numero_maximo_default)) if param_doc else numero_maximo_default
-            except:
-                numero_maximo = numero_maximo_default
+        tipo_de_evento = request.form.get('tipo_de_evento', 'Normal') # NOVO CAMPO
 
-        else:
-            # Se for 15 números (Comportamento Normal):
-            premio_faltaum = clean_float_input('premio_faltaum')
-            quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
-            # Padrão 72.000 se não achar no banco
-            numero_maximo_default = 72000
+        # --- LÓGICA DE BLOQUEIO E PADRÕES BASEADOS NO TIPO DE CARTELA ---
+        if tipo_de_cartela == 25:
+            # Se for 25 números, forçamos as regras conforme o HTML
+            premio_faltaum = 0.0
+            premio_segundobingo = 0.0 # AJUSTE: Forçando zero no segundo bingo para cartela 25
+            quantidade_de_linhas = 1
             
-            # Busca do banco parametro especifico de 15
             try:
                 param_doc = db.parametros.find_one({})
-                numero_maximo = int(param_doc.get('arquivo_cartela_15', numero_maximo_default)) if param_doc else numero_maximo_default
+                numero_maximo = int(param_doc.get('arquivo_cartela_25', 90000)) if param_doc else 90000
             except:
-                numero_maximo = numero_maximo_default
+                numero_maximo = 90000
+        else:
+            # Se for 15 números, comportamento normal capturando os campos
+            premio_faltaum = clean_float_input('premio_faltaum')
+            premio_segundobingo = clean_float_input('premio_segundobingo')
+            quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
+            
+            try:
+                param_doc = db.parametros.find_one({})
+                numero_maximo = int(param_doc.get('arquivo_cartela_15', 72000)) if param_doc else 72000
+            except:
+                numero_maximo = 72000
         
+        # Captura dos demais valores financeiros
         valor_de_venda = clean_float_input('valor_de_venda')
         premio_quadra = clean_float_input('premio_quadra')
         premio_linha = clean_float_input('premio_linha')
         premio_bingo = clean_float_input('premio_bingo')
-        premio_segundobingo = clean_float_input('premio_segundobingo', default_value='0')
-        premio_acumulado = clean_float_input('premio_acumulado', default_value='0')
-        minimo_de_venda = clean_float_input('minimo_de_venda', default_value='0') 
+        premio_acumulado = clean_float_input('premio_acumulado')
+        minimo_de_venda = clean_float_input('minimo_de_venda') 
 
         numero_inicial = int(request.form.get('numero_inicial', 1))
         bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
 
-        numero_maximo = 72000 # Fallback
-        try:
-            param_doc = db.parametros.find_one({})
-            if param_doc:
-                if tipo_de_cartela == 15:
-                    numero_maximo = int(param_doc.get('arquivo_cartela_15', 72000))
-                elif tipo_de_cartela == 25:
-                    numero_maximo = int(param_doc.get('arquivo_cartela_25', 90000))
-        except Exception as e:
-            print(f"Erro ao buscar limite maximo na gravacao: {e}")        
-
         if not all([data_evento_str, hora_evento, descricao, unidade_de_venda]):
              raise ValueError("Preencha todos os campos obrigatórios (*).")
-        
-        if tipo_de_cartela not in [15, 25]:
-            raise ValueError("O tipo de cartela deve ser 15 ou 25 números.")
-        
-        if not (1 <= unidade_de_venda <= 6):
-             raise ValueError("Unidade de venda deve ser entre 1 e 6.")
-
-        if not (1 <= quantidade_de_linhas <= 3):
-             raise ValueError("Quantidade de linhas deve ser entre 1 e 3.")
 
         try:
              data_obj = datetime.strptime(data_evento_str, '%Y-%m-%d')
              data_evento_str_gravar = data_obj.strftime('%d/%m/%Y')
         except ValueError:
-             raise ValueError("Formato de data inválido. Use AAAA-MM-DD.")
+             raise ValueError("Formato de data inválido.")
         
-        data_hora_evento_str = f"{data_evento_str} {hora_evento}" 
-        data_hora_evento_dt = datetime.strptime(data_hora_evento_str, '%Y-%m-%d %H:%M')
+        data_hora_evento_dt = datetime.strptime(f"{data_evento_str} {hora_evento}", '%Y-%m-%d %H:%M')
         
+        # Recalcula o prêmio total no servidor por segurança
         premio_total = premio_quadra + (premio_linha * quantidade_de_linhas) + premio_bingo + premio_segundobingo + premio_faltaum
         
         dados_evento = {
@@ -2823,6 +2604,7 @@ def gravar_evento():
             "descricao": descricao,
             "unidade_de_venda": unidade_de_venda,
             "tipo_de_cartela": tipo_de_cartela, 
+            "tipo_de_evento": tipo_de_evento, # SALVANDO O NOVO CAMPO
             "valor_de_venda": Decimal128(str(valor_de_venda)),
             "numero_inicial": numero_inicial,
             "numero_maximo": numero_maximo,
@@ -2835,63 +2617,32 @@ def gravar_evento():
             "premio_total": Decimal128(str(premio_total)), 
             "premio_acumulado": Decimal128(str(premio_acumulado)),
             "bola_tope_acumulado": bola_tope_acumulado,
-            "minimo_de_venda": minimo_de_venda,
+            "minimo_de_venda": int(minimo_de_venda),
             "id_colaborador": session.get('id_colaborador', 'N/A'),
         }
         
-        novo_id_evento_int = None
-        
         if id_evento_edicao:
-            id_evento_int = int(id_evento_edicao)
-            
-            if 'status' in dados_evento:
-                 del dados_evento['status']
-            if 'data_ativado' in dados_evento:
-                 del dados_evento['data_ativado']
-                 
-            db.eventos.update_one({'id_evento': id_evento_int}, {'$set': dados_evento})
-            success_msg = f"Evento ID: {id_evento_int} atualizado com sucesso!"
-            
+            # Na edição, removemos campos de status para não sobrescrever dados de vendas ativas acidentalmente
+            db.eventos.update_one({'id_evento': int(id_evento_edicao)}, {'$set': dados_evento})
+            success_msg = f"Evento ID: {id_evento_edicao} atualizado com sucesso!"
         else:
-            novo_id_evento_int = get_next_evento_sequence()
-            if novo_id_evento_int is None:
-                raise Exception("Falha ao gerar ID sequencial do evento.")
-
+            novo_id = get_next_evento_sequence()
             dados_evento.update({
-                "id_evento": novo_id_evento_int, 
-                "status": "paralizado", 
+                "id_evento": novo_id, 
+                "status": "ativo", 
                 "data_ativado": None,
                 "data_cadastro": datetime.utcnow()
             })
-            
             db.eventos.insert_one(dados_evento)
-            success_msg = f"Evento '{dados_evento['descricao']}' salvo com sucesso! ID: {novo_id_evento_int}."
+            success_msg = f"Evento '{dados_evento['descricao']}' salvo com sucesso! ID: {novo_id}."
         
         return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
 
-
-    except ValueError as e:
-        session['form_data'] = dict(request.form)
-        view_redirect = 'alterar' if id_evento_edicao else 'novo'
-        redirect_args = {
-            'error': f"Erro de Validação: {e}",
-            'view': view_redirect
-        }
-        if id_evento_edicao:
-            redirect_args['id_evento'] = id_evento_edicao
-        return redirect(url_for('cadastro_evento', **redirect_args))
-        
     except Exception as e:
-        print(f"ERRO CRÍTICO na gravação/atualização de evento: {e}")
+        print(f"ERRO na gravação de evento: {e}")
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
-        redirect_args = {
-            'error': "Erro interno ao gravar/atualizar evento.",
-            'view': view_redirect
-        }
-        if id_evento_edicao:
-            redirect_args['id_evento'] = id_evento_edicao
-        return redirect(url_for('cadastro_evento', **redirect_args))
+        return redirect(url_for('cadastro_evento', error=f"Erro ao salvar: {e}", view=view_redirect, id_evento=id_evento_edicao))
 
 
 @app.route('/excluir_evento/<int:id_evento>', methods=['POST'])
@@ -5031,6 +4782,68 @@ def salvar_config_sorte_extra():
     except Exception as e:
         print(f"Erro ao salvar config sorte extra: {e}")
         return redirect(url_for('controle_sorte_extra', error=f"Erro na gravação: {str(e)}"))
+
+# =============================
+# Correcções do sistema
+# =============================
+
+@app.route('/admin/popular_bloqueios')
+@login_required
+def popular_bloqueios():
+    """
+    Popula a tabela 'config_bloqueio' com um único documento contendo 
+    o array de termos proibidos, apagando qualquer registro anterior.
+    Acessível apenas para administradores de nível 3.
+    """
+    # 1. Verificação de segurança: Apenas administradores nível 3
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso negado. Nível 3 requerido."))
+
+    db = get_vendas_db()
+    if db is None:
+        return redirect(url_for('cadastro_cliente', error="Erro de ligação à base de dados."))
+
+    try:
+        # 2. Lista de termos fornecida para bloqueio
+        termos_para_bloquear = [
+            "site_concorrente", "golpe", "fraude", "puta", "puto", "caralho", 
+            "porra", "buceta", "boceta", "pica", "merda", "cu", "cuzão", 
+            "viado", "arrombado", "foda", "pinto", "rola", "cacete", 
+            "piranha", "vagabundo", "vagabunda", "corno", "xoxota", 
+            "chupa", "chupeta", "putaria", "bicha", "traveco", "rapariga", 
+            "prostituta", "veado", "bichona", "vagina", "bosta", "fuck", 
+            "vaca", "boi", "penis", "xola"
+        ]
+
+        # 3. Limpeza e padronização da lista (remove duplicados e ordena)
+        termos_limpos = sorted(list(set([t.strip().lower() for t in termos_para_bloquear])))
+
+        # 4. ROTINA DE LIMPEZA: Apaga todos os registros existentes na coleção
+        delete_result = db.config_bloqueio.delete_many({})
+        print(f"[MANUTENÇÃO] Removidos {delete_result.deleted_count} registros antigos de bloqueio.")
+
+        # 5. Execução da gravação do novo documento único (Array Format)
+        db.config_bloqueio.update_one(
+            {'tipo': 'nicks_proibidos'},
+            {
+                '$set': {
+                    'tipo': 'nicks_proibidos',
+                    'palavras': termos_limpos,
+                    'data_atualizacao': datetime.utcnow()
+                }
+            },
+            upsert=True
+        )
+
+        contagem = len(termos_limpos)
+        msg = f"Limpeza concluída e lista atualizada! {contagem} termos salvos no formato oficial."
+        print(f"[LOG ADMIN] {session.get('nick')} resetou e atualizou bloqueios na sala {g.id_sala}.")
+        
+        return redirect(url_for('cadastro_cliente', success=msg, view='bloqueio'))
+
+    except Exception as e:
+        print(f"Erro ao processar limpeza/população de bloqueios: {e}")
+        return redirect(url_for('cadastro_cliente', error=f"Erro interno: {e}"))
 
 
 @app.route('/admin/corrigir_senhas_faltantes')

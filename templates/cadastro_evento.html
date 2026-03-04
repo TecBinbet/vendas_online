@@ -128,7 +128,11 @@
     </div>
 
     <div class="container">
-        <h2 class="text-2xl mb-0 -mt-4 text-blue-800 text-center">Gestão de Eventos</h2>
+        <h2 class="text-2xl -mt-4 text-blue-800 text-center">Gestão de Eventos</h2>
+
+        <div class="flex justify-center mt-2">
+            <a href="{{ url_for('submenu_eventos') }}" class="-mt-3 text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
+        </div>
 
         {% if error %}
             <div class="alert-danger">{{ error }}</div>
@@ -165,7 +169,6 @@
                 {% if active_view == 'alterar' %}Alteração de Evento (ID: {{ evento.get('id_evento', 'N/A') }}){% else %}Cadastro de Novo Evento{% endif %}
             </h3>
 
-            <!-- CORREÇÃO: onsubmit corrigido para chamar a nova lógica -->
             <form method="POST" action="{{ url_for('gravar_evento') }}" 
                   id="form-cadastro" class="space-y-4" 
                   onsubmit="return tratarSubmissao(this)"
@@ -222,10 +225,12 @@
                         <input type="number" id="unidade_de_venda" name="unidade_de_venda" required min="1" max="6" class="form-control"
                                value="{{ evento.get('unidade_de_venda', 1) }}" oninput="calculatePremioTotal()">
                     </div>
+                    
                     <div class="form-group">
                         <label for="valor_de_venda" class="required-label">Valor da Unidade (R$):</label>
                         <input type="number" id="valor_de_venda" name="valor_de_venda" required step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('valor_de_venda', 0.00) }}" oninput="calculatePremioTotal()">
+                               value="{% if active_view == 'alterar' %}{{ evento.get('valor_de_venda', '') }}{% else %}{% endif %}" 
+                               oninput="calculatePremioTotal()">
                     </div>
 
                     <div class="form-group">
@@ -237,7 +242,8 @@
                     <div class="form-group">
                         <label for="premio_quadra" class="label">Prêmio Quadra (R$):</label>
                         <input type="number" id="premio_quadra" name="premio_quadra" step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_quadra', 0.00) }}" oninput="calculatePremioTotal()">
+                               value="{% if active_view == 'alterar' %}{{ evento.get('premio_quadra', '') }}{% else %}{% endif %}" 
+                               oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
                         <label for="quantidade_de_linhas" class="required-label">Qtde. de Linhas (1-3):</label>
@@ -247,24 +253,28 @@
                     <div class="form-group">
                         <label for="premio_linha" class="required-label">Prêmio por Linha (R$):</label>
                         <input type="number" id="premio_linha" name="premio_linha" required step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_linha', 0.00) }}" oninput="calculatePremioTotal()">
+                               value="{% if active_view == 'alterar' %}{{ evento.get('premio_linha', '') }}{% else %}{% endif %}" 
+                               oninput="calculatePremioTotal()">
                     </div>
 
                     <div class="form-group">
                         <label for="premio_faltaum" class="label">Prêmio Falta Um (R$):</label>
                         <input type="number" id="premio_faltaum" name="premio_faltaum" step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_faltaum', 0.00) }}" oninput="calculatePremioTotal()">
+                               value="{% if active_view == 'alterar' %}{{ evento.get('premio_faltaum', '') }}{% else %}{% endif %}" 
+                               oninput="calculatePremioTotal()">
                     </div>
 
                     <div class="form-group">
                         <label for="premio_bingo" class="required-label">Prêmio Bingo (R$):</label>
                         <input type="number" id="premio_bingo" name="premio_bingo" required step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_bingo', 0.00) }}" oninput="calculatePremioTotal()">
+                               value="{% if active_view == 'alterar' %}{{ evento.get('premio_bingo', '') }}{% else %}{% endif %}" 
+                               oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
                         <label for="premio_segundobingo">Prêmio Segundo Bingo (R$):</label>
                         <input type="number" id="premio_segundobingo" name="premio_segundobingo" step="0.01" min="0" class="form-control"
-                               value="{{ evento.get('premio_segundobingo', 0.00) }}" oninput="calculatePremioTotal()">
+                               value="{% if active_view == 'alterar' %}{{ evento.get('premio_segundobingo', '') }}{% else %}{% endif %}" 
+                               oninput="calculatePremioTotal()">
                     </div>
                     <div class="form-group">
                         <label for="minimo_de_venda">Mínimo de Venda Necessário (Qtde):</label>
@@ -292,10 +302,20 @@
                                {% if (active_view == 'alterar' and evento.get('premio_acumulado', 0) <= 0) or (active_view != 'alterar' and default_acumulado <= 0) %}disabled{% endif %}>
                     </div>
 
+                    <!-- NOVO CAMPO: TIPO DE EVENTO -->
+                    <div class="form-group">
+                        <label for="tipo_de_evento">Tipo do Evento:</label>
+                        <select id="tipo_de_evento" name="tipo_de_evento" class="form-control">
+                            <option value="Normal" {% if (active_view == 'alterar' and evento.get('tipo_de_evento') == 'Normal') or active_view != 'alterar' %}selected{% endif %}>Normal</option>
+                            <option value="Especial" {% if active_view == 'alterar' and evento.get('tipo_de_evento') == 'Especial' %}selected{% endif %}>Especial</option>
+                        </select>
+                        <p class="text-[10px] text-blue-600 font-bold italic -mt-2">ESPECIAL - Destaque no setor de vendas</p>
+                    </div>
+
                     <div class="form-group">
                          <label for="status">Status (Automático):</label>
-                        <input type="text" id="status" name="status" disabled class="form-control bg-gray-100 font-semibold text-red-500"
-                               value="{% if active_view == 'alterar' %}{{ evento.get('status', 'Paralizado') }}{% else %}Paralizado (Padrão){% endif %}">
+                        <input type="text" id="status" name="status" disabled class="form-control bg-gray-100 font-semibold text-green-500"
+                               value="{% if active_view == 'alterar' %}{{ evento.get('status', 'Ativo') }}{% else %}Ativo (Padrão){% endif %}">
                     </div>
 
                 </div>
@@ -328,7 +348,7 @@
             
             <div class="mt-6 p-4 border rounded-lg bg-gray-50">
                 {% if active_view == 'consulta' and query and eventos_lista|length > 0 %}
-                    <h4 class="font-bold mb-3">{{ eventos_lista | length }} Resultado(s) encontrado(s) para "{{ query }}"</h4>
+                    <h4 class="font-bold mb-3">{{ eventos_lista | length }} Resultado(s) encontrado(s) for "{{ query }}"</h4>
                     {% for evento in eventos_lista %}
                         <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0">
                             <p><strong>ID:</strong> {{ evento.id_evento }}</p>
@@ -405,9 +425,6 @@
             </div>
         </div>
 
-        <div class="flex justify-center mt-2">
-            <a href="{{ url_for('submenu_eventos') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
-        </div>
         
     </div>
 
@@ -443,9 +460,26 @@
 
     <script>
         /**
-         * NOVA FUNÇÃO: trata a submissão do formulário, ativa loading e desativa botões.
+         * Trata a submissão do formulário, ativa loading e desativa botões.
          */
         function tratarSubmissao(form) {
+            // AJUSTE: Garante que campos decimais vazios sejam enviados como "0.00" para evitar erro no servidor
+            const camposParaZerar = [
+                'valor_de_venda', 
+                'premio_quadra', 
+                'premio_linha', 
+                'premio_faltaum', 
+                'premio_bingo', 
+                'premio_segundobingo'
+            ];
+
+            camposParaZerar.forEach(nome => {
+                const input = form.querySelector(`[name="${nome}"]`);
+                if (input && input.value.trim() === "") {
+                    input.value = "0.00";
+                }
+            });
+
             // 1. Ativa o overlay de carregamento
             const overlay = document.getElementById('loading-overlay');
             if (overlay) overlay.classList.remove('hidden');
@@ -464,21 +498,11 @@
                 btn.classList.add('opacity-50', 'cursor-not-allowed');
             });
 
-            // 4. Se houver um timeout de segurança (opcional)
-            setTimeout(() => {
-                if (overlay) overlay.classList.add('hidden');
-                allButtons.forEach(btn => {
-                    btn.disabled = false;
-                    btn.style.pointerEvents = 'auto';
-                    btn.classList.remove('opacity-50', 'cursor-not-allowed');
-                });
-            }, 15000);
-
             return true; // Continua com o envio do formulário
         }
 
         /**
-         * NOVA FUNÇÃO: Especifica para o botão de exclusão da modal
+         * Especifica para o botão de exclusão da modal
          */
         function ativarLoadingModal(btn) {
             const overlay = document.getElementById('loading-overlay');
@@ -515,6 +539,7 @@
         }
 
         function calculatePremioTotal() {
+            // parseFloat("") retorna NaN, usamos o || 0 para tratar campos vazios no cálculo dinâmico
             const quadra = parseFloat(document.getElementById('premio_quadra')?.value) || 0;
             const linhas_qtde = parseInt(document.getElementById('quantidade_de_linhas')?.value) || 0;
             const linha_valor = parseFloat(document.getElementById('premio_linha')?.value) || 0;
@@ -523,8 +548,10 @@
             const segundobingo = parseFloat(document.getElementById('premio_segundobingo')?.value) || 0;
             const valor_unidade = parseFloat(document.getElementById('valor_de_venda')?.value) || 0;
             const unidade_venda = parseInt(document.getElementById('unidade_de_venda')?.value) || 1;
+            
             const totalLinha = linhas_qtde * linha_valor;
             const premioTotal = quadra + totalLinha + bingo + segundobingo + faltaum ; 
+            
             let minimoVenda = 0;
             if (valor_unidade > 0 && unidade_venda > 0) {
                  minimoVenda = premioTotal / valor_unidade ;
@@ -539,17 +566,19 @@
             const bolaTopeInput = document.getElementById('bola_tope_acumulado');
             const bolaTopeLabel = document.getElementById('label_bola_tope');
 
-            if (acumulado > 0) {
-                bolaTopeInput.disabled = false;
-                bolaTopeInput.setAttribute('required', 'required');
-                bolaTopeLabel.classList.remove('text-gray-400');
-                bolaTopeLabel.classList.add('required-label');
-            } else {
-                bolaTopeInput.disabled = true;
-                bolaTopeInput.removeAttribute('required');
-                bolaTopeInput.value = ''; 
-                bolaTopeLabel.classList.add('text-gray-400');
-                bolaTopeLabel.classList.remove('required-label');
+            if (bolaTopeInput && bolaTopeLabel) {
+                if (acumulado > 0) {
+                    bolaTopeInput.disabled = false;
+                    bolaTopeInput.setAttribute('required', 'required');
+                    bolaTopeLabel.classList.remove('text-gray-400');
+                    bolaTopeLabel.classList.add('required-label');
+                } else {
+                    bolaTopeInput.disabled = true;
+                    bolaTopeInput.removeAttribute('required');
+                    bolaTopeInput.value = ''; 
+                    bolaTopeLabel.classList.add('text-gray-400');
+                    bolaTopeLabel.classList.remove('required-label');
+                }
             }
         }
         
@@ -621,6 +650,7 @@
             const maxInput = document.getElementById('numero_maximo');
             const faltaUmInput = document.getElementById('premio_faltaum');
             const qtdLinhasInput = document.getElementById('quantidade_de_linhas');
+            const premioSegundoBingoInput = document.getElementById('premio_segundobingo'); 
             
             if (tipoSelect) {
                 const tipo = tipoSelect.value.toString(); 
@@ -639,6 +669,12 @@
                         qtdLinhasInput.disabled = true;
                         qtdLinhasInput.classList.add('bg-gray-200', 'text-gray-500');
                     }
+                    // Segundo Bingo desativado para cartelas de 25 números
+                    if (premioSegundoBingoInput) {
+                        premioSegundoBingoInput.value = "0.00";
+                        premioSegundoBingoInput.disabled = true;
+                        premioSegundoBingoInput.classList.add('bg-gray-200', 'text-gray-500');
+                    }
                 } else {
                     if (faltaUmInput) {
                         faltaUmInput.disabled = false;
@@ -647,6 +683,11 @@
                     if (qtdLinhasInput) {
                         qtdLinhasInput.disabled = false;
                         qtdLinhasInput.classList.remove('bg-gray-200', 'text-gray-500');
+                    }
+                    // Reativa o campo para cartelas de 15 números
+                    if (premioSegundoBingoInput) {
+                        premioSegundoBingoInput.disabled = false;
+                        premioSegundoBingoInput.classList.remove('bg-gray-200', 'text-gray-500');
                     }
                 }
                 calculatePremioTotal();
