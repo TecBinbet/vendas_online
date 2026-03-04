@@ -43,7 +43,7 @@
         .view-content { display: none; }
         .view-content.active-view-show { display: block !important; }
 
-        /* --- CSS DA MODAL DE EXCLUSÃO --- */
+        /* --- CSS DAS MODAIS --- */
         .modal-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -60,6 +60,8 @@
             width: 90%;
             max-width: 500px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+            max-height: 90vh;
+            overflow-y: auto;
         }
         .modal-btn {
             padding: 0.6rem 1rem;
@@ -124,7 +126,7 @@
 
    <div id="loading-overlay" class="hidden">
         <div class="spinner"></div>
-        <p class="loading-text" id="loading-message">Processando, aguarde...</p>
+        <p class="loading-text" id="loading-message">A processar, aguarde...</p>
     </div>
 
     <div class="container">
@@ -157,7 +159,7 @@
         </div>
 
         <div class="mb-1 -mt-3 p-1 bg-info text-white border border-blue-600 rounded-lg">
-            Total de Eventos Cadastrados: <strong id="total-eventos">{{ total_eventos | default(0) }}</strong>.
+            Total de Eventos Registados: <strong id="total-eventos">{{ total_eventos | default(0) }}</strong>.
         </div>
         
         {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
@@ -166,7 +168,7 @@
             {% set evento = evento_edicao if evento_edicao is not none else {} %} 
             
             <h3 class="text-lg font-semibold mb-1 -mt-1 {% if active_view == 'alterar' %}text-accent{% else %}text-primary{% endif %}">
-                {% if active_view == 'alterar' %}Alteração de Evento (ID: {{ evento.get('id_evento', 'N/A') }}){% else %}Cadastro de Novo Evento{% endif %}
+                {% if active_view == 'alterar' %}Alteração de Evento (ID: {{ evento.get('id_evento', 'N/A') }}){% else %}Registo de Novo Evento{% endif %}
             </h3>
 
             <form method="POST" action="{{ url_for('gravar_evento') }}" 
@@ -175,7 +177,7 @@
                   onkeydown="return preventDefaultOnEnter(event)">
                 
                 {% if active_view == 'alterar' %}
-                    <input type="hidden" name="id_evento_edicao" value="{{ evento.get('id_evento', '') }}">
+                    <input type="hidden" name="id_evento_edicao" id="id_evento_edicao" value="{{ evento.get('id_evento', '') }}">
                 {% endif %}
 
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-2">
@@ -320,16 +322,16 @@
 
                 </div>
                 
-                <div class="mt-6 flex justify-end space-x-2">
-                    <button type="submit" class="btn-submit btn-save">
-                        {% if active_view == 'alterar' %}
-                            ✓ Salvar Alterações
-                        {% else %}
-                            💾 Salvar Evento
-                        {% endif %}
-                    </button>
+                <div class="mt-6 flex justify-end space-x-2 items-center">
                     {% if active_view == 'alterar' %}
+                        <!-- Botão de Replicação visível apenas ao alterar -->
+                        <button type="button" onclick="abrirModalReplicar()" class="btn-submit bg-purple-600 hover:bg-purple-800 shadow-md text-white mr-auto flex items-center gap-2">
+                            <span>🔄</span> Replicar Evento
+                        </button>
                         <a href="{{ url_for('cadastro_evento', view='listar') }}" class="nav-link bg-gray-400 text-white hover:bg-gray-500">Cancelar</a>
+                        <button type="submit" class="btn-submit btn-save shadow-md">✓ Salvar Alterações</button>
+                    {% else %}
+                        <button type="submit" class="btn-submit btn-save shadow-md">💾 Salvar Evento</button>
                     {% endif %}
                 </div>
             </form>
@@ -348,14 +350,14 @@
             
             <div class="mt-6 p-4 border rounded-lg bg-gray-50">
                 {% if active_view == 'consulta' and query and eventos_lista|length > 0 %}
-                    <h4 class="font-bold mb-3">{{ eventos_lista | length }} Resultado(s) encontrado(s) for "{{ query }}"</h4>
+                    <h4 class="font-bold mb-3">{{ eventos_lista | length }} Resultado(s) encontrado(s) para "{{ query }}"</h4>
                     {% for evento in eventos_lista %}
                         <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0">
                             <p><strong>ID:</strong> {{ evento.id_evento }}</p>
                             <p><strong>Descrição:</strong> <span class="font-semibold text-primary">{{ evento.descricao }}</span></p>
                             <p><strong>Data/Hora:</strong> {{ evento.data_evento | default('N/A') }} às {{ evento.hora_evento | default('N/A') }}</p>
                             <p><strong>Prêmio Total:</strong> R$ {{ evento.premio_total | default(0.00) | round(2) }} | <strong>Status:</strong> {{ evento.status }}</p>
-                            <p class="text-xs text-gray-500 mt-1">Vendas Registradas: {{ evento.qtd_vendas | default(0) }}</p>
+                            <p class="text-xs text-gray-500 mt-1">Vendas Registadas: {{ evento.qtd_vendas | default(0) }}</p>
 
                             <div class="mt-2 flex space-x-3">
                                 <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
@@ -418,7 +420,7 @@
                             </tr>
                             {% endfor %}
                         {% else %}
-                            <tr><td colspan="7" class="py-8 text-center text-gray-500 font-bold">Nenhum evento cadastrado.</td></tr>
+                            <tr><td colspan="7" class="py-8 text-center text-gray-500 font-bold">Nenhum evento registado.</td></tr>
                         {% endif %}
                     </tbody>
                 </table>
@@ -428,7 +430,61 @@
         
     </div>
 
-    <!-- Modais -->
+    <!-- MODAL REPLICAR EVENTO -->
+    <div id="replicar-modal" class="modal-overlay" onclick="fecharModalReplicar()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-1 text-purple-700 flex items-center gap-2"><span>🔄</span> Replicar Evento em Lote</h3>
+            <p class="text-sm text-gray-600 mb-4 border-b pb-3">Configure a quantidade e o intervalo para gerar cópias exatas (excepto nome e horário).</p>
+            
+            <div class="space-y-4">
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Quantidade (Réplicas)</label>
+                        <input type="number" id="rep_qtd" min="1" max="20" value="1" class="form-control text-center text-lg font-bold text-purple-700">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Intervalo (Minutos)</label>
+                        <input type="number" id="rep_intervalo" min="1" value="30" class="form-control text-center text-lg font-bold text-purple-700">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Status Inicial das Cópias</label>
+                    <select id="rep_status" class="form-control">
+                        <option value="paralizado" selected>Paralisado (Padrão e Recomendado)</option>
+                        <option value="ativo">Ativo</option>
+                    </select>
+                </div>
+
+                <div class="bg-purple-50 p-3 rounded-lg border border-purple-200">
+                    <button type="button" id="btn-gerar-previa" onclick="gerarPrevia()" class="w-full bg-purple-600 text-white font-bold py-2 rounded shadow hover:bg-purple-700 transition">
+                        🔍 Gerar Prévia de Horários
+                    </button>
+                    
+                    <div id="previa-container" class="mt-3 max-h-40 overflow-y-auto hidden">
+                        <!-- A prévia será injectada aqui -->
+                    </div>
+                </div>
+            </div>
+            
+            <div class="flex justify-end space-x-2 mt-6 pt-4 border-t border-gray-200">
+                <button type="button" class="modal-btn btn-cancel" onclick="fecharModalReplicar()">Cancelar</button>
+                <form id="form-confirmar-replicacao" method="POST" action="/api/gravar_replicacao" style="display: none;">
+                    <!-- Campos ocultos preenchidos pelo JS -->
+                    <input type="hidden" name="id_evento_molde" id="post_id_molde">
+                    <input type="hidden" name="qtd" id="post_qtd">
+                    <input type="hidden" name="intervalo" id="post_intervalo">
+                    <input type="hidden" name="status_replicas" id="post_status">
+                    
+                    <button type="submit" class="modal-btn bg-emerald-600 hover:bg-emerald-700 text-white shadow-lg flex items-center gap-2" onclick="return ativarLoadingModal(this, 'A Gravar Lote...')">
+                        <span>🚀</span> Confirmar e Gravar Lote
+                    </button>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE EXCLUSÃO -->
     <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
             <h3 id="modal-title" class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
@@ -440,12 +496,12 @@
             <div id="modal-critical-msg" style="display: none;">
                 <div class="warning-box">
                     <strong class="block mb-1 text-lg">⚠️ ATENÇÃO: VENDAS ENCONTRADAS!</strong>
-                    Existem <span id="modal-qtd-vendas" class="font-black text-xl">0</span> vendas registradas para este evento.
+                    Existem <span id="modal-qtd-vendas" class="font-black text-xl">0</span> vendas registadas para este evento.
                 </div>
                 <p class="mb-2 text-red-700 font-bold">
-                    Ao excluir este evento, TODAS as vendas e o arquivo de vendas associado serão APAGADOS PERMANENTEMENTE.
+                    Ao excluir este evento, TODAS as vendas e o ficheiro de vendas associado serão APAGADOS PERMANENTEMENTE.
                 </p>
-                <p class="mb-4 text-sm text-gray-600">Não será possível recuperar esses dados.</p>
+                <p class="mb-4 text-sm text-gray-600">Não será possível recuperar estes dados.</p>
             </div>
 
             <p class="mb-4"><strong>ID:</strong> <span id="modal-delete-id" class="font-bold">...</span></p>
@@ -460,57 +516,51 @@
 
     <script>
         /**
-         * Trata a submissão do formulário, ativa loading e desativa botões.
+         * Trata a submissão do formulário base
          */
         function tratarSubmissao(form) {
-            // AJUSTE: Garante que campos decimais vazios sejam enviados como "0.00" para evitar erro no servidor
             const camposParaZerar = [
-                'valor_de_venda', 
-                'premio_quadra', 
-                'premio_linha', 
-                'premio_faltaum', 
-                'premio_bingo', 
-                'premio_segundobingo'
+                'valor_de_venda', 'premio_quadra', 'premio_linha', 
+                'premio_faltaum', 'premio_bingo', 'premio_segundobingo'
             ];
 
             camposParaZerar.forEach(nome => {
                 const input = form.querySelector(`[name="${nome}"]`);
-                if (input && input.value.trim() === "") {
-                    input.value = "0.00";
-                }
+                if (input && input.value.trim() === "") input.value = "0.00";
             });
 
-            // 1. Ativa o overlay de carregamento
             const overlay = document.getElementById('loading-overlay');
             if (overlay) overlay.classList.remove('hidden');
 
-            // 2. Localiza o botão que disparou a ação para feedback visual
             const btnSubmit = form.querySelector('button[type="submit"]');
-            if (btnSubmit) {
-                btnSubmit.innerText = "A processar...";
-            }
+            if (btnSubmit) btnSubmit.innerText = "A processar...";
 
-            // 3. Desativa TODOS os botões de ação para impedir múltiplos cliques
             const allButtons = document.querySelectorAll('button, .nav-link');
             allButtons.forEach(btn => {
                 btn.disabled = true;
-                btn.style.pointerEvents = 'none'; // Bloqueia cliques em links também
+                btn.style.pointerEvents = 'none'; 
                 btn.classList.add('opacity-50', 'cursor-not-allowed');
             });
-
-            return true; // Continua com o envio do formulário
+            return true;
         }
 
         /**
-         * Especifica para o botão de exclusão da modal
+         * Loading para botões de modal
          */
-        function ativarLoadingModal(btn) {
+        function ativarLoadingModal(btn, msg = "A excluir...") {
             const overlay = document.getElementById('loading-overlay');
+            const msgEl = document.getElementById('loading-message');
+            if (msgEl) msgEl.textContent = msg;
             if (overlay) overlay.classList.remove('hidden');
             
-            btn.innerText = "Excluindo...";
-            btn.disabled = true;
-            btn.classList.add('opacity-50', 'cursor-not-allowed');
+            btn.innerText = msg;
+            
+            // AJUSTE: O setTimeout garante que o navegador consiga submeter 
+            // o formulário antes de o botão ser fisicamente desativado na tela.
+            setTimeout(() => {
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+            }, 50);
             
             const cancelBtn = document.querySelector('.btn-cancel');
             if (cancelBtn) cancelBtn.classList.add('hidden');
@@ -520,9 +570,7 @@
 
         window.addEventListener('pageshow', function(event) {
             const overlay = document.getElementById('loading-overlay');
-            if (overlay) {
-                overlay.classList.add('hidden');
-            }
+            if (overlay) overlay.classList.add('hidden');
         });
 
         document.addEventListener('DOMContentLoaded', (event) => {
@@ -539,7 +587,6 @@
         }
 
         function calculatePremioTotal() {
-            // parseFloat("") retorna NaN, usamos o || 0 para tratar campos vazios no cálculo dinâmico
             const quadra = parseFloat(document.getElementById('premio_quadra')?.value) || 0;
             const linhas_qtde = parseInt(document.getElementById('quantidade_de_linhas')?.value) || 0;
             const linha_valor = parseFloat(document.getElementById('premio_linha')?.value) || 0;
@@ -553,9 +600,8 @@
             const premioTotal = quadra + totalLinha + bingo + segundobingo + faltaum ; 
             
             let minimoVenda = 0;
-            if (valor_unidade > 0 && unidade_venda > 0) {
-                 minimoVenda = premioTotal / valor_unidade ;
-            }
+            if (valor_unidade > 0 && unidade_venda > 0) minimoVenda = premioTotal / valor_unidade;
+            
             document.getElementById('premio_total').value = premioTotal.toFixed(2);
             document.getElementById('minimo_de_venda').value = Math.ceil(minimoVenda); 
             toggleBolaTope();
@@ -582,27 +628,22 @@
             }
         }
         
-        // --- LÓGICA DA MODAL DE EXCLUSÃO ---
-        
+        // --- LÓGICA DE EXCLUSÃO ---
         const deleteModal = document.getElementById('delete-modal');
         const modalDeleteId = document.getElementById('modal-delete-id');
         const modalDeleteDescricao = document.getElementById('modal-delete-descricao');
         const btnConfirmDelete = document.getElementById('modal-btn-confirm-delete');
-        
         const modalNormalMsg = document.getElementById('modal-normal-msg');
         const modalCriticalMsg = document.getElementById('modal-critical-msg');
         const modalQtdVendas = document.getElementById('modal-qtd-vendas');
         const modalTitle = document.getElementById('modal-title');
-        
         let formIdParaExcluir = null; 
 
         function openDeleteModal(id, descricao, view, qtdVendas) {
             if (!deleteModal) return;
-
             formIdParaExcluir = `form-excluir-${view}-${id}`;
             modalDeleteId.textContent = id;
             modalDeleteDescricao.textContent = descricao;
-            
             const quantidade = parseInt(qtdVendas) || 0;
 
             if (quantidade > 0) {
@@ -621,7 +662,6 @@
                 btnConfirmDelete.classList.remove('btn-critical');
                 btnConfirmDelete.classList.add('btn-danger');
             }
-            
             deleteModal.style.display = 'flex';
         }
 
@@ -635,10 +675,7 @@
             btnConfirmDelete.onclick = function() {
                 if (formIdParaExcluir) {
                     const form = document.getElementById(formIdParaExcluir);
-                    if (form) {
-                        ativarLoadingModal(btnConfirmDelete);
-                        form.submit(); 
-                    }
+                    if (form) { ativarLoadingModal(btnConfirmDelete); form.submit(); }
                 }
             };
         }
@@ -654,101 +691,165 @@
             
             if (tipoSelect) {
                 const tipo = tipoSelect.value.toString(); 
-                if (maxInput && cartelaLimits[tipo]) {
-                    maxInput.value = cartelaLimits[tipo];
-                }
+                if (maxInput && cartelaLimits[tipo]) maxInput.value = cartelaLimits[tipo];
 
                 if (tipo === '25') {
                     if (faltaUmInput) {
-                        faltaUmInput.value = "0.00";
-                        faltaUmInput.disabled = true;
+                        faltaUmInput.value = "0.00"; faltaUmInput.disabled = true;
                         faltaUmInput.classList.add('bg-gray-200', 'text-gray-500'); 
                     }
                     if (qtdLinhasInput) {
-                        qtdLinhasInput.value = "1";
-                        qtdLinhasInput.disabled = true;
+                        qtdLinhasInput.value = "1"; qtdLinhasInput.disabled = true;
                         qtdLinhasInput.classList.add('bg-gray-200', 'text-gray-500');
                     }
-                    // Segundo Bingo desativado para cartelas de 25 números
                     if (premioSegundoBingoInput) {
-                        premioSegundoBingoInput.value = "0.00";
-                        premioSegundoBingoInput.disabled = true;
+                        premioSegundoBingoInput.value = "0.00"; premioSegundoBingoInput.disabled = true;
                         premioSegundoBingoInput.classList.add('bg-gray-200', 'text-gray-500');
                     }
                 } else {
-                    if (faltaUmInput) {
-                        faltaUmInput.disabled = false;
-                        faltaUmInput.classList.remove('bg-gray-200', 'text-gray-500');
-                    }
-                    if (qtdLinhasInput) {
-                        qtdLinhasInput.disabled = false;
-                        qtdLinhasInput.classList.remove('bg-gray-200', 'text-gray-500');
-                    }
-                    // Reativa o campo para cartelas de 15 números
-                    if (premioSegundoBingoInput) {
-                        premioSegundoBingoInput.disabled = false;
-                        premioSegundoBingoInput.classList.remove('bg-gray-200', 'text-gray-500');
-                    }
+                    if (faltaUmInput) { faltaUmInput.disabled = false; faltaUmInput.classList.remove('bg-gray-200', 'text-gray-500'); }
+                    if (qtdLinhasInput) { qtdLinhasInput.disabled = false; qtdLinhasInput.classList.remove('bg-gray-200', 'text-gray-500'); }
+                    if (premioSegundoBingoInput) { premioSegundoBingoInput.disabled = false; premioSegundoBingoInput.classList.remove('bg-gray-200', 'text-gray-500'); }
                 }
                 calculatePremioTotal();
             }
         }
 
-    let checkTimeout = null;
+        // --- LÓGICA DE DISPONIBILIDADE E REPLICAÇÃO ---
+        let checkTimeout = null;
 
-    function checkAvailability() {
-        const dataInput = document.getElementById('data_evento');
-        const horaInput = document.getElementById('hora_evento');
-        const msgSpan = document.getElementById('hora-availability-msg');
-        const btnSubmit = document.querySelector('.btn-submit');
-        
-        const idEdicaoInput = document.querySelector('input[name="id_evento_edicao"]');
-        const excludeId = idEdicaoInput ? idEdicaoInput.value : '';
+        function checkAvailability() {
+            const dataInput = document.getElementById('data_evento');
+            const horaInput = document.getElementById('hora_evento');
+            const msgSpan = document.getElementById('hora-availability-msg');
+            const btnSubmit = document.querySelector('.btn-save');
+            const idEdicaoInput = document.getElementById('id_evento_edicao');
+            const excludeId = idEdicaoInput ? idEdicaoInput.value : '';
 
-        msgSpan.textContent = '';
-        msgSpan.className = 'text-xs font-bold mt-1 block h-4'; 
+            msgSpan.textContent = '';
+            msgSpan.className = 'text-xs font-bold mt-1 block h-4'; 
 
-        if (!dataInput.value || !horaInput.value) return;
+            if (!dataInput.value || !horaInput.value) return;
 
-        clearTimeout(checkTimeout);
-        checkTimeout = setTimeout(() => {
-            msgSpan.textContent = 'Verificando disponibilidade...';
-            msgSpan.classList.add('text-blue-500');
+            clearTimeout(checkTimeout);
+            checkTimeout = setTimeout(() => {
+                msgSpan.textContent = 'A verificar disponibilidade...';
+                msgSpan.classList.add('text-blue-500');
 
-            const url = `/api/check_event_availability?data=${dataInput.value}&hora=${horaInput.value}&exclude_id=${excludeId}`;
+                const url = `/api/check_event_availability?data=${dataInput.value}&hora=${horaInput.value}&exclude_id=${excludeId}`;
 
-            fetch(url)
-                .then(response => response.json())
-                .then(data => {
-                    if (data.exists) {
-                        msgSpan.textContent = `⛔ ${data.msg}`;
-                        msgSpan.classList.remove('text-blue-500');
-                        msgSpan.classList.add('text-red-600');
-                        if(btnSubmit) {
-                            btnSubmit.disabled = true;
-                            btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+                fetch(url)
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.exists) {
+                            msgSpan.textContent = `⛔ ${data.msg}`;
+                            msgSpan.classList.remove('text-blue-500');
+                            msgSpan.classList.add('text-red-600');
+                            if(btnSubmit) { btnSubmit.disabled = true; btnSubmit.classList.add('opacity-50', 'cursor-not-allowed'); }
+                        } else {
+                            msgSpan.textContent = '✅ Horário Disponível';
+                            msgSpan.classList.remove('text-blue-500', 'text-red-600');
+                            msgSpan.classList.add('text-green-600');
+                            if(btnSubmit) { btnSubmit.disabled = false; btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed'); }
+                            setTimeout(() => { if(msgSpan.textContent.includes('Disponível')) msgSpan.textContent = ''; }, 3000);
                         }
+                    })
+                    .catch(err => { console.error('Erro:', err); msgSpan.textContent = ''; });
+            }, 500); 
+        }
+
+        // FUNÇÕES DA MODAL DE REPLICAÇÃO
+        function abrirModalReplicar() {
+            document.getElementById('replicar-modal').style.display = 'flex';
+            document.getElementById('previa-container').innerHTML = '';
+            document.getElementById('previa-container').classList.add('hidden');
+            document.getElementById('form-confirmar-replicacao').style.display = 'none';
+        }
+
+        function fecharModalReplicar() {
+            document.getElementById('replicar-modal').style.display = 'none';
+        }
+
+        async function gerarPrevia() {
+            const idMolde = document.getElementById('id_evento_edicao').value;
+            const qtd = document.getElementById('rep_qtd').value;
+            const intervalo = document.getElementById('rep_intervalo').value;
+            
+            const btn = document.getElementById('btn-gerar-previa');
+            const container = document.getElementById('previa-container');
+            const formGravar = document.getElementById('form-confirmar-replicacao');
+
+            if (!qtd || qtd < 1 || !intervalo || intervalo < 1) {
+                alert("Forneça valores válidos para Quantidade e Intervalo.");
+                return;
+            }
+
+            btn.innerHTML = '⏳ A calcular horários...';
+            btn.disabled = true;
+            container.innerHTML = '';
+            container.classList.remove('hidden');
+            formGravar.style.display = 'none';
+
+            try {
+                // Preparamos o pedido para o nosso novo endpoint
+                const response = await fetch('/api/previa_replicacao', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        id_evento: idMolde, 
+                        qtd: parseInt(qtd), 
+                        intervalo: parseInt(intervalo) 
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    container.innerHTML = `<p class="text-red-600 font-bold p-2 bg-red-100 rounded">Erro: ${data.error}</p>`;
+                    return;
+                }
+
+                let html = '<ul class="text-sm space-y-1 bg-white p-2 border border-gray-200 rounded">';
+                let todosLivres = true;
+
+                data.previa.forEach((item, index) => {
+                    if (item.livre) {
+                        html += `<li class="text-green-700 font-medium">✅ ${item.data_hora_formatada} <span class="text-xs text-gray-400">- Livre</span></li>`;
                     } else {
-                        msgSpan.textContent = '✅ Horário Disponível';
-                        msgSpan.classList.remove('text-blue-500', 'text-red-600');
-                        msgSpan.classList.add('text-green-600');
-                        if(btnSubmit) {
-                            btnSubmit.disabled = false;
-                            btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
-                        }
-                        setTimeout(() => { if(msgSpan.textContent.includes('Disponível')) msgSpan.textContent = ''; }, 3000);
+                        html += `<li class="text-red-600 font-bold">❌ ${item.data_hora_formatada} <span class="text-xs text-red-400">- Ocupado</span></li>`;
+                        todosLivres = false;
                     }
-                })
-                .catch(err => { console.error('Erro:', err); msgSpan.textContent = ''; });
-        }, 500); 
-    }
+                });
+                html += '</ul>';
 
-    document.addEventListener('DOMContentLoaded', () => {
-        const dataInput = document.getElementById('data_evento');
-        const horaInput = document.getElementById('hora_evento');
-        if(dataInput) dataInput.addEventListener('change', checkAvailability);
-        if(horaInput) horaInput.addEventListener('input', checkAvailability);
-    });
+                if (!todosLivres) {
+                    html += `<p class="text-xs text-red-600 mt-2 font-bold bg-red-100 p-2 rounded">⚠️ Conflito detetado. Ajuste o intervalo ou a data/hora do evento original e tente novamente.</p>`;
+                } else {
+                    // Se tudo está verde, preenchemos os inputs hidden e libertamos o botão
+                    document.getElementById('post_id_molde').value = idMolde;
+                    document.getElementById('post_qtd').value = qtd;
+                    document.getElementById('post_intervalo').value = intervalo;
+                    document.getElementById('post_status').value = document.getElementById('rep_status').value;
+                    formGravar.style.display = 'block';
+                }
+
+                container.innerHTML = html;
+
+            } catch (err) {
+                console.error(err);
+                container.innerHTML = `<p class="text-red-600 font-bold">Erro ao comunicar com o servidor.</p>`;
+            } finally {
+                btn.innerHTML = '🔍 Gerar Prévia de Horários';
+                btn.disabled = false;
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            const dataInput = document.getElementById('data_evento');
+            const horaInput = document.getElementById('hora_evento');
+            if(dataInput) dataInput.addEventListener('change', checkAvailability);
+            if(horaInput) horaInput.addEventListener('input', checkAvailability);
+        });
 
     </script>
 </body>

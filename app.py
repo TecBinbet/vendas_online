@@ -9,14 +9,13 @@ from pymongo import MongoClient
 from pymongo.errors import ConnectionFailure, OperationFailure
 from bson.objectid import ObjectId
 from bson.decimal128 import Decimal128
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import quote_plus
 import os
 import re # Para a busca de clientes e limpeza de nome
 import bcrypt
 import io # Para manipulação de arquivos em memória
 from functools import wraps # Para o decorator login_required
-from datetime import timedelta
 import certifi  # Para certificados SSL
 import html 
 import unicodedata # Para limpeza de nome de arquivo
@@ -4782,6 +4781,169 @@ def salvar_config_sorte_extra():
     except Exception as e:
         print(f"Erro ao salvar config sorte extra: {e}")
         return redirect(url_for('controle_sorte_extra', error=f"Erro na gravação: {str(e)}"))
+
+
+@app.route('/api/previa_replicacao', methods=['POST'])
+@login_required
+def previa_replicacao():
+    """
+    Recebe os dados via AJAX e calcula os próximos N horários com base no intervalo.
+    Verifica no banco se cada horário está livre (retorna True/False para cada).
+    """
+    db = get_vendas_db()
+    if db is None:
+        return jsonify({"error": "Banco de dados inacessível"}), 500
+
+    dados = request.get_json()
+    
+    if not dados:
+        return jsonify({"error": "Nenhum dado recebido."}), 400
+
+    id_evento_molde = dados.get('id_evento')
+    
+    # Assegura que qtd e intervalo são inteiros para evitar erros de cálculo
+    try:
+        qtd = int(dados.get('qtd', 1))
+        intervalo_minutos = int(dados.get('intervalo', 30))
+    except (ValueError, TypeError) as e:
+        return jsonify({"error": "Quantidade ou intervalo inválidos."}), 400
+
+    if not id_evento_molde:
+        return jsonify({"error": "ID do evento não fornecido."}), 400
+
+    try:
+        # 1. Obter o evento molde
+        evento_molde = db.eventos.find_one({'id_evento': int(id_evento_molde)})
+        if not evento_molde:
+            return jsonify({"error": "Evento molde não encontrado."}), 404
+        
+        # 2. Reconstruir a data/hora original do evento (DD/MM/YYYY HH:MM)
+        data_str = evento_molde.get('data_evento')
+        hora_str = evento_molde.get('hora_evento')
+        
+        if not data_str or not hora_str:
+             return jsonify({"error": "Evento molde com dados de data/hora incompletos."}), 400
+             
+        base_dt = datetime.strptime(f"{data_str} {hora_str}", "%d/%m/%Y %H:%M")
+
+        lista_previa = []
+
+        # 3. Calcular e verificar os próximos N slots
+        for i in range(1, qtd + 1):
+            # O primeiro slot criado é base + (1 * intervalo)
+            proximo_dt = base_dt + timedelta(minutes=intervalo_minutos * i)
+            
+            data_formatada_verificar = proximo_dt.strftime("%d/%m/%Y")
+            hora_formatada_verificar = proximo_dt.strftime("%H:%M")
+
+            # Verifica colisão
+            existe = db.eventos.find_one({
+                "data_evento": data_formatada_verificar,
+                "hora_evento": hora_formatada_verificar
+            })
+
+            lista_previa.append({
+                "data_hora_formatada": proximo_dt.strftime("%d/%m/%Y às %H:%M"),
+                "livre": not bool(existe)
+            })
+            
+        return jsonify({"previa": lista_previa})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc() # Imprime a stack trace completa no console para ajudar no debug
+        return jsonify({"error": "Erro interno ao calcular horários."}), 500
+
+
+@app.route('/api/gravar_replicacao', methods=['POST'])
+@login_required
+def gravar_replicacao():
+    """
+    Rota final que grava as cópias caso o operador confirme.
+    Refaz a verificação de segurança por precaução.
+    """
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+
+    db = get_vendas_db()
+    if db is None:
+        return redirect(url_for('menu_operacoes', error="Banco de Dados Offline"))
+
+    id_evento_molde = int(request.form.get('id_evento_molde'))
+    qtd = int(request.form.get('qtd', 0))
+    intervalo_minutos = int(request.form.get('intervalo', 0))
+    status_replicas = request.form.get('status_replicas', 'paralizado')
+
+    if qtd <= 0 or intervalo_minutos <= 0:
+        return redirect(url_for('cadastro_evento', view='alterar', id_evento=id_evento_molde, error="Parâmetros inválidos."))
+
+    try:
+        evento_molde = db.eventos.find_one({'id_evento': id_evento_molde})
+        if not evento_molde:
+            raise ValueError("Evento molde não localizado.")
+
+        # Data Base
+        base_dt = datetime.strptime(f"{evento_molde['data_evento']} {evento_molde['hora_evento']}", "%d/%m/%Y %H:%M")
+        
+        # Resgatar e formatar o prémio para a nova descrição
+        # Trata o Decimal128 caso venha do Mongo
+        premio_bruto = evento_molde.get('premio_total', Decimal128("0.00"))
+        if isinstance(premio_bruto, Decimal128):
+            premio_bruto = float(premio_bruto.to_decimal())
+        
+        # Formatação: 1500.0 -> "1.500,00" (Ajuste padrão brasileiro de moeda)
+        premio_formatado = f"{premio_bruto:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+        eventos_para_inserir = []
+
+        # Dupla verificação de segurança (backend check)
+        for i in range(1, qtd + 1):
+            novo_dt = base_dt + timedelta(minutes=intervalo_minutos * i)
+            data_str = novo_dt.strftime("%d/%m/%Y")
+            hora_str = novo_dt.strftime("%H:%M")
+
+            if db.eventos.find_one({"data_evento": data_str, "hora_evento": hora_str}):
+                return redirect(url_for('cadastro_evento', view='alterar', id_evento=id_evento_molde, 
+                                        error=f"Conflito de horário detectado em {data_str} {hora_str}. Cancelado."))
+
+            # Gera ID Seguro
+            novo_id = get_next_evento_sequence()
+
+            # REGRA 3: Formatação Automática da Descrição
+            nova_descricao = f"{novo_dt.strftime('%d/%m')} às {hora_str} - R$ {premio_formatado}"
+
+            # Cópia profunda do dicionário, removendo a raiz do MongoDB
+            novo_evento = evento_molde.copy()
+            if '_id' in novo_evento:
+                del novo_evento['_id']
+
+            # Atualização dos campos específicos da réplica
+            novo_evento.update({
+                "id_evento": novo_id,
+                "data_evento": data_str,
+                "hora_evento": hora_str,
+                "data_hora_evento": novo_dt,
+                "descricao": nova_descricao,
+                "status": status_replicas,
+                "data_ativado": None if status_replicas != 'ativo' else datetime.utcnow(),
+                "data_cadastro": datetime.utcnow(),
+                "id_colaborador": session.get('id_colaborador', 'N/A')
+            })
+
+            eventos_para_inserir.append(novo_evento)
+
+        # Inserção em Lote (Bulk Insert)
+        if eventos_para_inserir:
+            db.eventos.insert_many(eventos_para_inserir)
+            msg = f"Sucesso! {qtd} evento(s) replicado(s) com o status '{status_replicas}'."
+            return redirect(url_for('cadastro_evento', success=msg, view='listar'))
+        
+        return redirect(url_for('cadastro_evento', view='listar'))
+
+    except Exception as e:
+        return redirect(url_for('cadastro_evento', view='alterar', id_evento=id_evento_molde, error="Falha ao replicar eventos."))
+
+
 
 # =============================
 # Correcções do sistema

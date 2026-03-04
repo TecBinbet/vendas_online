@@ -99,7 +99,11 @@
 <body>
 
     <div class="container">
-        <h2 class="text-xl font-bold -mt-4 text-gray-900 text-center">⭐ Nova Venda</h2>
+        <div class="flex justify-center font-bold -mt-4">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
+        </div>
+
+        <h2 class="text-xl font-bold text-gray-900 text-center">⭐ Nova Venda</h2>
 
         {% if error %}
             <div class="alert alert-danger">{{ error }}</div>
@@ -244,9 +248,6 @@
     </div>
 
 {% endif %}
-        <div class="flex justify-center font-bold mt-4">
-            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
-        </div>
     </div>
     
     <!-- MODAL DE SELEÇÃO DE EVENTOS -->
@@ -272,9 +273,12 @@
                              <div class="flex justify-between items-start -mt-3">
                                 <p class="text-md font-bold text-primary">{{ evento.descricao }} ( {{ evento.id_evento }} )</p>
                             </div>
-                            <p class="text-md font-bold text-blue-700 ">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
-                            <div class="-mt-1 text-md font-semibold">
-                                <p>💰 R$ {{ '%.2f' | format(evento.valor_de_venda_float) }} / Kit</p>
+                            <p class="text-sm font-bold text-blue-700 text-center">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
+                            <div class="mt-1 space-y-0.5">
+                                <p class="text-sm font-semibold text-center text-gray-700">💰 Preço Unid.: R$ {{ '%.2f' | format(evento.valor_de_venda_float) }}</p>
+                                <p class="text-md font-semibold text-center text-green-900 bg-green-100/50 px-2 py-0.5 rounded border border-green-200 inline-block">
+                                    🏆 Premiação: R$ {{ evento.premio_total | format_moeda }}
+                                </p>
                             </div>
                         </div>
                         <div class="pt-1 border-t border-dashed mt-1">

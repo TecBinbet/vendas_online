@@ -28,7 +28,11 @@
 <body class="p-4 md:p-8">
 
     <div class="max-w-4xl mx-auto">
-        <h2 class="text-xl font-semibold mb-1 -mt-4 text-blue-800">📊 Consulta de Vendas</h2>
+        <div class="-mt-4 text-center">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary text-green-800 font-bold hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
+        </div>
+
+        <h2 class="text-xl font-semibold mb-1 text-blue-800">📊 Consulta de Vendas</h2>
 
         {% if error %}
             <div class="alert alert-danger">{{ error }}</div>
@@ -219,9 +223,6 @@
 
         {% endif %}
         
-        <div class="mt-2 text-center">
-            <a href="{{ url_for('menu_operacoes') }}" class="text-primary text-green-800 font-bold hover:text-secondary font-medium">← Voltar ao Menu de Operações</a>
-        </div>
     </div>
 
 </body>
