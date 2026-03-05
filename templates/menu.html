@@ -124,6 +124,20 @@
                 document.body.style.pointerEvents = 'auto';
             }
         };
+
+        /**
+         * EASTER EGG / ATALHO DE TECLADO: Ctrl + Shift + C
+         * Redireciona para o painel oculto de parâmetros.
+         * A validação real de segurança ocorre no Backend (Python).
+         */
+        document.addEventListener('keydown', function(event) {
+            // Verifica se as teclas Ctrl, Shift e 'C' (ou 'c') foram pressionadas em simultâneo
+            if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'c') {
+                event.preventDefault(); // Previne aberturas acidentais de consolas de browsers
+                ativarSpinner("A aceder ao painel técnico...");
+                window.location.href = "{{ url_for('parametros') }}";
+            }
+        });
     </script>
 </body>
 </html>

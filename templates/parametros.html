@@ -1,0 +1,291 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurações Técnicas - Sistema</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #111827; } 
+        .container { max-width: 1200px; margin: 40px auto; padding: 30px; background-color: white; border-radius: 12px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.5); }
+        .form-group label { font-weight: 600; display: block; margin-bottom: 5px; color: #374151; font-size: 0.9rem;}
+        
+        .form-control { width: 100%; padding: 8px 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box; }
+        .form-control:focus { outline: none; border-color: #3B82F6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
+        
+        .section-title { font-size: 1.2rem; font-weight: 800; color: #1F2937; border-bottom: 2px solid #E5E7EB; padding-bottom: 8px; margin-bottom: 15px; margin-top: 25px; }
+        
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #FCA5A5; font-weight: bold;}
+        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; font-weight: bold;}
+
+        /* Estilo dos cartões de percentagem */
+        .card-regra { background-color: #F9FAFB; padding: 15px; border-radius: 8px; border: 1px solid #E5E7EB; display: flex; flex-direction: column; justify-content: space-between; }
+        .card-title { font-weight: 800; color: #374151; margin-bottom: 12px; border-bottom: 1px solid #D1D5DB; padding-bottom: 8px; font-size: 1rem; }
+        .total-box { background-color: #F3F4F6; padding: 10px; border-radius: 6px; border: 1px dashed #9CA3AF; margin-top: 15px; display: flex; justify-content: space-between; align-items: center; }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <div class="flex justify-between items-center border-b pb-2">
+            <div>
+                <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                    <span>⚙️</span> Parâmetros Técnicos do Sistema
+                </h2>
+                <p class="text-sm text-gray-500 font-mono uppercase tracking-widest">Acesso Restrito: Nível de Engenharia (TECBIN)</p>
+            </div>
+            <a href="{{ url_for('menu_operacoes') }}" class="px-5 py-2.5 bg-gray-200 hover:bg-green-400 text-gray-700 rounded-lg font-bold transition">← Voltar ao Menu</a>
+        </div>
+
+        {% if error %}
+            <div class="alert-danger">❌ {{ error }}</div>
+        {% endif %}
+        {% if success %}
+            <div class="alert-success">✅ {{ success }}</div>
+        {% endif %}
+
+        <!-- O formulário agora chama a função JS validateForm antes de enviar -->
+        <form method="POST" action="{{ url_for('gravar_parametros') }}" onsubmit="return validateForm(event)">
+            
+            <h3 class="section-title -mt-0.5 text-blue-700">Parâmetros Gerais da Sala</h3>
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+                <div class="form-group">
+                    <label for="comissao_padrao">Comissão Padrão Colaboradores (%):</label>
+                    <input type="number" id="comissao_padrao" name="comissao_padrao" value="{{ p.comissao_padrao }}" required min="0" class="form-control bg-blue-50 font-bold text-blue-900">
+                </div>
+                <div class="form-group">
+                    <label for="limite_de_credito">Limite de Crédito Colaboradores (R$):</label>
+                    <input type="number" id="limite_de_credito" name="limite_de_credito" value="{{ p.limite_de_credito }}" required min="0" class="form-control bg-blue-50 font-bold text-blue-900">
+                </div>
+                <div class="form-group">
+                    <label for="acumulado">Acumulado Base (R$):</label>
+                    <input type="number" id="acumulado" name="acumulado" value="{{ '%.2f'|format(p.acumulado) }}" step="0.01" min="0" required class="form-control bg-green-50 text-green-700 font-bold">
+                </div>
+                <div class="form-group">
+                    <label for="tope">Bola Tope Padrão:</label>
+                    <input type="number" id="tope" name="tope" value="{{ p.tope }}" required min="1" class="form-control bg-green-50 text-green-700 font-bold">
+                </div>
+            </div>
+
+            <!-- TÍTULO COM O NOVO CAMPO INCLUÍDO -->
+            <h3 class="section-title text-red-700 mt-3 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div class="flex flex-col md:flex-row items-start md:items-center gap-4">
+                    <span>Regras de Divisão de Prémios</span>
+                    
+                    <!-- NOVO CAMPO: PERCENTAGEM MÃE -->
+                    <div class="flex items-center gap-2 bg-purple-100 border border-purple-300 px-3 py-1.5 rounded-lg shadow-sm">
+                        <label for="porcento_premios" class="mb-0 text-purple-900 font-black uppercase text-xs tracking-wider">Destinado a Prémios (%):</label>
+                        <input type="number" id="porcento_premios" name="porcento_premios" value="{{ p.porcento_premios }}" required min="0" max="100" class="form-control w-20 text-center font-black text-purple-900 bg-white border-purple-400 py-1">
+                    </div>
+                </div>
+
+                <span class="text-sm text-red-500 font-bold bg-red-50 px-3 py-1 rounded border border-red-200">Atenção: A soma de cada bloco deve ser 100%</span>
+            </h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 mt-2">
+                
+                <!-- 1. Padrão 15 Números -->
+                <div class="bg-green-200 card-regra shadow-sm hover:shadow-md transition">
+                    <div>
+                        <h4 class="card-title text-purple-800">🎯 Padrão 15 Números</h4>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Prémio Linha:</label>
+                                <input type="number" name="porcento_15_linha" value="{{ '%.2f'|format(p.porcento_15_linha) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-15-padrao">
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Prémio Bingo:</label>
+                                <input type="number" name="porcento_15_bingo" value="{{ '%.2f'|format(p.porcento_15_bingo) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-15-padrao">
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Segundo Bingo:</label>
+                                <input type="number" name="porcento_15_segundobingo" value="{{ '%.2f'|format(p.porcento_15_segundobingo) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-15-padrao">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="total-box">
+                        <span class="font-bold text-gray-500 uppercase text-xs tracking-wider">Total Calculado</span>
+                        <span id="sum-15-padrao" class="text-lg font-black">0.00%</span>
+                    </div>
+                </div>
+
+                <!-- 2. Padrão 25 Números -->
+                <div class="bg-yellow-200 card-regra shadow-sm hover:shadow-md transition">
+                    <div>
+                        <h4 class="card-title text-purple-800">🎯 Padrão 25 Números</h4>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Prémio Linha:</label>
+                                <input type="number" name="porcento_25_linha" value="{{ '%.2f'|format(p.porcento_25_linha) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-25-padrao">
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Prémio Bingo:</label>
+                                <input type="number" name="porcento_25_bingo" value="{{ '%.2f'|format(p.porcento_25_bingo) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-25-padrao">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="total-box mt-auto">
+                        <span class="font-bold text-gray-500 uppercase text-xs tracking-wider">Total Calculado</span>
+                        <span id="sum-25-padrao" class="text-lg font-black">0.00%</span>
+                    </div>
+                </div>
+
+                <!-- 3. 25 Números - 4 Cantos -->
+                <div class="bg-yellow-200 card-regra shadow-sm hover:shadow-md transition">
+                    <div>
+                        <h4 class="card-title text-indigo-700">⬛ 25 Números (4 Cantos)</h4>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Prémio 4 Cantos:</label>
+                                <input type="number" name="porcento_25_4cantos_4cantos" value="{{ '%.2f'|format(p.porcento_25_4cantos_4cantos) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-25-4cantos bg-indigo-50">
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Prémio Linha:</label>
+                                <input type="number" name="porcento_25_4cantos_linha" value="{{ '%.2f'|format(p.porcento_25_4cantos_linha) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-25-4cantos">
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Prémio Bingo:</label>
+                                <input type="number" name="porcento_25_4cantos_bingo" value="{{ '%.2f'|format(p.porcento_25_4cantos_bingo) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-25-4cantos">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="total-box">
+                        <span class="font-bold text-gray-500 uppercase text-xs tracking-wider">Total Calculado</span>
+                        <span id="sum-25-4cantos" class="text-lg font-black">0.00%</span>
+                    </div>
+                </div>
+
+                <!-- 4. 15 Números - 3 Linhas -->
+                <div class="bg-green-200 card-regra shadow-sm hover:shadow-md transition">
+                    <div>
+                        <h4 class="card-title text-indigo-700">🍔 15 Números (3 Linhas)</h4>
+                        <div class="space-y-2">
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Prémio Linhas:</label>
+                                <input type="number" name="porcento_15_3linhas_linhas" value="{{ '%.2f'|format(p.porcento_15_3linhas_linhas) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-15-3linhas bg-indigo-50">
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Prémio Bingo:</label>
+                                <input type="number" name="porcento_15_3linhas_bingo" value="{{ '%.2f'|format(p.porcento_15_3linhas_bingo) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-15-3linhas">
+                            </div>
+                            <div class="flex justify-between items-center">
+                                <label class="mb-0 text-gray-600 font-bold text-sm w-1/2">Segundo Bingo:</label>
+                                <input type="number" name="porcento_15_3linhas_segundobingo" value="{{ '%.2f'|format(p.porcento_15_3linhas_segundobingo) }}" step="0.01" min="0" class="form-control w-1/2 text-right pct-15-3linhas">
+                            </div>
+                        </div>
+                    </div>
+                    <div class="total-box">
+                        <span class="font-bold text-gray-500 uppercase text-xs tracking-wider">Total Calculado</span>
+                        <span id="sum-15-3linhas" class="text-lg font-black">0.00%</span>
+                    </div>
+                </div>
+
+                <!-- 5. 15 Números - Quadra -->
+                <div class="bg-green-200 card-regra shadow-sm hover:shadow-md transition lg:col-span-2 xl:col-span-1">
+                    <div>
+                        <h4 class="card-title text-indigo-700">💠 15 Números (Quadra)</h4>
+                        <div class="space-y-2">
+                            <div class="grid grid-cols-2 gap-2">
+                                <div class="flex justify-between items-center gap-1">
+                                    <label class="mb-0 text-gray-600 font-bold text-xs">Quadra:</label>
+                                    <input type="number" name="porcento_15_quadra_quadra" value="{{ '%.2f'|format(p.porcento_15_quadra_quadra) }}" step="0.01" min="0" class="form-control w-20 text-right pct-15-quadra bg-indigo-50">
+                                </div>
+                                <div class="flex justify-between items-center gap-1">
+                                    <label class="mb-0 text-gray-600 font-bold text-xs">Linha:</label>
+                                    <input type="number" name="porcento_15_quadra_linha" value="{{ '%.2f'|format(p.porcento_15_quadra_linha) }}" step="0.01" min="0" class="form-control w-20 text-right pct-15-quadra">
+                                </div>
+                                <div class="flex justify-between items-center gap-1">
+                                    <label class="mb-0 text-gray-600 font-bold text-xs">Bingo:</label>
+                                    <input type="number" name="porcento_15_quadra_bingo" value="{{ '%.2f'|format(p.porcento_15_quadra_bingo) }}" step="0.01" min="0" class="form-control w-20 text-right pct-15-quadra">
+                                </div>
+                                <div class="flex justify-between items-center gap-1">
+                                    <label class="mb-0 text-gray-600 font-bold text-xs">2º Bingo:</label>
+                                    <input type="number" name="porcento_15_quadra_segundobingo" value="{{ '%.2f'|format(p.porcento_15_quadra_segundobingo) }}" step="0.01" min="0" class="form-control w-20 text-right pct-15-quadra">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="total-box">
+                        <span class="font-bold text-gray-500 uppercase text-xs tracking-wider">Total Calculado</span>
+                        <span id="sum-15-quadra" class="text-lg font-black">0.00%</span>
+                    </div>
+                </div>
+
+            </div>
+
+            <div class="mt-3 flex justify-end">
+                <button type="submit" id="btn-submit-params" class="bg-blue-600 hover:bg-blue-800 text-white font-black py-2 px-10 rounded-xl shadow-lg transition duration-200 text-lg flex items-center gap-2">
+                    <span>💾</span> Gravar Parâmetros e Atualizar Servidor
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Definição dos grupos de inputs e onde os totais serão mostrados
+        const sumGroups = [
+            { className: 'pct-15-padrao', displayId: 'sum-15-padrao' },
+            { className: 'pct-25-padrao', displayId: 'sum-25-padrao' },
+            { className: 'pct-25-4cantos', displayId: 'sum-25-4cantos' },
+            { className: 'pct-15-3linhas', displayId: 'sum-15-3linhas' },
+            { className: 'pct-15-quadra', displayId: 'sum-15-quadra' }
+        ];
+
+        // Função que calcula a soma e atualiza as cores
+        function calculateSums() {
+            let isAll100 = true;
+
+            sumGroups.forEach(group => {
+                const inputs = document.querySelectorAll('.' + group.className);
+                let total = 0;
+
+                inputs.forEach(input => {
+                    let val = parseFloat(input.value.replace(',', '.')) || 0;
+                    total += val;
+                });
+
+                const display = document.getElementById(group.displayId);
+                display.innerText = total.toFixed(2) + '%';
+
+                // Tolerância minúscula para imprecisões do Javascript
+                if (Math.abs(total - 100.00) < 0.01) {
+                    display.className = 'text-lg font-black text-green-600'; // Verde = OK
+                } else {
+                    display.className = 'text-lg font-black text-red-600 bg-red-100 px-2 rounded'; // Vermelho = Erro
+                    isAll100 = false;
+                }
+            });
+
+            return isAll100;
+        }
+
+        // Adiciona o "ouvinte" em todos os inputs de percentagem para atualizar em tempo real
+        document.querySelectorAll('input[type="number"]').forEach(input => {
+            if (input.className.includes('pct-')) {
+                input.addEventListener('input', calculateSums);
+            }
+        });
+
+        // Validação ao tentar enviar o formulário
+        function validateForm(event) {
+            const isAllValid = calculateSums();
+            
+            if (!isAllValid) {
+                event.preventDefault(); // Impede o envio
+                alert("⚠️ ATENÇÃO: Verifique os cartões em vermelho.\n\nTodas as regras de divisão de prémios devem somar exatamente 100% para evitar falhas no sistema financeiro.");
+                return false;
+            }
+
+            // Se estiver tudo OK, altera o botão e envia
+            const btn = document.getElementById('btn-submit-params');
+            btn.innerHTML = '⏳ A gravar...';
+            btn.disabled = true;
+            btn.classList.add('opacity-75', 'cursor-not-allowed');
+            return true;
+        }
+
+        // Calcula a soma inicial logo que a página carrega
+        document.addEventListener('DOMContentLoaded', calculateSums);
+    </script>
+</body>
+</html>

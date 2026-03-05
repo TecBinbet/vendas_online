@@ -278,6 +278,17 @@
                                value="{% if active_view == 'alterar' %}{{ evento.get('premio_segundobingo', '') }}{% else %}{% endif %}" 
                                oninput="calculatePremioTotal()">
                     </div>
+
+                    <!-- NOVO CAMPO: TIPO DE PREMIAÇÃO -->
+                    <div class="form-group">
+                        <label for="tipo_premiacao" class="required-label">Tipo de Premiação:</label>
+                        <select id="tipo_premiacao" name="tipo_premiacao" class="form-control" required>
+                            <option value="Fixa" {% if (active_view == 'alterar' and evento.get('tipo_premiacao') == 'Fixa') or active_view != 'alterar' %}selected{% endif %}>Fixa (Valores Exatos)</option>
+                            <option value="Porcentagem" {% if active_view == 'alterar' and evento.get('tipo_premiacao') == 'Porcentagem' %}selected{% endif %}>Porcentagem (Baseado em Vendas)</option>
+                        </select>
+                        <p class="text-[10px] text-blue-600 font-bold italic -mt-2">Define a forma de pagamento das premiações</p>
+                    </div>
+
                     <div class="form-group">
                         <label for="minimo_de_venda">Mínimo de Venda Necessário (Qtde):</label>
                         <input type="text" id="minimo_de_venda" name="minimo_de_venda" disabled class="form-control bg-green-200 font-bold"
@@ -304,7 +315,6 @@
                                {% if (active_view == 'alterar' and evento.get('premio_acumulado', 0) <= 0) or (active_view != 'alterar' and default_acumulado <= 0) %}disabled{% endif %}>
                     </div>
 
-                    <!-- NOVO CAMPO: TIPO DE EVENTO -->
                     <div class="form-group">
                         <label for="tipo_de_evento">Tipo do Evento:</label>
                         <select id="tipo_de_evento" name="tipo_de_evento" class="form-control">
@@ -324,7 +334,6 @@
                 
                 <div class="mt-6 flex justify-end space-x-2 items-center">
                     {% if active_view == 'alterar' %}
-                        <!-- Botão de Replicação visível apenas ao alterar -->
                         <button type="button" onclick="abrirModalReplicar()" class="btn-submit bg-purple-600 hover:bg-purple-800 shadow-md text-white mr-auto flex items-center gap-2">
                             <span>🔄</span> Replicar Evento
                         </button>
@@ -470,7 +479,6 @@
             <div class="flex justify-end space-x-2 mt-6 pt-4 border-t border-gray-200">
                 <button type="button" class="modal-btn btn-cancel" onclick="fecharModalReplicar()">Cancelar</button>
                 <form id="form-confirmar-replicacao" method="POST" action="/api/gravar_replicacao" style="display: none;">
-                    <!-- Campos ocultos preenchidos pelo JS -->
                     <input type="hidden" name="id_evento_molde" id="post_id_molde">
                     <input type="hidden" name="qtd" id="post_qtd">
                     <input type="hidden" name="intervalo" id="post_intervalo">
@@ -515,9 +523,6 @@
     </div>
 
     <script>
-        /**
-         * Trata a submissão do formulário base
-         */
         function tratarSubmissao(form) {
             const camposParaZerar = [
                 'valor_de_venda', 'premio_quadra', 'premio_linha', 
@@ -526,7 +531,9 @@
 
             camposParaZerar.forEach(nome => {
                 const input = form.querySelector(`[name="${nome}"]`);
-                if (input && input.value.trim() === "") input.value = "0.00";
+                if (input && input.value.trim() === "") {
+                    input.value = "0.00"; 
+                }
             });
 
             const overlay = document.getElementById('loading-overlay');
@@ -544,9 +551,6 @@
             return true;
         }
 
-        /**
-         * Loading para botões de modal
-         */
         function ativarLoadingModal(btn, msg = "A excluir...") {
             const overlay = document.getElementById('loading-overlay');
             const msgEl = document.getElementById('loading-message');
@@ -555,8 +559,6 @@
             
             btn.innerText = msg;
             
-            // AJUSTE: O setTimeout garante que o navegador consiga submeter 
-            // o formulário antes de o botão ser fisicamente desativado na tela.
             setTimeout(() => {
                 btn.disabled = true;
                 btn.classList.add('opacity-50', 'cursor-not-allowed');
@@ -715,7 +717,6 @@
             }
         }
 
-        // --- LÓGICA DE DISPONIBILIDADE E REPLICAÇÃO ---
         let checkTimeout = null;
 
         function checkAvailability() {
@@ -758,7 +759,6 @@
             }, 500); 
         }
 
-        // FUNÇÕES DA MODAL DE REPLICAÇÃO
         function abrirModalReplicar() {
             document.getElementById('replicar-modal').style.display = 'flex';
             document.getElementById('previa-container').innerHTML = '';
@@ -791,7 +791,6 @@
             formGravar.style.display = 'none';
 
             try {
-                // Preparamos o pedido para o nosso novo endpoint
                 const response = await fetch('/api/previa_replicacao', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -825,7 +824,6 @@
                 if (!todosLivres) {
                     html += `<p class="text-xs text-red-600 mt-2 font-bold bg-red-100 p-2 rounded">⚠️ Conflito detetado. Ajuste o intervalo ou a data/hora do evento original e tente novamente.</p>`;
                 } else {
-                    // Se tudo está verde, preenchemos os inputs hidden e libertamos o botão
                     document.getElementById('post_id_molde').value = idMolde;
                     document.getElementById('post_qtd').value = qtd;
                     document.getElementById('post_intervalo').value = intervalo;

@@ -197,6 +197,31 @@ def format_moeda(value):
     except:
         return "0,00"
 
+# Helper genérico de float para Decimal128 caso não exista no seu scope:
+def safe_dec(value):
+    try:
+        val = str(value).replace(',', '.')
+        return Decimal128(str(float(val)))
+    except:
+        return Decimal128("0.00")
+
+def safe_get_float(val):
+    if isinstance(val, Decimal128):
+        return float(val.to_decimal())
+    try:
+        return float(val)
+    except:
+        return 0.0
+
+def safe_get_int(val):
+    if isinstance(val, Decimal128):
+        return int(val.to_decimal())
+    try:
+        return int(float(val))
+    except:
+        return 0
+
+
 # --- LOCKS GLOBAIS PARA SINCRONIZAÇÃO DE SEQUÊNCIAS ---
 venda_lock = threading.Lock()
 cliente_lock = threading.Lock()
@@ -2357,7 +2382,78 @@ def check_event_availability():
         return jsonify({'exists': False})
 
 
-# --- SUBSTITUA A FUNÇÃO cadastro_evento EXISTENTE POR ESTA ---
+def calcular_premios_dinamicos(db, evento, param_doc):
+    """
+    MOTOR MATEMÁTICO: Calcula e reajusta as premiações em tempo real 
+    com base no percentual de vendas, sem perder os valores mínimos registrados.
+    """
+    # 1. Verifica se o evento está elegível para cálculo dinâmico
+    if str(evento.get('tipo_premiacao', '')).lower() != 'porcentagem':
+        return evento
+
+    porcento_premios = safe_float(param_doc.get('porcento_premios', 0))
+    if porcento_premios <= 0:
+        return evento
+
+    # 2. Resgata e calcula as vendas
+    qtd_vendas = evento.get('qtd_vendas', 0)
+    valor_venda = safe_float(evento.get('valor_de_venda', 0))
+    total_arrecadado = qtd_vendas * valor_venda
+
+    if total_arrecadado <= 0:
+        return evento
+
+    # 3. Matemática de Comparação
+    premio_potencial = total_arrecadado * (porcento_premios / 100.0)
+    premio_minimo_total = safe_float(evento.get('premio_total', 0))
+
+    # 4. Distribuição (Apenas se o Potencial bater o Mínimo)
+    if premio_potencial > premio_minimo_total:
+        tipo_cartela = int(evento.get('tipo_de_cartela', 15))
+        qtd_linhas = int(evento.get('quantidade_de_linhas', 1))
+        
+        # Detecção Automática de Regras
+        tem_quadra = safe_float(evento.get('premio_quadra', 0)) > 0
+        faltaum_val = safe_float(evento.get('premio_faltaum', 0))
+        
+        # Isola o valor do "Falta Um" da distribuição percentual
+        premio_distribuir = premio_potencial - faltaum_val
+
+        if tipo_cartela == 15:
+            if tem_quadra:
+                regra = param_doc.get('porcento_15_quadra', {})
+                evento['premio_quadra'] = premio_distribuir * (safe_float(regra.get('quadra', 0)) / 100.0)
+                evento['premio_linha'] = (premio_distribuir * (safe_float(regra.get('linha', 0)) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
+                evento['premio_bingo'] = premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)
+                evento['premio_segundobingo'] = premio_distribuir * (safe_float(regra.get('segundobingo', 0)) / 100.0)
+            elif qtd_linhas == 3:
+                regra = param_doc.get('porcento_15_3linhas', {})
+                evento['premio_linha'] = (premio_distribuir * (safe_float(regra.get('linhas', 0)) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
+                evento['premio_bingo'] = premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)
+                evento['premio_segundobingo'] = premio_distribuir * (safe_float(regra.get('segundobingo', 0)) / 100.0)
+            else:
+                regra = param_doc.get('porcento_15', {})
+                evento['premio_linha'] = (premio_distribuir * (safe_float(regra.get('linha', 0)) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
+                evento['premio_bingo'] = premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)
+                evento['premio_segundobingo'] = premio_distribuir * (safe_float(regra.get('segundobingo', 0)) / 100.0)
+        
+        elif tipo_cartela == 25:
+            if tem_quadra: # 4 Cantos
+                regra = param_doc.get('porcento_25_4cantos', {})
+                evento['premio_quadra'] = premio_distribuir * (safe_float(regra.get('4cantos', 0)) / 100.0)
+                evento['premio_linha'] = (premio_distribuir * (safe_float(regra.get('linha', 0)) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
+                evento['premio_bingo'] = premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)
+            else:
+                regra = param_doc.get('porcento_25', {})
+                evento['premio_linha'] = (premio_distribuir * (safe_float(regra.get('linha', 0)) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
+                evento['premio_bingo'] = premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)
+
+        # Atualiza o Total e adiciona uma flag para o Frontend saber que houve reajuste
+        evento['premio_total'] = premio_potencial
+        evento['is_premio_dinamico_ativo'] = True
+
+    return evento
+
 
 @app.route('/cadastro_evento', methods=['GET'])
 @login_required
@@ -2379,10 +2475,10 @@ def cadastro_evento():
     error = request.args.get('error')
     success = request.args.get('success')
 
-    # Adicionado 'premio_faltaum' à lista de campos float
+    # Adicionado 'premiacao_fixa' à lista de campos float
     numeric_float_fields = [
         'valor_de_venda', 'premio_quadra', 'premio_linha', 'premio_bingo', 
-        'premio_segundobingo', 'premio_acumulado', 'minimo_de_venda', 'premio_total', 'premio_faltaum'
+        'premio_segundobingo', 'premio_acumulado', 'minimo_de_venda', 'premio_total', 'premio_faltaum', 'premiacao_fixa'
     ]
     numeric_int_fields = [
         'unidade_de_venda', 'numero_inicial', 'numero_maximo', 'tipo_de_cartela',
@@ -2449,7 +2545,7 @@ def cadastro_evento():
             total_eventos = db.eventos.count_documents({})
             
             if active_view == 'listar':
-                eventos_cursor = db.eventos.find({}).sort([("data_evento", pymongo.DESCENDING), ("hora_evento", pymongo.DESCENDING)])
+                eventos_cursor = db.eventos.find({}).sort([("data_evento", -1), ("hora_evento", -1)])
                 eventos_lista = list(eventos_cursor)
             
             elif active_view == 'consulta' and search_term:
@@ -2457,6 +2553,7 @@ def cadastro_evento():
                 if search_term.isdigit(): 
                     query_filter = {'id_evento': int(search_term)}
                 if not query_filter:
+                    import re 
                     regex_term = re.compile(re.escape(search_term), re.IGNORECASE)
                     query_filter = {
                         '$or': [
@@ -2464,13 +2561,37 @@ def cadastro_evento():
                             {'data_evento': {'$regex': regex_term}}
                         ]
                     }
-                eventos_cursor = db.eventos.find(query_filter).sort("data_evento", pymongo.DESCENDING)
+                eventos_cursor = db.eventos.find(query_filter).sort("data_evento", -1)
                 eventos_lista = list(eventos_cursor) 
 
         except Exception as e:
             print(f"Erro mongo cadastro_evento: {e}")
             error = f"Erro crítico: {e}"
 
+    # --- BUSCA LIMITES E PADRÕES NOS PARAMETROS ANTES DO LOOP ---
+    cartela_limits = {'15': 72000, '25': 90000}
+    default_acumulado = 0.0
+    default_tope = 0
+    param_doc_global = {}
+
+    if db_status:
+        try:
+            param_doc_global = db.parametros.find_one({}) or {}
+            if param_doc_global:
+                if 'arquivo_cartela_15' in param_doc_global:
+                    cartela_limits['15'] = int(param_doc_global['arquivo_cartela_15'])
+                if 'arquivo_cartela_25' in param_doc_global:
+                    cartela_limits['25'] = int(param_doc_global['arquivo_cartela_25'])
+                
+                if 'acumulado' in param_doc_global:
+                    default_acumulado = safe_float(param_doc_global['acumulado'])
+                if 'tope' in param_doc_global:
+                    default_tope = int(param_doc_global['tope'])
+
+        except Exception as e:
+            print(f"Aviso parametros: {e}")
+
+    # Processamento Final da Lista e Aplicação do Motor Matemático
     for evento in eventos_lista:
         if '_id' in evento: evento['_id'] = str(evento['_id'])
         id_ev = evento.get('id_evento')
@@ -2479,30 +2600,12 @@ def cadastro_evento():
         if nome_cv in db.list_collection_names():
             qtd = db[nome_cv].count_documents({})
         evento['qtd_vendas'] = qtd
+        
         for key in all_numeric_fields:
             if key in evento: evento[key] = safe_float(evento.get(key, 0.0))
-
-    # --- BUSCA LIMITES E PADRÕES NOS PARAMETROS ---
-    cartela_limits = {'15': 72000, '25': 90000}
-    default_acumulado = 0.0
-    default_tope = 0
-
-    if db_status:
-        try:
-            param_doc = db.parametros.find_one({})
-            if param_doc:
-                if 'arquivo_cartela_15' in param_doc:
-                    cartela_limits['15'] = int(param_doc['arquivo_cartela_15'])
-                if 'arquivo_cartela_25' in param_doc:
-                    cartela_limits['25'] = int(param_doc['arquivo_cartela_25'])
-                
-                if 'acumulado' in param_doc:
-                    default_acumulado = safe_float(param_doc['acumulado'])
-                if 'tope' in param_doc:
-                    default_tope = int(param_doc['tope'])
-
-        except Exception as e:
-            print(f"Aviso parametros: {e}")
+            
+        # INJEÇÃO DO MOTOR MATEMÁTICO: Apenas para a listagem
+        evento = calcular_premios_dinamicos(db, evento, param_doc_global)
 
     context = {
         'total_eventos': total_eventos,
@@ -2545,13 +2648,13 @@ def gravar_evento():
         descricao = format_title_case(request.form.get('descricao'))
         unidade_de_venda = int(request.form.get('unidade_de_venda', 1))
         tipo_de_cartela = int(request.form.get('tipo_de_cartela', 15)) 
-        tipo_de_evento = request.form.get('tipo_de_evento', 'Normal') # NOVO CAMPO
+        tipo_de_evento = request.form.get('tipo_de_evento', 'Normal') 
+        tipo_premiacao = request.form.get('tipo_premiacao', 'Fixa')
 
         # --- LÓGICA DE BLOQUEIO E PADRÕES BASEADOS NO TIPO DE CARTELA ---
         if tipo_de_cartela == 25:
-            # Se for 25 números, forçamos as regras conforme o HTML
             premio_faltaum = 0.0
-            premio_segundobingo = 0.0 # AJUSTE: Forçando zero no segundo bingo para cartela 25
+            premio_segundobingo = 0.0
             quantidade_de_linhas = 1
             
             try:
@@ -2560,7 +2663,6 @@ def gravar_evento():
             except:
                 numero_maximo = 90000
         else:
-            # Se for 15 números, comportamento normal capturando os campos
             premio_faltaum = clean_float_input('premio_faltaum')
             premio_segundobingo = clean_float_input('premio_segundobingo')
             quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
@@ -2578,6 +2680,7 @@ def gravar_evento():
         premio_bingo = clean_float_input('premio_bingo')
         premio_acumulado = clean_float_input('premio_acumulado')
         minimo_de_venda = clean_float_input('minimo_de_venda') 
+        premiacao_fixa = clean_float_input('premiacao_fixa', default_value='-1.00')
 
         numero_inicial = int(request.form.get('numero_inicial', 1))
         bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
@@ -2603,7 +2706,8 @@ def gravar_evento():
             "descricao": descricao,
             "unidade_de_venda": unidade_de_venda,
             "tipo_de_cartela": tipo_de_cartela, 
-            "tipo_de_evento": tipo_de_evento, # SALVANDO O NOVO CAMPO
+            "tipo_de_evento": tipo_de_evento,
+            "tipo_premiacao": tipo_premiacao,
             "valor_de_venda": Decimal128(str(valor_de_venda)),
             "numero_inicial": numero_inicial,
             "numero_maximo": numero_maximo,
@@ -2613,6 +2717,7 @@ def gravar_evento():
             "premio_bingo": Decimal128(str(premio_bingo)),
             "premio_faltaum": Decimal128(str(premio_faltaum)),
             "premio_segundobingo": Decimal128(str(premio_segundobingo)),
+            "premiacao_fixa": Decimal128(str(premiacao_fixa)),
             "premio_total": Decimal128(str(premio_total)), 
             "premio_acumulado": Decimal128(str(premio_acumulado)),
             "bola_tope_acumulado": bola_tope_acumulado,
@@ -2621,7 +2726,6 @@ def gravar_evento():
         }
         
         if id_evento_edicao:
-            # Na edição, removemos campos de status para não sobrescrever dados de vendas ativas acidentalmente
             db.eventos.update_one({'id_evento': int(id_evento_edicao)}, {'$set': dados_evento})
             success_msg = f"Evento ID: {id_evento_edicao} atualizado com sucesso!"
         else:
@@ -2642,6 +2746,7 @@ def gravar_evento():
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
         return redirect(url_for('cadastro_evento', error=f"Erro ao salvar: {e}", view=view_redirect, id_evento=id_evento_edicao))
+
 
 
 @app.route('/excluir_evento/<int:id_evento>', methods=['POST'])
@@ -4943,6 +5048,190 @@ def gravar_replicacao():
     except Exception as e:
         return redirect(url_for('cadastro_evento', view='alterar', id_evento=id_evento_molde, error="Falha ao replicar eventos."))
 
+
+@app.route('/parametros', methods=['GET'])
+@login_required
+def parametros():
+    """
+    Exibe a tela de configuração técnica.
+    Bloqueia o acesso de qualquer utilizador que não seja o TECBIN.
+    """
+    # 1. VALIDAÇÃO DE SEGURANÇA (EASTER EGG LOCK)
+    nick_operador = session.get('nick', '').upper()
+    nome_operador = session.get('operador', '').upper()
+    
+    if nick_operador != 'TECBIN' and nome_operador != 'TECBIN':
+        print(f"[SECURITY] Tentativa de acesso não autorizada a /parametros por: {nick_operador or nome_operador}")
+        return redirect(url_for('menu_operacoes', error="Acesso Negado: Permissão de Engenharia Necessária."))
+
+    db = get_vendas_db()
+    if db is None:
+        return redirect(url_for('menu_operacoes', error="Banco de dados inacessível."))
+
+    # 2. CARREGAR DADOS EXISTENTES (OU INICIALIZAR VAZIO)
+    param_doc = db.parametros.find_one({})
+    
+    # Se o documento não existir, criamos a estrutura base em memória
+    if not param_doc:
+        param_doc = {
+            'comissao_padrao': 0,
+            'limite_de_credito': 0,
+            'acumulado': Decimal128("0.00"),
+            'tope': 0,
+            'porcento_premios': 0,
+            'porcento_15': {'linha': Decimal128("0.00"), 'bingo': Decimal128("0.00"), 'segundobingo': Decimal128("0.00")},
+            'porcento_25': {'linha': Decimal128("0.00"), 'bingo': Decimal128("0.00")},
+            'porcento_25_4cantos': {'4cantos': Decimal128("0.00"), 'linha': Decimal128("0.00"), 'bingo': Decimal128("0.00")},
+            'porcento_15_3linhas': {'linhas': Decimal128("0.00"), 'bingo': Decimal128("0.00"), 'segundobingo': Decimal128("0.00")},
+            'porcento_15_quadra': {'quadra': Decimal128("0.00"), 'linha': Decimal128("0.00"), 'bingo': Decimal128("0.00"), 'segundobingo': Decimal128("0.00")}
+        }
+    
+    # Garantir que os sub-objetos existem, mesmo em documentos parcialmente preenchidos antigos
+    p15 = param_doc.get('porcento_15', {})
+    p25 = param_doc.get('porcento_25', {})
+    p25_4cantos = param_doc.get('porcento_25_4cantos', {})
+    p15_3linhas = param_doc.get('porcento_15_3linhas', {})
+    p15_quadra  = param_doc.get('porcento_15_quadra', {})
+
+    # Objeto simplificado para o template (AGORA UTILIZANDO safe_get_int)
+    context_p = {
+        'comissao_padrao': safe_get_int(param_doc.get('comissao_padrao', 0)),
+        'limite_de_credito': safe_get_int(param_doc.get('limite_de_credito', 0)),
+        'acumulado': safe_get_float(param_doc.get('acumulado', 0)),
+        'tope': safe_get_int(param_doc.get('tope', 0)),
+        'porcento_premios': safe_get_int(param_doc.get('porcento_premios', 0)),
+        
+        # Padrão
+        'porcento_15_linha': safe_get_float(p15.get('linha', 0)),
+        'porcento_15_bingo': safe_get_float(p15.get('bingo', 0)),
+        'porcento_15_segundobingo': safe_get_float(p15.get('segundobingo', 0)),
+        
+        'porcento_25_linha': safe_get_float(p25.get('linha', 0)),
+        'porcento_25_bingo': safe_get_float(p25.get('bingo', 0)),
+        
+        # 25 Números - 4 Cantos
+        'porcento_25_4cantos_4cantos': safe_get_float(p25_4cantos.get('4cantos', 0)),
+        'porcento_25_4cantos_linha': safe_get_float(p25_4cantos.get('linha', 0)),
+        'porcento_25_4cantos_bingo': safe_get_float(p25_4cantos.get('bingo', 0)),
+        
+        # 15 Números - 3 Linhas
+        'porcento_15_3linhas_linhas': safe_get_float(p15_3linhas.get('linhas', 0)),
+        'porcento_15_3linhas_bingo': safe_get_float(p15_3linhas.get('bingo', 0)),
+        'porcento_15_3linhas_segundobingo': safe_get_float(p15_3linhas.get('segundobingo', 0)),
+        
+        # 15 Números - Quadra
+        'porcento_15_quadra_quadra': safe_get_float(p15_quadra.get('quadra', 0)),
+        'porcento_15_quadra_linha': safe_get_float(p15_quadra.get('linha', 0)),
+        'porcento_15_quadra_bingo': safe_get_float(p15_quadra.get('bingo', 0)),
+        'porcento_15_quadra_segundobingo': safe_get_float(p15_quadra.get('segundobingo', 0)),
+    }
+
+    return render_template(
+        'parametros.html', 
+        p=context_p, 
+        error=request.args.get('error'), 
+        success=request.args.get('success')
+    )
+
+
+@app.route('/gravar_parametros', methods=['POST'])
+@login_required
+def gravar_parametros():
+    """
+    Grava os parâmetros na base de dados formatando devidamente para Decimal128 e Object.
+    Valida se as percentagens de cada grupo somam 100%.
+    """
+    # 1. NOVA VALIDAÇÃO DE SEGURANÇA NA ESCRITA
+    nick_operador = session.get('nick', '').upper()
+    nome_operador = session.get('operador', '').upper()
+    
+    if nick_operador != 'TECBIN' and nome_operador != 'TECBIN':
+        return redirect(url_for('menu_operacoes', error="Acesso Negado na Gravação."))
+
+    db = get_vendas_db()
+
+    try:
+        def get_float_val(field_name):
+            try:
+                return float(request.form.get(field_name, '0').replace(',', '.'))
+            except:
+                return 0.0
+
+        # VALIDAÇÃO A 100% PARA CADA GRUPO
+        
+        # Padrão 15
+        soma_15 = get_float_val('porcento_15_linha') + get_float_val('porcento_15_bingo') + get_float_val('porcento_15_segundobingo')
+        if abs(soma_15 - 100.0) > 0.01: # Permite uma margem de erro de arredondamento ínfima
+             return redirect(url_for('parametros', error=f"Erro: O total de prémios para 15 Números (Padrão) deve ser exatamente 100%. Atualmente é {soma_15}%."))
+
+        # Padrão 25
+        soma_25 = get_float_val('porcento_25_linha') + get_float_val('porcento_25_bingo')
+        if abs(soma_25 - 100.0) > 0.01:
+             return redirect(url_for('parametros', error=f"Erro: O total de prémios para 25 Números (Padrão) deve ser exatamente 100%. Atualmente é {soma_25}%."))
+
+        # 25 - 4 Cantos
+        soma_25_4cantos = get_float_val('porcento_25_4cantos_4cantos') + get_float_val('porcento_25_4cantos_linha') + get_float_val('porcento_25_4cantos_bingo')
+        if abs(soma_25_4cantos - 100.0) > 0.01:
+             return redirect(url_for('parametros', error=f"Erro: O total para 25 Números (4 Cantos) deve ser 100%. Atualmente é {soma_25_4cantos}%."))
+
+        # 15 - 3 Linhas
+        soma_15_3linhas = get_float_val('porcento_15_3linhas_linhas') + get_float_val('porcento_15_3linhas_bingo') + get_float_val('porcento_15_3linhas_segundobingo')
+        if abs(soma_15_3linhas - 100.0) > 0.01:
+             return redirect(url_for('parametros', error=f"Erro: O total para 15 Números (3 Linhas) deve ser 100%. Atualmente é {soma_15_3linhas}%."))
+
+        # 15 - Quadra
+        soma_15_quadra = get_float_val('porcento_15_quadra_quadra') + get_float_val('porcento_15_quadra_linha') + get_float_val('porcento_15_quadra_bingo') + get_float_val('porcento_15_quadra_segundobingo')
+        if abs(soma_15_quadra - 100.0) > 0.01:
+             return redirect(url_for('parametros', error=f"Erro: O total para 15 Números (Quadra) deve ser 100%. Atualmente é {soma_15_quadra}%."))
+
+        # 2. CONSTRUÇÃO DO DICIONÁRIO DE ATUALIZAÇÃO
+        dados_atualizados = {
+            'comissao_padrao': int(request.form.get('comissao_padrao', 0)),
+            'limite_de_credito': int(request.form.get('limite_de_credito', 0)),
+            'acumulado': safe_dec(request.form.get('acumulado', '0')),
+            'tope': int(request.form.get('tope', 0)),
+            'porcento_premios': int(request.form.get('porcento_premios', 0)),
+            
+            # Aninhando os objetos padrão
+            'porcento_15': {
+                'linha': safe_dec(request.form.get('porcento_15_linha', '0')),
+                'bingo': safe_dec(request.form.get('porcento_15_bingo', '0')),
+                'segundobingo': safe_dec(request.form.get('porcento_15_segundobingo', '0'))
+            },
+            'porcento_25': {
+                'linha': safe_dec(request.form.get('porcento_25_linha', '0')),
+                'bingo': safe_dec(request.form.get('porcento_25_bingo', '0'))
+            },
+            
+            # Aninhando os novos objetos
+            'porcento_25_4cantos': {
+                '4cantos': safe_dec(request.form.get('porcento_25_4cantos_4cantos', '0')),
+                'linha': safe_dec(request.form.get('porcento_25_4cantos_linha', '0')),
+                'bingo': safe_dec(request.form.get('porcento_25_4cantos_bingo', '0'))
+            },
+            'porcento_15_3linhas': {
+                'linhas': safe_dec(request.form.get('porcento_15_3linhas_linhas', '0')),
+                'bingo': safe_dec(request.form.get('porcento_15_3linhas_bingo', '0')),
+                'segundobingo': safe_dec(request.form.get('porcento_15_3linhas_segundobingo', '0'))
+            },
+            'porcento_15_quadra': {
+                'quadra': safe_dec(request.form.get('porcento_15_quadra_quadra', '0')),
+                'linha': safe_dec(request.form.get('porcento_15_quadra_linha', '0')),
+                'bingo': safe_dec(request.form.get('porcento_15_quadra_bingo', '0')),
+                'segundobingo': safe_dec(request.form.get('porcento_15_quadra_segundobingo', '0'))
+            }
+        }
+
+        # 3. UPSERT NO MONGODB
+        # Atualiza o primeiro documento encontrado ou cria um novo se a coleção estiver vazia
+        db.parametros.update_one({}, {'$set': dados_atualizados}, upsert=True)
+        
+        print(f"[SYS ADMIN] Parâmetros técnicos atualizados com sucesso por TECBIN.")
+        return redirect(url_for('parametros', success="Parâmetros atualizados e gravados na base de dados com sucesso!"))
+
+    except Exception as e:
+        print(f"Erro Crítico ao gravar parâmetros: {e}")
+        return redirect(url_for('parametros', error=f"Erro interno ao salvar as configurações: {e}"))
 
 
 # =============================
