@@ -412,7 +412,16 @@
                                 <td class="py-2 px-2 border-b text-sm">{{ evento.id_evento }}</td>
                                 <td class="py-2 px-2 border-b text-sm">{{ evento.descricao }}</td>
                                 <td class="py-2 px-2 border-b text-sm">{{ evento.data_evento | default('N/A') }} às {{ evento.hora_evento | default('N/A') }}</td>
-                                <td class="py-2 px-2 border-b text-sm  font-semibold">R$ {{ evento.premio_total | format_moeda }}</td>
+                                
+                                <td class="py-2 px-2 border-b text-sm font-semibold">
+                                    <span class="{% if evento.get('is_premio_dinamico_ativo') %}text-green-700 font-bold{% endif %}">
+                                        R$ {{ evento.premio_total_float | format_moeda }}
+                                    </span>
+                                    {% if evento.get('is_premio_dinamico_ativo') %}
+                                        <span title="Prêmio Reajustado Pelas Vendas!" class="cursor-help ml-1">🚀</span>
+                                    {% endif %}
+                                </td>
+                                
                                 <td class="py-2 px-2 border-b text-sm text-gray-600">{{ evento.qtd_vendas | default(0) }}</td>
                                 <td class="py-2 px-2 border-b text-sm">{{ evento.status }}</td>
                                 <td class="py-2 px-2 border-b text-sm whitespace-nowrap">
