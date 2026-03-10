@@ -5119,6 +5119,13 @@ def parametros():
         'acumulado': safe_get_float(param_doc.get('acumulado', 0)),
         'tope': safe_get_int(param_doc.get('tope', 0)),
         'porcento_premios': safe_get_int(param_doc.get('porcento_premios', 0)),
+
+        # --- NOVOS CAMPOS (ROBÔ E INTEGRAÇÕES) ---
+        'tempo_atualizacao_premios': safe_get_int(param_doc.get('tempo_atualizacao_premios', 1)),
+        'minimo_atualizacao_premios': safe_get_float(param_doc.get('minimo_atualizacao_premios', 50.0)),
+        'receber_pix': bool(param_doc.get('receber_pix', False)),
+        'chat_id_telegram': param_doc.get('chat_id_telegram', ''),
+        'token_telegram': param_doc.get('token_telegram', ''),
         
         # Padrão
         'porcento_15_linha': safe_get_float(p15.get('linha', 0)),
@@ -5175,33 +5182,38 @@ def gravar_parametros():
                 return float(request.form.get(field_name, '0').replace(',', '.'))
             except:
                 return 0.0
+     
+        porcento_premios_val = int(request.form.get('porcento_premios', 0))
 
         # VALIDAÇÃO A 100% PARA CADA GRUPO
-        
-        # Padrão 15
-        soma_15 = get_float_val('porcento_15_linha') + get_float_val('porcento_15_bingo') + get_float_val('porcento_15_segundobingo')
-        if abs(soma_15 - 100.0) > 0.01: # Permite uma margem de erro de arredondamento ínfima
-             return redirect(url_for('parametros', error=f"Erro: O total de prémios para 15 Números (Padrão) deve ser exatamente 100%. Atualmente é {soma_15}%."))
+        # Somente se a distribuição de prémios percentuais estiver ativada (> 0)
+        if porcento_premios_val > 0:
+            
+            # Padrão 15
+            soma_15 = get_float_val('porcento_15_linha') + get_float_val('porcento_15_bingo') + get_float_val('porcento_15_segundobingo')
+            if abs(soma_15 - 100.0) > 0.01: # Permite uma margem de erro de arredondamento ínfima
+                 return redirect(url_for('parametros', error=f"Erro: O total de prémios para 15 Números (Padrão) deve ser exatamente 100%. Atualmente é {soma_15}%."))
 
-        # Padrão 25
-        soma_25 = get_float_val('porcento_25_linha') + get_float_val('porcento_25_bingo')
-        if abs(soma_25 - 100.0) > 0.01:
-             return redirect(url_for('parametros', error=f"Erro: O total de prémios para 25 Números (Padrão) deve ser exatamente 100%. Atualmente é {soma_25}%."))
+            # Padrão 25
+            soma_25 = get_float_val('porcento_25_linha') + get_float_val('porcento_25_bingo')
+            if abs(soma_25 - 100.0) > 0.01:
+                 return redirect(url_for('parametros', error=f"Erro: O total de prémios para 25 Números (Padrão) deve ser exatamente 100%. Atualmente é {soma_25}%."))
 
-        # 25 - 4 Cantos
-        soma_25_4cantos = get_float_val('porcento_25_4cantos_4cantos') + get_float_val('porcento_25_4cantos_linha') + get_float_val('porcento_25_4cantos_bingo')
-        if abs(soma_25_4cantos - 100.0) > 0.01:
-             return redirect(url_for('parametros', error=f"Erro: O total para 25 Números (4 Cantos) deve ser 100%. Atualmente é {soma_25_4cantos}%."))
+            # 25 - 4 Cantos
+            soma_25_4cantos = get_float_val('porcento_25_4cantos_4cantos') + get_float_val('porcento_25_4cantos_linha') + get_float_val('porcento_25_4cantos_bingo')
+            if abs(soma_25_4cantos - 100.0) > 0.01:
+                 return redirect(url_for('parametros', error=f"Erro: O total para 25 Números (4 Cantos) deve ser 100%. Atualmente é {soma_25_4cantos}%."))
 
-        # 15 - 3 Linhas
-        soma_15_3linhas = get_float_val('porcento_15_3linhas_linhas') + get_float_val('porcento_15_3linhas_bingo') + get_float_val('porcento_15_3linhas_segundobingo')
-        if abs(soma_15_3linhas - 100.0) > 0.01:
-             return redirect(url_for('parametros', error=f"Erro: O total para 15 Números (3 Linhas) deve ser 100%. Atualmente é {soma_15_3linhas}%."))
+            # 15 - 3 Linhas
+            soma_15_3linhas = get_float_val('porcento_15_3linhas_linhas') + get_float_val('porcento_15_3linhas_bingo') + get_float_val('porcento_15_3linhas_segundobingo')
+            if abs(soma_15_3linhas - 100.0) > 0.01:
+                 return redirect(url_for('parametros', error=f"Erro: O total para 15 Números (3 Linhas) deve ser 100%. Atualmente é {soma_15_3linhas}%."))
 
-        # 15 - Quadra
-        soma_15_quadra = get_float_val('porcento_15_quadra_quadra') + get_float_val('porcento_15_quadra_linha') + get_float_val('porcento_15_quadra_bingo') + get_float_val('porcento_15_quadra_segundobingo')
-        if abs(soma_15_quadra - 100.0) > 0.01:
-             return redirect(url_for('parametros', error=f"Erro: O total para 15 Números (Quadra) deve ser 100%. Atualmente é {soma_15_quadra}%."))
+            # 15 - Quadra
+            soma_15_quadra = get_float_val('porcento_15_quadra_quadra') + get_float_val('porcento_15_quadra_linha') + get_float_val('porcento_15_quadra_bingo') + get_float_val('porcento_15_quadra_segundobingo')
+            if abs(soma_15_quadra - 100.0) > 0.01:
+                 return redirect(url_for('parametros', error=f"Erro: O total para 15 Números (Quadra) deve ser 100%. Atualmente é {soma_15_quadra}%."))
+
 
         # 2. CONSTRUÇÃO DO DICIONÁRIO DE ATUALIZAÇÃO
         dados_atualizados = {
@@ -5210,7 +5222,15 @@ def gravar_parametros():
             'acumulado': safe_dec(request.form.get('acumulado', '0')),
             'tope': int(request.form.get('tope', 0)),
             'porcento_premios': int(request.form.get('porcento_premios', 0)),
+
+            # --- NOVOS CAMPOS CORRIGIDOS (ROBÔ E INTEGRAÇÕES) ---
+            'tempo_atualizacao_premios': int(request.form.get('tempo_atualizacao_premios', 1)),
+            'minimo_atualizacao_premios': safe_dec(request.form.get('minimo_atualizacao_premios', '50.00')),
+            'receber_pix': True if request.form.get('receber_pix') else False,
+            'chat_id_telegram': request.form.get('chat_id_telegram', '').strip(),
+            'token_telegram': request.form.get('token_telegram', '').strip(),
             
+
             # Aninhando os objetos padrão
             'porcento_15': {
                 'linha': safe_dec(request.form.get('porcento_15_linha', '0')),
