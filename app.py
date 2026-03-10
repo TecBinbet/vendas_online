@@ -5126,6 +5126,7 @@ def parametros():
         'receber_pix': bool(param_doc.get('receber_pix', False)),
         'chat_id_telegram': param_doc.get('chat_id_telegram', ''),
         'token_telegram': param_doc.get('token_telegram', ''),
+        'texto_requisicao_saque': param_doc.get('texto_requisicao_saque', ''),	
         
         # Padrão
         'porcento_15_linha': safe_get_float(p15.get('linha', 0)),
@@ -5229,7 +5230,7 @@ def gravar_parametros():
             'receber_pix': True if request.form.get('receber_pix') else False,
             'chat_id_telegram': request.form.get('chat_id_telegram', '').strip(),
             'token_telegram': request.form.get('token_telegram', '').strip(),
-            
+            'texto_requisicao_saque': request.form.get('texto_requisicao_saque', '').strip(),
 
             # Aninhando os objetos padrão
             'porcento_15': {

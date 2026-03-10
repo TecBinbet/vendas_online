@@ -91,7 +91,7 @@
             </div>
 
             <!-- BLOCO 3: INTEGRAÇÕES E PAGAMENTOS (NOVO) -->
-            <h3 class="section-title text-emerald-700">🌐 Integrações e Pagamentos Automáticos</h3>
+            <h3 class="section-title text-emerald-700">🌐 Integrações e Pagamentos Automáticos & Requisição de Saques</h3>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                 
                 <!-- Toggle do PIX -->
@@ -104,7 +104,7 @@
                             {% if p.receber_pix %}ATIVADO{% else %}DESATIVADO{% endif %}
                         </span>
                     </label>
-                    <p class="text-[10px] text-gray-500 mt-2 font-bold italic">Ative para permitir compras via Mercado Pago pelo telemóvel.</p>
+                    <p class="text-[10px] text-gray-500 -mt-2 font-bold italic">Ative para permitir compras via Mercado Pago pelo SmartPhone.</p>
                 </div>
 
                 <!-- Telegram Token -->
@@ -119,6 +119,13 @@
                     <input type="text" id="chat_id_telegram" name="chat_id_telegram" value="{{ p.chat_id_telegram }}" class="form-control text-sm font-mono text-gray-600" placeholder="Ex: -100123456789">
                     <p class="text-[10px] text-gray-500 mt-1">ID do grupo que receberá requisições de saques.</p>
                 </div>
+            </div>
+
+            <!-- CAMPO: TEXTO SAQUE (NOVO) -->
+            <div class="mt-3 form-group border border-emerald-200 p-2 rounded-lg bg-emerald-50/30">
+                <label for="texto_requisicao_saque" class="text-emerald-800 flex items-center gap-1"><span>📝</span> Instruções para Tela de Saque (Terminal do Cliente)</label>
+                <textarea id="texto_requisicao_saque" name="texto_requisicao_saque" rows="3" class="form-control text-lg text-blue-800 leading-relaxed" placeholder="Ex: Olá! Os seus pedidos de saque são processados em até 2 horas. Certifique-se de que a sua chave Pix (CPF ou Telefone) está correta no perfil.">{{ p.texto_requisicao_saque }}</textarea>
+                <p class="text-[11px] text-gray-500 -mt-2 font-semibold">Este texto será exibido no aplicativo do cliente na hora de solicitar um saque. (Recomendado: 150 a 300 caracteres).</p>
             </div>
 
             <!-- BLOCO 4: REGRAS DE PRÉMIOS -->
@@ -275,7 +282,7 @@
     </div>
 
     <script>
-        // Lógica de manipulação visual do Toggle (Opcional, pois Tailwind+CSS resolve, mas fica para o texto)
+        // Lógica de manipulação visual do Toggle 
         const checkboxPix = document.querySelector('input[name="receber_pix"]');
         const spanTextPix = checkboxPix.nextElementSibling.nextElementSibling;
         
@@ -302,7 +309,6 @@
 
         // Função que calcula a soma e atualiza as cores
         function calculateSums() {
-            // Se "Destinado a Prémios (%)" for menor ou igual a 0, não precisa de validar os 100%
             const porcentoPremios = parseFloat(document.getElementById('porcento_premios').value) || 0;
             const requires100Percent = porcentoPremios > 0;
             
@@ -320,11 +326,10 @@
                 const display = document.getElementById(group.displayId);
                 display.innerText = total.toFixed(2) + '%';
 
-                // Tolerância minúscula para imprecisões do Javascript
                 if (!requires100Percent || Math.abs(total - 100.00) < 0.01) {
-                    display.className = 'text-lg font-black text-green-600'; // Verde = OK (ou se não for necessário)
+                    display.className = 'text-lg font-black text-green-600'; 
                 } else {
-                    display.className = 'text-lg font-black text-red-600 bg-red-100 px-2 rounded'; // Vermelho = Erro
+                    display.className = 'text-lg font-black text-red-600 bg-red-100 px-2 rounded'; 
                     isAll100 = false;
                 }
             });
@@ -332,25 +337,22 @@
             return isAll100;
         }
 
-        // Adiciona o "ouvinte" em todos os inputs de percentagem para atualizar em tempo real
         document.querySelectorAll('input[type="number"]').forEach(input => {
             if (input.className.includes('pct-')) {
                 input.addEventListener('input', calculateSums);
             }
         });
 
-        // Validação ao tentar enviar o formulário
         function validateForm(event) {
             const isAllValid = calculateSums();
             const porcentoPremios = parseFloat(document.getElementById('porcento_premios').value) || 0;
             
             if (porcentoPremios > 0 && !isAllValid) {
-                event.preventDefault(); // Impede o envio
+                event.preventDefault(); 
                 alert("⚠️ ATENÇÃO: Verifique os cartões em vermelho.\n\nComo você ativou a distribuição de prêmios (" + porcentoPremios + "%), todas as regras de divisão devem somar exatamente 100% para evitar falhas no sistema financeiro.");
                 return false;
             }
 
-            // Se estiver tudo OK, altera o botão e envia
             const btn = document.getElementById('btn-submit-params');
             btn.innerHTML = '⏳ A gravar...';
             btn.disabled = true;
@@ -358,7 +360,6 @@
             return true;
         }
 
-        // Calcula a soma inicial logo que a página carrega
         document.addEventListener('DOMContentLoaded', calculateSums);
     </script>
 </body>

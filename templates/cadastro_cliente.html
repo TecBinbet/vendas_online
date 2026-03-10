@@ -166,7 +166,7 @@
             <a href="{{ url_for(next_url | default('menu_operacoes', true), id_evento=id_evento_retorno) }}" class="text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
         </div>
 
-         <h2 class="text-xl mb-2 -mt-2 text-blue-800 text-center font-bold uppercase tracking-tight">Gestão de Clientes</h2>
+         <h2 class="text-xl mb-1 text-blue-800 text-center font-bold uppercase tracking-tight">Gestão de Clientes</h2>
 
         {% if error %}
             <div class="alert-danger">{{ error }}</div>
@@ -294,7 +294,7 @@
         </div>
 
         <div id="view-consulta" class="{% if active_view != 'consulta' %}hidden{% endif %}">
-            <h3 class="text-xl font-semibold text-accent mb-2">🔎 Localizar Cliente</h3>
+            <h3 class="text-xl font-semibold text-accent mb-4">🔎 Localizar Cliente</h3>
             
             <form method="GET" action="{{ url_for('cadastro_cliente') }}" class="mb-4 space-y-2" id="form-consulta">
                 <input type="hidden" name="view" value="consulta">
@@ -313,17 +313,17 @@
                 </div>
             </form>
             
-            <div class="space-y-2">
+            <div class="space-y-3">
                 {% if active_view == 'consulta' and query and clientes_lista|length > 0 %}
                     {% for cliente in clientes_lista %}
-                        <div class="bg-white border-2 border-gray-100 p-1 rounded-xl shadow-sm hover:border-accent transition-all">
+                        <div class="bg-white border-2 border-gray-100 p-4 rounded-xl shadow-sm hover:border-accent transition-all">
                             <div class="flex justify-between items-start">
                                 <div>
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-bold">CLI: {{ cliente.id_cliente }}</span>
+                                    <div class="flex items-center gap-2 mb-1">
+                                        <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-bold">CLI{{ cliente.id_cliente }}</span>
                                         <span class="text-lg font-black text-gray-800 uppercase tracking-tight">{{ cliente.nick }}</span>
                                     </div>
-                                    <p class="text-xs text-gray-700 font-medium">{{ cliente.nome_cliente }} | {{ cliente.cidade | default('N/A') }}</p>
+                                    <p class="text-xs text-gray-400 font-medium">{{ cliente.nome_cliente }} | {{ cliente.cidade | default('N/A') }}</p>
                                 </div>
                                 <div class="text-right">
                                     <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</p>
@@ -331,12 +331,12 @@
                                 </div>
                             </div>
                             <div class="mt-4 flex flex-wrap gap-2 items-center">
-                                <button type="button" onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}')" class="px-4 py-3 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm shadow">💰 + Crédito</button>
-                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="px-4 py-3 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold">✏️ Alterar</a>
+                                <button type="button" onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}')" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm shadow">💰 + Crédito</button>
+                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold">✏️ Alterar</a>
                                 
                                 {% if nivel >= 3 %}
                                 <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" id="form-excluir-consulta-{{ cliente.id_cliente }}" class="inline-block" onsubmit="return ativarLoading(this, 'Excluindo cliente...')">
-                                    <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta")' class="px-4 py-3 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">🗑️ Excluir</button>
+                                    <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta")' class="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">🗑️ Excluir</button>
                                 </form>
                                 {% endif %}
                             </div>
@@ -377,24 +377,24 @@
             <div class="overflow-x-auto border border-gray-100 rounded-2xl shadow-sm">
                 <table class="min-w-full bg-white">
                     <thead>
-                        <tr class="list-header bg-gray-50 text-[11px] font-black text-gray-400 uppercase tracking-widest text-left">
-                            <th class="py-4 px-6 border-b">ID</th>
-                            <th class="py-4 px-6 border-b">Nick / Nome</th>
-                            <th class="py-4 px-6 border-b">Cidade</th>
-                            <th class="py-4 px-6 border-b text-right">Ações</th>
+                        <tr class="list-header bg-gray-50 text-[12px] font-black text-gray-600 uppercase tracking-widest text-left">
+                            <th class="py-1 px-4 border-b">ID</th>
+                            <th class="py-1 px-4 border-b">Nick / Nome</th>
+                            <th class="py-1 px-4 border-b">Cidade</th>
+                            <th class="py-1 px-4 border-b text-right">Ações</th>
                         </tr>
                     </thead>
                     <tbody class="text-sm">
                         {% if active_view == 'listar' and clientes_lista %}
                             {% for cliente in clientes_lista %}
                             <tr class="list-row hover:bg-green-50/50 transition duration-150">
-                                <td class="py-4 px-6 border-b font-mono text-xs text-gray-400">CLI{{ cliente.id_cliente }}</td>
-                                <td class="py-4 px-6 border-b">
-                                    <div class="font-bold text-gray-800 uppercase tracking-tighter">{{ cliente.nick }}</div>
-                                    <div class="text-[10px] text-gray-400">{{ cliente.nome_cliente }}</div>
+                                <td class="py-1 px-4 border-b font-mono text-[20px] text-gray-800">{{ cliente.id_cliente }}</td>
+                                <td class="py-1 px-4 border-b">
+                                    <div class="font-bold text-[16px] text-blue-800 uppercase tracking-tighter">{{ cliente.nick }}</div>
+                                    <div class="font-semibold text-[14px] text-gray-600">{{ cliente.nome_cliente }}</div>
                                 </td>
-                                <td class="py-4 px-6 border-b text-gray-500 font-medium">{{ cliente.cidade | default('—') }}</td>
-                                <td class="py-4 px-6 border-b text-right">
+                                <td class="py-2 px-4 border-b text-gray-500 font-medium">{{ cliente.cidade | default('—') }}</td>
+                                <td class="py-2 px-4 border-b text-right">
                                     <div class="flex justify-end gap-3">
                                         <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="text-blue-500 font-bold hover:underline">Editar</a>
                                         
@@ -455,17 +455,17 @@
     <!-- Modal Recarga -->
     <div id="recarga-modal" class="modal-overlay" onclick="closeRecargaModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
-            <h3 class="text-xl2 font-semibold mb-1 text-primary">💰 Adicionar Crédito</h3>
-            <p class="text-xl text-gray-400 mb-2 uppercase tracking-widest font-bold">Destino: <span id="modal-recarga-nick" class="text-gray-800">...</span></p>
+            <h3 class="text-xl font-black mb-1 text-primary">💰 Adicionar Crédito</h3>
+            <p class="text-xs text-gray-400 mb-6 uppercase tracking-widest font-bold">Destino: <span id="modal-recarga-nick" class="text-gray-800">...</span></p>
             <form method="POST" action="{{ url_for('adicionar_credito_cliente') }}" onsubmit="return ativarLoading(this, 'Processando recarga...')">
                 <input type="hidden" name="id_cliente" id="modal-recarga-id">
-                <div class="mb-4">
-                    <label class="block text-[12px] font-black text-gray-400 uppercase mb-1 tracking-widest">Valor da Recarga (R$)</label>
+                <div class="mb-6">
+                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Valor da Recarga (R$)</label>
                     <input type="number" name="valor_recarga" step="0.01" min="0.01" required 
-                           class="w-full p-1 border-2 border-primary/20 rounded-xl text-3xl font-black text-center text-primary focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all bg-primary/5">
+                           class="w-full p-4 border-2 border-primary/20 rounded-xl text-3xl font-black text-center text-primary focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all bg-primary/5">
                 </div>
                 <div class="flex gap-2">
-                    <button type="button" class="flex-1 py-3 bg-red-200 text-gray-700 rounded-xl font-bold hover:bg-red-400" onclick="closeRecargaModal()">Cancelar</button>
+                    <button type="button" class="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold hover:bg-gray-200" onclick="closeRecargaModal()">Cancelar</button>
                     <button type="submit" class="flex-1 py-3 bg-primary text-white rounded-xl font-bold shadow-lg hover:brightness-110 active:scale-95 transition-all">Confirmar</button>
                 </div>
             </form>
