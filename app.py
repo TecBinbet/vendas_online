@@ -4387,45 +4387,43 @@ def acao_saque():
         if saque.get('status') != 'pendente':
             return redirect(url_for('monitor_saques', error="Esta solicitação já foi processada."))
 
-        id_cliente = saque.get('id_cliente')
         valor = safe_float(saque.get('valor_requerido'))
         
+        # Pega o ID que estava salvo no pedido de saque
+        id_raw = saque.get('id_cliente')
+        
+        # --- BUSCA INTELIGENTE DO CLIENTE ---
+        possiveis_ids = [id_raw]
+        try:
+            if str(id_raw).isdigit(): possiveis_ids.append(int(id_raw))
+            possiveis_ids.append(str(id_raw))
+        except: pass
+        
+        cliente = db.clientes.find_one({'id_cliente': {'$in': possiveis_ids}})
+        # ---------------------------------------------
+
+        if not cliente:
+            return redirect(url_for('monitor_saques', error=f"Erro Crítico: Cliente {id_raw} deletado ou não encontrado."))
+
+        saldo_atual = safe_float(cliente.get('saldo_atual', 0))
+
         if acao == 'pagar':
-            # Pega o ID que estava salvo no pedido de saque
-            id_raw = saque.get('id_cliente')
+            # Se for aprovar o pagamento, o valor JÁ FOI DEBITADO na hora da requisição.
+            # Aqui você deve decidir se o seu sistema antigo debitava na hora do pedido ou aqui.
+            # Baseado na sua explicação ("o sistema irá abater o valor do saldo atual do cliente"),
+            # presumo que o débito JÁ ocorreu no momento em que o cliente clicou em "Solicitar Saque" no celular.
+            # LOGO, aqui NÃO PRECISAMOS DEBITAR NOVAMENTE, apenas mudar o status.
             
-            # --- CORREÇÃO: BUSCA INTELIGENTE (HÍBRIDA) ---
-            # Monta uma lista de possibilidades para achar o cliente
-            # Ex: Se id_raw for "20", ele vai procurar por "20" E por 20
-            possiveis_ids = [id_raw]
+            # --- Se o seu sistema NÃO debitava na requisição e você quiser manter o débito aqui, 
+            # descomente o bloco abaixo. Mas pela sua nova regra, o débito já deve ter ocorrido. ---
             
-            try:
-                # Tenta criar a versão numérica
-                if str(id_raw).isdigit():
-                    possiveis_ids.append(int(id_raw))
-                # Tenta criar a versão texto
-                possiveis_ids.append(str(id_raw))
-            except:
-                pass
-            
-            # Busca no banco usando o operador $in (procura por qualquer um da lista)
-            cliente = db.clientes.find_one({'id_cliente': {'$in': possiveis_ids}})
-            # ---------------------------------------------
-
-            if not cliente:
-                # Se mesmo procurando de todos os jeitos não achar, aí sim é erro real
-                return redirect(url_for('monitor_saques', error=f"Erro Crítico: Cliente {id_raw} deletado ou não encontrado."))
-
-            # Continua o processo de pagamento...
-            saldo_atual = safe_float(cliente.get('saldo_atual', 0))
-            
+            """
             if saldo_atual < valor:
                 return redirect(url_for('monitor_saques', error=f"Erro: Cliente tem apenas R$ {saldo_atual:.2f}. Saque de R$ {valor:.2f} impossível."))
 
-            # 2. Debita o saldo
             sucesso, msg = registrar_transacao_cliente(
                 db=db,
-                id_cliente=cliente.get('id_cliente'), # Usa o ID oficial achado no banco
+                id_cliente=cliente.get('id_cliente'), 
                 valor=-abs(valor), 
                 tipo='saque',
                 descricao=f"Saque Aprovado (Req: {str(id_saque)[-4:]})",
@@ -4435,6 +4433,7 @@ def acao_saque():
             
             if not sucesso:
                  return redirect(url_for('monitor_saques', error=f"Erro ao debitar: {msg}"))
+            """
 
             # 3. Atualiza status do saque para PAGO
             db.requisao_saque.update_one(
@@ -4443,13 +4442,29 @@ def acao_saque():
                     'status': 'pago',
                     'data_pgto': hora_brasil(),
                     'operador_pgto': session.get('nick'),
-                    'saldo_atual_pgto': saldo_atual - valor
+                    'saldo_atual_pgto': saldo_atual # Saldo atual do cliente após o pagamento
                 }}
             )
-            msg_sucesso = "Saque APROVADO e saldo debitado com sucesso!"
+            msg_sucesso = "Saque APROVADO com sucesso!"
 
         elif acao == 'rejeitar':
-            # Apenas muda o status, não mexe no saldo (pois não foi debitado na solicitação)
+            # --- NOVA LÓGICA CRÍTICA: DEVOLVER O DINHEIRO AO CLIENTE ---
+            
+            # 1. Devolve o dinheiro usando a nossa função oficial de transação
+            sucesso, msg = registrar_transacao_cliente(
+                db=db,
+                id_cliente=cliente.get('id_cliente'),
+                valor=abs(valor), # Valor POSITIVO para somar de volta à conta
+                tipo='estorno_saque',
+                descricao=f"Estorno de Saque Rejeitado (Req: {str(id_saque)[-4:]})",
+                id_evento=None,
+                id_venda=None
+            )
+
+            if not sucesso:
+                 return redirect(url_for('monitor_saques', error=f"Erro ao devolver saldo: {msg}"))
+
+            # 2. Muda o status para rejeitado
             db.requisao_saque.update_one(
                 {'_id': ObjectId(id_saque)},
                 {'$set': {
@@ -4458,7 +4473,7 @@ def acao_saque():
                     'operador_pgto': session.get('nick')
                 }}
             )
-            msg_sucesso = "Solicitação de Saque REJEITADA."
+            msg_sucesso = f"Solicitação REJEITADA. R$ {valor:.2f} foram devolvidos à carteira do cliente!"
 
         else:
             return redirect(url_for('monitor_saques', error="Ação inválida."))
@@ -4468,6 +4483,7 @@ def acao_saque():
     except Exception as e:
         print(f"Erro critico acao_saque: {e}")
         return redirect(url_for('monitor_saques', error=f"Erro interno: {e}"))
+
 
 
 @app.route('/financeiro_evento', methods=['GET'])

@@ -45,7 +45,7 @@
 </head>
 <body>
     <div class="container">
-        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
             <h2 style="margin:0;">💸 Monitor de Saques</h2>
             <a href="{{ url_for('menu_operacoes') }}" style="text-decoration: none; font-size: 1.3rem;">🏠 Voltar</a>
         </div>
@@ -110,10 +110,10 @@
                      </strong>
                 </span>
             </div>
-            <div style="font-size: 1.2rem; margin: 5px 0; color: #111;">
+            <div style="font-size: 1.2rem; margin: 1px 0; color: #111;">
                 Valor: <strong>R$ {{ "{:,.2f}".format(s.valor_requerido) }}</strong>
             </div>
-            <div style="font-size: 0.9rem; color: #444; background: #fff; padding: 5px; border: 1px dashed #ccc; margin-bottom: 5px;">
+            <div style="font-size: 0.9rem; color: #444; background: #fff; padding: 5px; border: 1px dashed #ccc; margin-bottom: 3px;">
                 🔑 PIX: <strong>{{ s.chave_pix }}</strong>
             </div>
             
@@ -132,7 +132,7 @@
                 </form>
             </div>
             {% else %}
-                <div style="margin-top: 5px; font-size: 0.85rem; color: #666; border-top: 1px solid #eee; padding-top: 5px;">
+                <div style="margin-top: 1px; font-size: 0.85rem; color: #0047AB; border-top: 1px solid #eee; padding-top: 0px;">
                     Processado por: <strong>{{ s.operador_pgto or 'Sistema' }}</strong> <br>
                     {% if s.data_pgto %}
                         Em: <strong>{{ s.data_pgto.strftime('%d/%m/%Y às %H:%M') }}</strong>
