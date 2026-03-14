@@ -2582,7 +2582,7 @@ def cadastro_evento():
     if db_status:
         try:
             total_eventos = db.eventos.count_documents({})
-            if active_view == 'listar': eventos_lista = list(db.eventos.find({}).sort([("data_evento", -1), ("hora_evento", -1)]))
+            if active_view in ['listar', 'exclusao_lote']: eventos_lista = list(db.eventos.find({}).sort([("data_evento", -1), ("hora_evento", -1)]))
             elif active_view == 'consulta' and search_term:
                 query_filter = {'id_evento': int(search_term)} if search_term.isdigit() else {'$or': [{'descricao': {'$regex': re.compile(re.escape(search_term), re.IGNORECASE)}}, {'data_evento': {'$regex': re.compile(re.escape(search_term), re.IGNORECASE)}}]}
                 eventos_lista = list(db.eventos.find(query_filter).sort("data_evento", -1))
@@ -2641,6 +2641,75 @@ def cadastro_evento():
     }
     
     return render_template('cadastro_evento.html', **context)
+
+
+@app.route('/excluir_eventos_lote', methods=['POST'])
+@login_required
+def excluir_eventos_lote():
+    """Rota para apagar múltiplos eventos de uma só vez a partir da nova aba 'Seleção /p Exclusão'."""
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    # Validação de segurança (Nível 3)
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('cadastro_evento', view='exclusao_lote', error="Acesso Negado. Privilégio insuficiente."))
+
+    # Obtém a lista de checkboxes selecionados (retorna array de strings)
+    ids_selecionados_str = request.form.getlist('eventos_selecionados')
+    
+    if not ids_selecionados_str:
+        return redirect(url_for('cadastro_evento', view='exclusao_lote', error="Nenhum evento foi selecionado para exclusão."))
+
+    excluidos_sucesso = 0
+    falhas = 0
+
+    try:
+        # Loop para processar cada ID selecionado
+        for id_str in ids_selecionados_str:
+            try:
+                id_evento = int(id_str)
+                
+                # 1. Exclui o registro principal do Evento
+                result = db.eventos.delete_one({'id_evento': id_evento})
+                
+                if result.deleted_count == 1:
+                    # 2. Remove as coleções dinâmicas inteiras associadas ao evento
+                    colecoes_para_apagar = [
+                        f"vendas{id_evento}",
+                        f"vendas_sorte_extra{id_evento}",
+                        f"pagamentos{id_evento}"
+                    ]
+                    
+                    for col_name in colecoes_para_apagar:
+                        if col_name in db.list_collection_names():
+                            db[col_name].drop()
+
+                    # 3. Remove registros vinculados nas tabelas de apoio
+                    db.resultados.delete_many({'id_evento': id_evento})
+                    db.controle_venda.delete_many({'id_evento': id_evento})
+                    
+                    excluidos_sucesso += 1
+                else:
+                    falhas += 1
+
+            except ValueError:
+                falhas += 1 # Ignora silenciosamente se houver lixo no ID
+
+        # Mensagem final para o utilizador
+        msg = f"Operação concluída! {excluidos_sucesso} eventos (e seus dados vinculados) foram excluídos permanentemente."
+        if falhas > 0:
+            msg += f" ({falhas} falharam)."
+            
+        print(f"[AUDITORIA] Admin {session.get('nick')} executou exclusão em lote. Sucesso: {excluidos_sucesso}, Falhas: {falhas}")
+        
+        # Redireciona de volta para a aba de exclusão em lote
+        return redirect(url_for('cadastro_evento', view='exclusao_lote', success=msg))
+
+    except Exception as e:
+        print(f"ERRO CRÍTICO na exclusão em lote: {e}")
+        import traceback
+        traceback.print_exc()
+        return redirect(url_for('cadastro_evento', view='exclusao_lote', error=f"Ocorreu um erro interno durante o processo: {e}"))
 
 
 @app.route('/gravar_evento', methods=['POST'])

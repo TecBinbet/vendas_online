@@ -76,9 +76,46 @@
         
         .search-type-selector { display: flex; gap: 15px; margin-bottom: 8px; font-size: 0.9rem; color: #4B5563; }
         .search-type-selector label { font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+
+        /* --- CSS DO SPINNER --- */
+        .spinner-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(17, 24, 39, 0.75);
+            display: none; 
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .spinner-visible { display: flex; }
+
+        .spinner-animation {
+            animation: spin 1s linear infinite;
+            border-radius: 9999px;
+            height: 5rem;
+            width: 5rem;
+            border-width: 4px;
+            border-style: solid;
+            border-color: rgba(255, 255, 255, 0.1);
+            border-top-color: #3B82F6;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
     </style>
 </head>
 <body>
+
+    <!-- Estrutura do Spinner -->
+    <div id="loading-spinner" class="spinner-overlay">
+        <div class="flex flex-col items-center">
+            <div class="spinner-animation"></div>
+            <p id="spinner-text" class="text-white mt-4 font-bold animate-pulse uppercase tracking-widest text-sm">Processando...</p>
+        </div>
+    </div>
 
     <div class="container">
         <div class="flex justify-center font-bold -mt-4">
@@ -216,7 +253,7 @@
                             
                             <div class="mt-1 space-y-0.5">
                                 <p class="text-sm font-semibold text-gray-700">💰 Valor Kit: R$ {{ '%.2f' | format(evento.valor_de_venda_float) }}</p>
-                                <p class="text-md font-semibold text-green-900 bg-green-100/50 px-2 py-0.5 rounded border border-green-200 inline-block">
+                                <p class="text-md font-black text-green-900 bg-green-100/50 px-2 py-0.5 rounded border border-green-200 inline-block">
                                     🏆 Premiação: R$ {{ evento.premio_total | format_moeda }}
                                     {% if evento.get('is_premio_dinamico_ativo', False) %}
                                         <span title="Prêmio Reajustado Pelas Vendas!" class="cursor-help ml-1">🚀</span>
@@ -243,12 +280,30 @@
         let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
         let searchTimeout = null;
 
+        // --- FUNÇÃO DO SPINNER ---
+        function ativarSpinner(mensagem) {
+            const spinner = document.getElementById('loading-spinner');
+            const text = document.getElementById('spinner-text');
+            if (text && mensagem) text.innerText = mensagem;
+            if (spinner) spinner.classList.add('spinner-visible');
+            document.body.style.pointerEvents = 'none'; // Bloqueia cliques
+        }
+
+        // Remove o spinner se o usuário voltar na página
+        window.onpageshow = function(event) {
+            const spinner = document.getElementById('loading-spinner');
+            if (spinner) spinner.classList.remove('spinner-visible');
+            document.body.style.pointerEvents = 'auto';
+        };
+
         function handleSearchInput(inputElement) {
             const termo = inputElement.value.trim();
             const resultsDiv = document.getElementById('search-results-list');
             if (searchTimeout) clearTimeout(searchTimeout);
             if (termo.length < 2) { resultsDiv.style.display = 'none'; return; }
-            searchTimeout = setTimeout(() => { executarBusca(termo); }, 400);
+            
+            // REDUZIDO O TEMPO DE DEBOUNCE DE 400 PARA 250 MILISSEGUNDOS (MAIS RÁPIDO)
+            searchTimeout = setTimeout(() => { executarBusca(termo); }, 250);
         }
         
         async function executarBusca(termo) {
@@ -275,6 +330,7 @@
         function selecionarCliente(cliente) {
             const inputBusca = document.getElementById('id_cliente_busca');
             inputBusca.value = `CLI${cliente.id}`;
+            ativarSpinner('A consultar carteira do cliente...'); // SPINNER AQUI
             document.getElementById('main-form').submit();
         }
 
@@ -307,16 +363,21 @@
         
         function selectEvent(cardElement) {
             document.getElementById('input_id_evento').value = cardElement.dataset.id;
+            ativarSpinner('A carregar evento e regras...'); // SPINNER AQUI
             document.getElementById('main-form').submit();
         }
         
         function syncAndConfirm(event) {
             if (!window.confirm("Confirmar a gravação desta venda?")) return false;
+            
             const btn = document.getElementById('btn-confirmar-venda');
             btn.disabled = true;
             btn.innerHTML = '⏳ Gravando...';
+            
+            ativarSpinner('A processar venda e a gerar bilhetes...'); // SPINNER AQUI
+            
             document.getElementById('confirm-form').submit();
-            return false;
+            return false; // Previne comportamento nativo enquanto o form submete
         }
 
         function copyReceiptText() {

@@ -153,13 +153,20 @@
                 🔎 Consulta
             </a>
             <a href="{{ url_for('cadastro_evento', view='listar') }}" 
+               onclick="ativarSpinnerLink('Carregando lista...')"
                class="nav-link {% if active_view == 'listar' %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
                 📋 Listar
             </a>
+            <a href="{{ url_for('cadastro_evento', view='exclusao_lote') }}" 
+               onclick="ativarSpinnerLink('Carregando seleção...')"
+               class="nav-link {% if active_view == 'exclusao_lote' %}bg-red-600 text-white{% else %}bg-red-100 text-red-800{% endif %} hover:bg-red-500 hover:text-white">
+                🗑️ Seleção /p Exclusão
+            </a>
         </div>
 
-        <div class="mb-1 -mt-3 p-1 bg-info text-white border border-blue-600 rounded-lg">
-            Total de Eventos Registados: <strong id="total-eventos">{{ total_eventos | default(0) }}</strong>.
+        <div class="mb-1 -mt-3 p-1 bg-info text-white border border-blue-600 rounded-lg flex justify-between px-3">
+            <span>Controle Ativo</span>
+            <span>Total de Eventos Registados: <strong id="total-eventos">{{ total_eventos | default(0) }}</strong></span>
         </div>
         
         {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
@@ -279,7 +286,6 @@
                                oninput="calculatePremioTotal()">
                     </div>
 
-                    <!-- NOVO CAMPO: TIPO DE PREMIAÇÃO -->
                     <div class="form-group">
                         <label for="tipo_premiacao" class="required-label">Tipo de Premiação:</label>
                         <select id="tipo_premiacao" name="tipo_premiacao" class="form-control" required>
@@ -392,17 +398,17 @@
         <div id="view-listar" class="view-content {% if active_view == 'listar' %}active-view-show{% endif %}">
             <h3 class="text-lg font-bold mb-0 -mt-1 text-gray-700">Lista de Eventos (Ordenada por Data)</h3>
             
-            <div class="overflow-x-auto shadow-md rounded-lg">
+            <div class="overflow-x-auto shadow-md rounded-lg mt-2">
                 <table class="min-w-full bg-white border border-gray-200">
                     <thead>
                         <tr class="list-header">
-                            <th class="py-0 px-2 border-b text-left">ID</th>
-                            <th class="py-0 px-2 border-b text-left">Descrição</th>
-                            <th class="py-0 px-2 border-b text-left">Data/Hora</th>
-                            <th class="py-0 px-2 border-b text-left">Prêmio Total</th>
-                            <th class="py-0 px-2 border-b text-left">Vendas</th>
-                            <th class="py-0 px-2 border-b text-left">Status</th>
-                            <th class="py-0 px-2 border-b text-left">Ações</th>
+                            <th class="py-2 px-2 border-b text-left">ID</th>
+                            <th class="py-2 px-2 border-b text-left">Descrição</th>
+                            <th class="py-2 px-2 border-b text-left">Data/Hora</th>
+                            <th class="py-2 px-2 border-b text-left">Prêmio Total</th>
+                            <th class="py-2 px-2 border-b text-left">Vendas</th>
+                            <th class="py-2 px-2 border-b text-left">Status</th>
+                            <th class="py-2 px-2 border-b text-left">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -410,7 +416,7 @@
                             {% for evento in eventos_lista %}
                             <tr class="list-row hover:bg-green-200 transition duration-150">
                                 <td class="py-2 px-2 border-b text-sm">{{ evento.id_evento }}</td>
-                                <td class="py-2 px-2 border-b text-sm">{{ evento.descricao }}</td>
+                                <td class="py-2 px-2 border-b text-sm font-bold">{{ evento.descricao }}</td>
                                 <td class="py-2 px-2 border-b text-sm">{{ evento.data_evento | default('N/A') }} às {{ evento.hora_evento | default('N/A') }}</td>
                                 
                                 <td class="py-2 px-2 border-b text-sm font-semibold">
@@ -445,6 +451,65 @@
             </div>
         </div>
 
+        <!-- NOVA ABA: EXCLUSÃO EM LOTE -->
+        <div id="view-exclusao_lote" class="view-content {% if active_view == 'exclusao_lote' %}active-view-show{% endif %}">
+            <div class="flex justify-between items-center mb-2 -mt-1">
+                <h3 class="text-lg font-bold text-red-700">Exclusão em Lote</h3>
+                <p class="text-sm text-gray-500 italic">Selecione os eventos que deseja apagar.</p>
+            </div>
+            
+            <form method="POST" action="{{ url_for('excluir_eventos_lote') }}" id="form-exclusao-lote" onsubmit="return confirmBatchDelete(this)">
+                
+                <div class="bg-red-50 p-1 rounded-lg border border-red-200 mb-2 -mt-2 flex justify-between items-center shadow-sm">
+                    <label class="flex items-center space-x-3 cursor-pointer font-bold text-red-800 hover:text-red-600 transition select-none">
+                        <input type="checkbox" id="select-all-events" class="w-6 h-6 text-red-600 rounded cursor-pointer" onclick="toggleAllCheckboxes(this)">
+                        <span class="text-lg">Selecionar Todos na Lista</span>
+                    </label>
+                    <button type="submit" class="bg-red-600 hover:bg-red-800 text-white font-bold py-2 px-6 rounded-lg shadow-lg flex items-center gap-2 transition active:scale-95">
+                        <span>🗑️</span> Excluir Selecionados
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto shadow-md rounded-lg">
+                    <table class="min-w-full bg-white border border-gray-200">
+                        <thead>
+                            <tr class="bg-red-100 text-red-900 font-bold text-left">
+                                <th class="py-1 px-4 border-b w-10 text-center">SEL</th>
+                                <th class="py-1 px-2 border-b">ID</th>
+                                <th class="py-1 px-2 border-b">Descrição</th>
+                                <th class="py-1 px-2 border-b">Data/Hora</th>
+                                <th class="py-1 px-2 border-b">Vendas</th>
+                                <th class="py-1 px-2 border-b">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% if active_view == 'exclusao_lote' and eventos_lista %}
+                                {% for evento in eventos_lista %}
+                                <tr class="list-row hover:bg-red-50 transition duration-150 cursor-pointer" onclick="toggleRowCheckbox('check-{{ evento.id_evento }}', event)">
+                                    <td class="py-2 px-4 border-b text-center" onclick="event.stopPropagation()">
+                                        <input type="checkbox" name="eventos_selecionados" value="{{ evento.id_evento }}" id="check-{{ evento.id_evento }}" class="evento-checkbox w-5 h-5 cursor-pointer accent-red-600">
+                                    </td>
+                                    <td class="py-2 px-2 border-b text-sm font-medium text-gray-700">{{ evento.id_evento }}</td>
+                                    <td class="py-2 px-2 border-b text-sm font-bold">{{ evento.descricao }}</td>
+                                    <td class="py-2 px-2 border-b text-sm text-gray-600">{{ evento.data_evento | default('N/A') }} às {{ evento.hora_evento | default('N/A') }}</td>
+                                    <td class="py-2 px-2 border-b text-sm font-bold {% if evento.qtd_vendas and evento.qtd_vendas > 0 %}text-red-600{% else %}text-gray-400{% endif %}">
+                                        {{ evento.qtd_vendas | default(0) }}
+                                    </td>
+                                    <td class="py-2 px-2 border-b text-sm">
+                                        <span class="px-2 py-1 rounded text-xs font-bold {% if evento.status == 'ativo' %}bg-green-100 text-green-800{% else %}bg-gray-100 text-gray-600{% endif %}">
+                                            {{ evento.status | upper }}
+                                        </span>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            {% else %}
+                                <tr><td colspan="6" class="py-8 text-center text-gray-500 font-bold">Nenhum evento registado.</td></tr>
+                            {% endif %}
+                        </tbody>
+                    </table>
+                </div>
+            </form>
+        </div>
         
     </div>
 
@@ -501,7 +566,7 @@
         </div>
     </div>
 
-    <!-- MODAL DE EXCLUSÃO -->
+    <!-- MODAL DE EXCLUSÃO INDIVIDUAL -->
     <div id="delete-modal" class="modal-overlay" onclick="closeDeleteModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
             <h3 id="modal-title" class="text-xl font-bold mb-2 text-danger">Confirmar Exclusão</h3>
@@ -532,6 +597,50 @@
     </div>
 
     <script>
+        // --- JS DA EXCLUSÃO EM LOTE ---
+        function toggleAllCheckboxes(source) {
+            const checkboxes = document.querySelectorAll('.evento-checkbox');
+            for(let i = 0; i < checkboxes.length; i++) {
+                checkboxes[i].checked = source.checked;
+            }
+        }
+
+        function toggleRowCheckbox(checkboxId, event) {
+            // Evita que cliques em links dentro da linha ativem o checkbox
+            if (event.target.tagName.toLowerCase() === 'a') return;
+            const cb = document.getElementById(checkboxId);
+            if (cb) cb.checked = !cb.checked;
+        }
+
+        function confirmBatchDelete(form) {
+            const selecionados = document.querySelectorAll('.evento-checkbox:checked');
+            if(selecionados.length === 0) {
+                alert("Por favor, selecione pelo menos um evento para excluir.");
+                return false;
+            }
+            
+            const msg = `⚠️ AVISO CRÍTICO DE EXCLUSÃO EM MASSA\n\nVocê selecionou ${selecionados.length} evento(s) para exclusão.\n\nISSO APAGARÁ DEFINITIVAMENTE:\n- Os eventos selecionados.\n- Todas as tabelas de vendas associadas.\n- Registos de pagamentos associados.\n\nDeseja realmente continuar?`;
+            
+            if(window.confirm(msg)) {
+                if(window.confirm(`Tem a certeza absoluta? ${selecionados.length} eventos desaparecerão para sempre.`)) {
+                    const btnSubmit = form.querySelector('button[type="submit"]');
+                    ativarLoadingModal(btnSubmit, 'A processar exclusões...');
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // --- NOVA FUNÇÃO PARA LINKS (SPINNER) ---
+        function ativarSpinnerLink(msg) {
+            const overlay = document.getElementById('loading-overlay');
+            const msgEl = document.getElementById('loading-message');
+            if (msgEl) msgEl.textContent = msg;
+            if (overlay) overlay.classList.remove('hidden');
+            document.body.style.pointerEvents = 'none'; // Bloqueia cliques adicionais
+        }
+
+        // --- JS EXISTENTE ---
         function tratarSubmissao(form) {
             const camposParaZerar = [
                 'valor_de_venda', 'premio_quadra', 'premio_linha', 
@@ -582,6 +691,7 @@
         window.addEventListener('pageshow', function(event) {
             const overlay = document.getElementById('loading-overlay');
             if (overlay) overlay.classList.add('hidden');
+            document.body.style.pointerEvents = 'auto'; // Restaura os cliques caso volte a página
         });
 
         document.addEventListener('DOMContentLoaded', (event) => {
@@ -639,7 +749,7 @@
             }
         }
         
-        // --- LÓGICA DE EXCLUSÃO ---
+        // --- LÓGICA DE EXCLUSÃO INDIVIDUAL ---
         const deleteModal = document.getElementById('delete-modal');
         const modalDeleteId = document.getElementById('modal-delete-id');
         const modalDeleteDescricao = document.getElementById('modal-delete-descricao');
