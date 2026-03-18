@@ -812,7 +812,6 @@ def teardown_request(exception=None):
     pass 
 
 # --- ROTAS DE AUTENTICAÇÃO E INICIALIZAÇÃO ---
-
 @app.route('/')
 def login_page():
     # Esta rota apenas renderiza o formulário de login (GET)
@@ -921,7 +920,6 @@ def login():
             print(f"[DEBUG] Falha: Senha incorreta (Testado '{senha_limpa}' e '{senha_limpa.capitalize()}')")
 
     return redirect(url_for('login_page', error="Usuário ou senha inválidos.", id_sala=id_sala_to_redirect))
-
 
 
 @app.route('/menu')
@@ -1113,7 +1111,6 @@ def evento_mudar_status():
 
 
 # --- Rotas de Colaborador ---
-
 @app.route('/cadastro_colaborador', methods=['GET'])
 @login_required
 def cadastro_colaborador():
@@ -1750,21 +1747,32 @@ def processar_venda():
 
             if cliente_doc: 
                 saldo_verificacao = safe_float(cliente_doc.get('saldo_atual', 0.0))
-            
-            #if saldo_verificacao > 0:
-            valor_debito = -abs(valor_total_atual) 
-            desc_transacao = f"Compra de {quantidade} kit(s) - {selected_event.get('descricao')}"
 
-            registrar_transacao_cliente(
-                db=db,
-                id_cliente=id_cliente_final,
-                valor=valor_debito,
-                tipo='compra',
-                descricao=desc_transacao,
-                id_evento=id_evento_int_para_controle,
-                id_venda=id_venda_formatado
-            )
+            # --- NOVA LÓGICA DE DÉBITO: NUNCA NEGATIVAR ---
+            valor_debito = 0.0
             
+            # Só descontamos se o cliente tiver saldo positivo
+            if saldo_verificacao > 0:
+                # O desconto real será o valor da compra OU o saldo atual (o que for menor)
+                # Ex 1: Compra 50, Saldo 100 -> Desconta 50
+                # Ex 2: Compra 50, Saldo 20  -> Desconta 20 (Zera o saldo, não negativa)
+                desconto_real = min(abs(valor_total_atual), saldo_verificacao)
+                valor_debito = -abs(desconto_real)
+            
+            # Só regista a transação financeira no extrato se houver valor a descontar
+            if valor_debito != 0.0:
+                desc_transacao = f"Compra de {quantidade} kit(s) - {selected_event.get('descricao')}"
+
+                registrar_transacao_cliente(
+                    db=db,
+                    id_cliente=id_cliente_final,
+                    valor=valor_debito,
+                    tipo='compra',
+                    descricao=desc_transacao,
+                    id_evento=id_evento_int_para_controle,
+                    id_venda=id_venda_formatado
+                )    
+        
         except Exception as e:
             venda_lock.release()
             print(f"{log_prefix} LOG 5 (ERRO INTERNO): Erro crítico durante a transação: {e}")
@@ -1880,7 +1888,6 @@ def processar_venda():
             f"Ocorreu um erro ao gerar o comprovante completo, mas a venda foi registrada."
         )
         return redirect(url_for('nova_venda', id_evento=id_evento_string))
-
 
 
 # --- ROTAS DE CADASTRO DE CLIENTE ---
@@ -2582,7 +2589,7 @@ def cadastro_evento():
     if db_status:
         try:
             total_eventos = db.eventos.count_documents({})
-            if active_view in ['listar', 'exclusao_lote']: eventos_lista = list(db.eventos.find({}).sort([("data_evento", -1), ("hora_evento", -1)]))
+            if active_view in ['listar', 'exclusao_lote']: eventos_lista = list(db.eventos.find({}).sort([("data_evento", 1), ("hora_evento", 1)]))
             elif active_view == 'consulta' and search_term:
                 query_filter = {'id_evento': int(search_term)} if search_term.isdigit() else {'$or': [{'descricao': {'$regex': re.compile(re.escape(search_term), re.IGNORECASE)}}, {'data_evento': {'$regex': re.compile(re.escape(search_term), re.IGNORECASE)}}]}
                 eventos_lista = list(db.eventos.find(query_filter).sort("data_evento", -1))
@@ -2836,7 +2843,6 @@ def gravar_evento():
         return redirect(url_for('cadastro_evento', error=f"Erro ao salvar: {e}", view=view_redirect, id_evento=id_evento_edicao))
 
 
-
 @app.route('/excluir_evento/<int:id_evento>', methods=['POST'])
 @login_required
 def excluir_evento(id_evento):
@@ -2863,6 +2869,10 @@ def excluir_evento(id_evento):
             nome_colecao_pgtos = f"pagamentos{id_evento}"
             if nome_colecao_pgtos in db.list_collection_names():
                 db[nome_colecao_pgtos].drop()
+
+            nome_colecao_snapshot = f"snapshot_vendas_{id_evento}"
+            if nome_colecao_snapshot in db.list_collection_names():
+                db[nome_colecao_snapshot].drop()
 
             # 3. NOVO: Remove registros vinculados nas tabelas de apoio
             # Usamos delete_many por segurança, caso haja lixo duplicado, mas geralmente é 1 registro.
@@ -3080,7 +3090,6 @@ def consulta_vendas():
                            resultados_agregados=resultados_agregados)
 
 
-
 @app.route('/consulta_vendas/detalhes', methods=['GET'])
 @login_required
 def consulta_vendas_detalhes():
@@ -3221,7 +3230,6 @@ def consulta_vendas_detalhes():
                            info_colaborador=info_colaborador,
                            info_tipo_cartela=info_tipo_cartela,
                            info_telefone_cliente=info_telefone_cliente)
-
 
 
 # Minha Conta
