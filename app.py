@@ -5757,6 +5757,41 @@ def limpeza_dados():
     return render_template('limpeza_dados.html', disponiveis=disponiveis, blindadas=BLINDADAS)
 
 
+@app.route('/admin/buscar_proximo_numero_inicial', methods=['GET'])
+@login_required
+def buscar_proximo_numero_inicial():
+    db = get_vendas_db()
+    try:
+        # 1. Localiza o último evento finalizado (ordenado por data e hora decrescente)
+        ultimo_evento = db.eventos.find_one(
+            {'status': {'$in': ['finalizado', 'FINALIZADO']}},
+            sort=[('data_evento', -1), ('hora_evento', -1)]
+        )
+
+        if not ultimo_evento:
+            return jsonify({'sucesso': True, 'numero': 1, 'obs': 'Nenhum evento anterior encontrado.'})
+
+        id_ultimo = ultimo_evento.get('id_evento')
+
+        # 2. Busca na tabela controle_venda o ponteiro de parada deste evento
+        controle = db.controle_venda.find_one({'id_evento': id_ultimo})
+        
+        if controle and 'inicial_proxima_venda' in controle:
+            proximo_numero = int(controle['inicial_proxima_venda'])
+            return jsonify({
+                'sucesso': True, 
+                'numero': proximo_numero,
+                'evento_origem': ultimo_evento.get('descricao', str(id_ultimo))
+            })
+        
+        # Fallback caso o evento exista mas não tenha registro no controle
+        return jsonify({'sucesso': True, 'numero': 1, 'obs': 'Evento encontrado, mas sem registro de vendas.'})
+
+    except Exception as e:
+        print(f"Erro ao buscar número inicial: {e}")
+        return jsonify({'sucesso': False, 'erro': str(e)}), 500
+
+
 if __name__ == '__main__':
     # Para desenvolvimento local apenas
     if os.environ.get('FLASK_ENV') != 'production':

@@ -243,7 +243,13 @@
                     </div>
 
                     <div class="form-group">
-                        <label for="numero_inicial" class="required-label">Número Inicial da Cartela:</label>
+                        <div class="flex justify-between items-center mb-1">
+                            <label for="numero_inicial" class="mb-0">Número Inicial da Cartela:</label>
+                            <button type="button" onclick="sugerirNumeroInicial()" 
+                                 class="bg-blue-100 hover:bg-blue-200 text-blue-700 text-[10px] font-bold py-1 px-2 rounded border border-blue-300 transition">
+                               🔍 BUSCAR INICIAL
+                            </button>
+                        </div>
                         <input type="number" id="numero_inicial" name="numero_inicial" required min="1" class="form-control"
                                value="{{ evento.get('numero_inicial', 1) }}">
                     </div>
@@ -967,6 +973,40 @@
             if(dataInput) dataInput.addEventListener('change', checkAvailability);
             if(horaInput) horaInput.addEventListener('input', checkAvailability);
         });
+
+        async function sugerirNumeroInicial() {
+            const btn = event.currentTarget;
+            const inputInicial = document.getElementById('numero_inicial');
+    
+            // Feedback visual de carregamento
+            const textoOriginal = btn.innerHTML;
+            btn.innerHTML = "⏳ BUSCANDO...";
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/admin/buscar_proximo_numero_inicial');
+                const data = await response.json();
+
+                if (data.sucesso) {
+                    inputInicial.value = data.numero;
+            
+                    // Pequeno alerta de sucesso não invasivo
+                    if (data.evento_origem) {
+                        console.log("Número baseado no evento: " + data.evento_origem);
+                    }
+                } else {
+                    alert("Não foi possível localizar o último número. Definido como 1.");
+                    inputInicial.value = 1;
+                }
+            } catch (error) {
+                console.error("Erro na requisição:", error);
+                alert("Erro técnico ao buscar dados. Verifique o console.");
+            } finally {
+                btn.innerHTML = textoOriginal;
+                btn.disabled = false;
+            }
+        }
+
 
     </script>
 </body>
