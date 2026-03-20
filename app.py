@@ -5691,6 +5691,72 @@ def financeiro_clientes():
         return redirect(url_for('menu_operacoes', error=f"Erro ao processar relatório financeiro: {e}"))
 
 
+@app.route('/admin/limpeza_dados', methods=['GET', 'POST'])
+@login_required
+def limpeza_dados():
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+
+    db = get_vendas_db()
+    BLINDADAS = ['colaboradores', 'usuarios', 'config', 'parametros', 'salas', 'config_bloqueio', 'contadores']
+
+    # Mapeamento: Se limpar a TABELA 'A', reseta o CONTADOR 'B' na coleção 'contadores'
+    MAPA_CONTADORES = {
+        'clientes': 'id_clientes_global',
+        'transacoes_clientes': None, # Não tem contador incremental fixo, usa timestamp
+        'requisao_saque': None,
+        'resultados': None
+    }
+
+    if request.method == 'POST':
+        tabelas_selecionadas = request.form.getlist('tabelas')
+        confirmacao = request.form.get('confirmacao_manual')
+
+        if confirmacao != "EXECUTAR":
+            return render_template('limpeza_dados.html', error="Confirmação incorreta.", blindadas=BLINDADAS)
+
+        try:
+            removidas = 0
+            resets_contadores = 0
+            
+            for tabela in tabelas_selecionadas:
+                if tabela not in BLINDADAS:
+                    # 1. Esvazia a tabela
+                    db[tabela].delete_many({})
+                    removidas += 1
+
+                    # 2. Checa se existe contador vinculado para esta tabela
+                    # Procuramos por tabelas de vendas dinâmicas (ex: vendas1, vendas2...) ou fixas
+                    campo_contador = MAPA_CONTADORES.get(tabela)
+                    
+                    # Lógica especial para tabelas de vendas dinâmicas (vendasX)
+                    if tabela.startswith('vendas') and not tabela.startswith('vendas_sorte_extra'):
+                        # Para tabelas 'vendas123', o contador geralmente fica na 'controle_venda'
+                        db.controle_venda.delete_many({'id_evento': {'$exists': True}})
+                        resets_contadores += 1
+
+                    # Reset de contadores globais na coleção 'contadores'
+                    if campo_contador:
+                        db.contadores.update_one(
+                            {'_id': campo_contador},
+                            {'$set': {'sequence_value': 0, 'id_vendas_global': 0}},
+                            upsert=False
+                        )
+                        resets_contadores += 1
+            
+            msg = f"Limpeza concluída! {removidas} tabelas limpas e {resets_contadores} contadores reiniciados."
+            return render_template('limpeza_dados.html', success=msg, blindadas=BLINDADAS)
+            
+        except Exception as e:
+            return render_template('limpeza_dados.html', error=f"Erro: {e}", blindadas=BLINDADAS)
+
+    # Listagem (Mantém igual)
+    todas_colecoes = db.list_collection_names()
+    disponiveis = [c for c in todas_colecoes if c not in BLINDADAS]
+    disponiveis.sort()
+    return render_template('limpeza_dados.html', disponiveis=disponiveis, blindadas=BLINDADAS)
+
+
 if __name__ == '__main__':
     # Para desenvolvimento local apenas
     if os.environ.get('FLASK_ENV') != 'production':
