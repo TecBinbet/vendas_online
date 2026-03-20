@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Menu Financeiro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#059669',
+                        'secondary': '#10B981',
+                        'accent': '#F59E0B',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F7F7F7; }
+        .menu-card { 
+            transition: all 0.3s; 
+            border-left: 5px solid transparent;
+        }
+        .menu-card:hover { 
+            transform: translateY(-3px); 
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        /* Cores temáticas para as bordas dos cards */
+        .card-auditoria { border-left-color: #2563EB; } /* Azul */
+        .card-saques { border-left-color: #DC2626; } /* Vermelho */
+
+        /* --- CSS DO SPINNER --- */
+        .spinner-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(17, 24, 39, 0.75);
+            display: none; 
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .spinner-visible {
+            display: flex;
+        }
+
+        .spinner-animation {
+            animation: spin 1s linear infinite;
+            border-radius: 9999px;
+            height: 5rem;
+            width: 5rem;
+            border-width: 4px;
+            border-style: solid;
+            border-color: rgba(255, 255, 255, 0.1);
+            border-top-color: #3B82F6;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Estrutura do Spinner -->
+    <div id="loading-spinner" class="spinner-overlay">
+        <div class="flex flex-col items-center">
+            <div class="spinner-animation"></div>
+            <p class="text-white mt-4 font-bold animate-pulse uppercase tracking-widest text-sm">Carregando módulo...</p>
+        </div>
+    </div>
+
+    <div class="min-h-screen flex items-center justify-center p-4">
+        <div class="bg-gray-300 rounded-xl shadow-lg w-full max-w-2xl overflow-hidden">
+            
+            <div class="bg-gradient-to-r from-gray-800 to-gray-600 p-1 text-white text-center">
+                <h1 class="text-2xl font-bold">🏦 Gestão Financeira</h1>
+                <p class="opacity-90 -mt-2">Selecione o módulo financeiro desejado</p>
+            </div>
+
+            <!-- Ajustado para grid-cols-2 para ficar lado a lado -->
+            <div class="p-2 grid gap-2 md:grid-cols-2">
+                
+                <!-- Finanças Clientes (Auditoria) -->
+                <a href="{{ url_for('financeiro_clientes') }}" onclick="ativarSpinner()"
+                   class="menu-card card-auditoria bg-gray-50 hover:bg-blue-50 p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center text-center group no-underline">
+                    <div class="bg-blue-100 p-3 rounded-full mb-2 group-hover:bg-blue-200 transition">
+                        <span class="text-3xl">📊</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-800 group-hover:text-blue-600">Finanças de Clientes</h3>
+                    <p class="text-sm text-gray-500 mt-1">Auditoria de carteiras, extratos, entradas (PIX/Prêmios) e saídas.</p>
+                </a>
+
+                <!-- Monitor de Saques -->
+                <a href="{{ url_for('monitor_saques') }}" onclick="ativarSpinner()"
+                   class="menu-card card-saques bg-gray-50 hover:bg-red-50 p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center text-center group no-underline">
+                    <div class="bg-red-100 p-3 rounded-full mb-2 group-hover:bg-red-200 transition">
+                        <span class="text-3xl">💸</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-800 group-hover:text-red-600">Monitor de Saques</h3>
+                    <p class="text-sm text-gray-500 mt-1">Analisar, aprovar ou rejeitar solicitações de saque dos clientes.</p>
+                </a>
+
+            </div>
+
+            <div class="bg-gray-100 p-2 text-center border-t border-gray-200">
+                <a href="{{ url_for('menu_operacoes') }}" onclick="ativarSpinner()" class="inline-flex items-center justify-center px-6 py-2 border border-gray-300 shadow-sm text-base font-semibold rounded-md text-gray-700 bg-green-200 hover:bg-green-400 transition">
+                    ⬅️ Voltar ao Menu Principal
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function ativarSpinner() {
+            const spinner = document.getElementById('loading-spinner');
+            if (spinner) {
+                spinner.classList.add('spinner-visible');
+            }
+            // Bloqueia interações na página para evitar cliques múltiplos durante a transição
+            document.body.style.pointerEvents = 'none';
+        }
+
+        // Garante que se o usuário usar o botão 'Voltar' do navegador, o spinner não fique travado
+        window.onpageshow = function(event) {
+            if (event.persisted) {
+                const spinner = document.getElementById('loading-spinner');
+                if (spinner) spinner.classList.remove('spinner-visible');
+                document.body.style.pointerEvents = 'auto';
+            }
+        };
+    </script>
+</body>
+</html>

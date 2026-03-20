@@ -1588,7 +1588,6 @@ def processar_venda():
     Processo Crítico de Venda - ATUALIZADO para incluir todos os períodos
     do cliente no comprovante e no link final.
     INCLUI TRAVA DE SEGURANÇA DE STATUS DO EVENTO.
-    MOTOR ATÓMICO (Sem Locks).
     """
     db = get_vendas_db()
     if db is None: 
@@ -1666,121 +1665,133 @@ def processar_venda():
     numero_inicial2_atual = 0 
     numero_final2_atual = 0 
     
-    # ==============================================================================
-    # 🚀 MOTOR DE VENDAS ATÓMICO (SEM LOCKS EM PYTHON)
-    # O MongoDB garante a exclusividade das sequências via find_one_and_update
-    # ==============================================================================
-    print(f"{log_prefix} LOG 2: Iniciando processamento atómico da venda...")
+    print(f"{log_prefix} LOG 2: Tentando adquirir 'venda_lock' (timeout=8s)...")
     
-    try:
-        print(f"{log_prefix} LOG 3A: Gerando ID da Venda...")
-        novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
-        if novo_id_venda_int is None:
-            raise Exception("Falha ao gerar o ID sequencial da venda.")
-        id_venda_formatado = f"V{novo_id_venda_int:05d}" 
+    if venda_lock.acquire(timeout=8): 
+        print(f"{log_prefix} LOG 3: 'venda_lock' ADQUIRIDO.")
+        try:
+            print(f"{log_prefix} LOG 3A: Gerando ID da Venda...")
+            novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
+            if novo_id_venda_int is None:
+                raise Exception("Falha ao gerar o ID sequencial da venda.")
+            id_venda_formatado = f"V{novo_id_venda_int:05d}" 
 
-        print(f"{log_prefix} LOG 3B: Gerando IDs de Bilhetes...")
-        numero_inicial_evento = int(selected_event.get('numero_inicial', 1))
-        
-        # O MONGODB GARANTE QUE NINGUÉM MAIS PEGA ESTA SEQUÊNCIA
-        numero_inicial_atual = get_next_bilhete_sequence(db, 
-                                                   id_evento_int_para_controle, 
-                                                   'inicial_proxima_venda', 
-                                                   quantidade_cartelas_atual,
-                                                   limite_maximo_cartelas)
-                                                   
-        if numero_inicial_atual is None:
-            raise Exception("Falha ao obter o número inicial do bilhete/cartela.")
+            print(f"{log_prefix} LOG 3B: Gerando IDs de Bilhetes...")
+            numero_inicial_evento = int(selected_event.get('numero_inicial', 1))
+            numero_inicial_atual = get_next_bilhete_sequence(db, 
+                                                       id_evento_int_para_controle, 
+                                                       'inicial_proxima_venda', 
+                                                       quantidade_cartelas_atual,
+                                                       limite_maximo_cartelas)
+            if numero_inicial_atual is None:
+                raise Exception("Falha ao obter o número inicial do bilhete/cartela.")
 
-        # Lógica de Rollover / Reinício
-        if numero_inicial_atual == 1: 
-            numero_inicial_atual = numero_inicial_evento
-            db.controle_venda.update_one(
-                {'id_evento': id_evento_int_para_controle},
-                {'$set': {'inicial_proxima_venda': numero_inicial_atual + quantidade_cartelas_atual}}
+            if numero_inicial_atual == 1: 
+                numero_inicial_atual = numero_inicial_evento
+                db.controle_venda.update_one(
+                    {'id_evento': id_evento_int_para_controle},
+                    {'$set': {'inicial_proxima_venda': numero_inicial_atual + quantidade_cartelas_atual}}
+                )
+
+            numero_final_atual = numero_inicial_atual + quantidade_cartelas_atual - 1
+            
+            if numero_final_atual > limite_maximo_cartelas:
+                numero_inicial2_atual = 1
+                numero_final2_atual = numero_final_atual - limite_maximo_cartelas
+                numero_final_atual = limite_maximo_cartelas
+            
+            print(f"{log_prefix} ... IDs Bilhete gerados: {numero_inicial_atual}-{numero_final_atual}...")
+
+            registro_venda = {
+                "id_venda": id_venda_formatado,
+                "id_evento_ObjectId": id_evento_mongo, 
+                "id_evento": id_evento_int_para_controle, 
+                "descricao_evento": selected_event.get('descricao'),
+                "id_cliente": id_cliente_final, 
+                "nome_cliente": cliente_doc.get('nick'),
+                "telefone_cliente": cliente_doc.get('telefone',''),
+                "id_colaborador": colaborador_id,
+                "nick_colaborador": nick_colaborador,
+                "data_venda": hora_brasil() ,     #  << data correta
+                "quantidade_unidades": quantidade,
+                "quantidade_cartelas": quantidade_cartelas_atual,
+                "numero_inicial": numero_inicial_atual,
+                "numero_final": numero_final_atual,
+                "numero_inicial2": numero_inicial2_atual,
+                "numero_final2": numero_final2_atual,
+                "valor_unitario": Decimal128(str(valor_unitario)), 
+                "valor_total": Decimal128(str(valor_total_atual)),
+                "origem": "terminal_colaborador"
+            }
+            
+            print(f"{log_prefix} LOG 3C: Atualizando cliente {id_cliente_final}...")
+            db.clientes.update_one(
+                {"id_cliente": id_cliente_final}, 
+                {"$set": {"data_ultimo_compra": hora_brasil()}}
             )
 
-        numero_final_atual = numero_inicial_atual + quantidade_cartelas_atual - 1
-        
-        if numero_final_atual > limite_maximo_cartelas:
-            numero_inicial2_atual = 1
-            numero_final2_atual = numero_final_atual - limite_maximo_cartelas
-            numero_final_atual = limite_maximo_cartelas
-        
-        print(f"{log_prefix} ... IDs Bilhete gerados: {numero_inicial_atual}-{numero_final_atual}...")
-
-        registro_venda = {
-            "id_venda": id_venda_formatado,
-            "id_evento_ObjectId": id_evento_mongo, 
-            "id_evento": id_evento_int_para_controle, 
-            "descricao_evento": selected_event.get('descricao'),
-            "id_cliente": id_cliente_final, 
-            "nome_cliente": cliente_doc.get('nick'),
-            "telefone_cliente": cliente_doc.get('telefone',''),
-            "id_colaborador": colaborador_id,
-            "nick_colaborador": nick_colaborador,
-            "data_venda": hora_brasil(),
-            "quantidade_unidades": quantidade,
-            "quantidade_cartelas": quantidade_cartelas_atual,
-            "numero_inicial": numero_inicial_atual,
-            "numero_final": numero_final_atual,
-            "numero_inicial2": numero_inicial2_atual,
-            "numero_final2": numero_final2_atual,
-            "valor_unitario": Decimal128(str(valor_unitario)), 
-            "valor_total": Decimal128(str(valor_total_atual)),
-            "origem": "terminal_colaborador"
-        }
-        
-        print(f"{log_prefix} LOG 3C: Atualizando cliente {id_cliente_final}...")
-        db.clientes.update_one(
-            {"id_cliente": id_cliente_final}, 
-            {"$set": {"data_ultimo_compra": hora_brasil()}}
-        )
-
-        print(f"{log_prefix} LOG 3D: Inserindo venda na coleção '{nome_colecao_venda}'...")
-        db[nome_colecao_venda].insert_one(registro_venda)
-        print(f"{log_prefix} ... Venda inserida.")
-
-        # --- ATUALIZAÇÃO DO BUFFER PARA O ROBÔ DE PRÊMIOS ---
-        db.eventos.update_one(
-            {"id_evento": id_evento_int_para_controle},
-            {"$inc": {"valor_pendente_telemovel": float(valor_total_atual)}}
-        )
-        # ----------------------------------------------------
-       
-        # 💸 CHAMADA DA NOVA FUNÇÃO FINANCEIRA BLINDADA
-        valor_debito = 0.0
-        saldo_verificacao = safe_float(cliente_doc.get('saldo_atual', 0.0))
-        
-        if saldo_verificacao > 0:
-            # Nunca negativa o cliente (desconto máximo = saldo atual)
-            desconto_real = min(abs(valor_total_atual), saldo_verificacao)
-            valor_debito = -abs(desconto_real)
-        
-        if valor_debito != 0.0:
-            desc_transacao = f"Compra de {quantidade} kit(s) - {selected_event.get('descricao')}"
-
-            registrar_transacao_cliente(
-                db=db,
-                id_cliente=id_cliente_final,
-                valor=valor_debito,
-                tipo='compra_cartela', 
-                descricao=desc_transacao,
-                id_evento=id_evento_int_para_controle,
-                id_venda=id_venda_formatado
+            print(f"{log_prefix} LOG 3D: Inserindo venda na coleção '{nome_colecao_venda}'...")
+            db[nome_colecao_venda].insert_one(registro_venda)
+            print(f"{log_prefix} ... Venda inserida.")
+ 
+            # --- ATUALIZAÇÃO DO BUFFER PARA O ROBÔ DE PRÊMIOS ---
+            # Adiciona o valor desta venda ao acumulador invisível do evento
+            db.eventos.update_one(
+                {"id_evento": id_evento_int_para_controle},
+                {"$inc": {"valor_pendente_telemovel": float(valor_total_atual)}}
             )
+            # ----------------------------------------------------
+           
+            # Gravar da movimentação do cliente.
+            saldo_verificacao = 0.0
+
+            if cliente_doc: 
+                saldo_verificacao = safe_float(cliente_doc.get('saldo_atual', 0.0))
+
+            # --- NOVA LÓGICA DE DÉBITO: NUNCA NEGATIVAR ---
+            valor_debito = 0.0
+            
+            # Só descontamos se o cliente tiver saldo positivo
+            if saldo_verificacao > 0:
+                # O desconto real será o valor da compra OU o saldo atual (o que for menor)
+                # Ex 1: Compra 50, Saldo 100 -> Desconta 50
+                # Ex 2: Compra 50, Saldo 20  -> Desconta 20 (Zera o saldo, não negativa)
+                desconto_real = min(abs(valor_total_atual), saldo_verificacao)
+                valor_debito = -abs(desconto_real)
+            
+            # Só regista a transação financeira no extrato se houver valor a descontar
+            if valor_debito != 0.0:
+                desc_transacao = f"Compra de {quantidade} kit(s) - {selected_event.get('descricao')}"
+
+                registrar_transacao_cliente(
+                    db=db,
+                    id_cliente=id_cliente_final,
+                    valor=valor_debito,
+                    tipo='compra',
+                    descricao=desc_transacao,
+                    id_evento=id_evento_int_para_controle,
+                    id_venda=id_venda_formatado
+                )    
         
-    except Exception as e:
-        print(f"{log_prefix} LOG 5 (ERRO INTERNO): Erro crítico durante a transação: {e}")
-        import traceback
-        traceback.print_exc()
-        error_redirect_kwargs['error'] = f"Erro interno no DB: Falha ao gravar a transação."
+        except Exception as e:
+            venda_lock.release()
+            print(f"{log_prefix} LOG 5 (ERRO INTERNO): Erro crítico durante a transação: {e}")
+            error_redirect_kwargs['error'] = f"Erro interno no DB: Falha ao gravar a transação."
+            error_redirect_kwargs['quantidade'] = quantidade
+            return redirect(url_for('nova_venda', **error_redirect_kwargs))
+            
+        finally:
+            if venda_lock.locked():
+                 print(f"{log_prefix} LOG FIM (LOCK): Liberando 'venda_lock'.")
+                 venda_lock.release()
+            
+    else:
+        print(f"{log_prefix} LOG 6 (TIMEOUT): 'venda_lock' não adquirido após 8s. (Sistema ocupado)")
+        error_redirect_kwargs['error'] = "Sistema muito ocupado. Por favor, tente novamente em alguns segundos."
         error_redirect_kwargs['quantidade'] = quantidade
         return redirect(url_for('nova_venda', **error_redirect_kwargs))
 
-    # ==============================================================================
-    # FIM DO MOTOR DE VENDAS ATÓMICO
-    # ==============================================================================
+    # --- FIM DO BLOCO DE LOCK ---
 
     print(f"{log_prefix} LOG 4: Venda gravada. Montando comprovante completo...")
     
@@ -1866,7 +1877,7 @@ def processar_venda():
         redirect_kwargs = {
             'id_evento': id_evento_string,
             'quantidade': '',
-            'id_cliente_busca':  '' 
+            'id_cliente_busca':  '' # f"CLI{id_cliente_final}"
         }
         return redirect(url_for('nova_venda', **redirect_kwargs))
 
@@ -4214,67 +4225,52 @@ def gerar_cartelas_pdf_15():
 # controle de movimentação dos clientes
 def registrar_transacao_cliente(db, id_cliente, valor, tipo, descricao, id_evento=None, id_venda=None):
     """
-    Centraliza toda movimentação financeira do cliente. (VERSÃO BLINDADA - ATÓMICA)
+    Centraliza toda movimentação financeira do cliente.
     valor: float ou Decimal128 (positivo para crédito, negativo para débito)
-    tipo: 'compra', 'premio', 'recarga', 'estorno_saque', 'saque'
+    tipo: 'compra', 'premio', 'recarga', 'ajuste'
     """
-    import pymongo # Garantir que temos acesso ao ReturnDocument
-    
     try:
-        valor_float = float(valor)
-        if valor_float == 0:
-            return True, "Transação de valor zero ignorada."
+        # 1. Converte valor para Decimal128 para precisão financeira
+        valor_decimal = Decimal128(str(valor))
+        
+        # 2. Busca saldo atual (Atomicamente para evitar condição de corrida)
+        # Se o cliente não tiver o campo 'saldo', assume 0.00
+        cliente = db.clientes.find_one({'id_cliente': id_cliente})
+        if not cliente:
+            return False, "Cliente não encontrado."
+            
+        saldo_anterior = safe_float(cliente.get('saldo_atual', 0.00))
+        saldo_novo = saldo_anterior + float(valor)
+        
+        # Opcional: Impedir saldo negativo se for compra
+        # if tipo == 'compra' and saldo_novo < 0:
+        #    return False, "Saldo insuficiente."
 
-        # 1. Determina a Natureza para o Livro-Razão (Facilita Relatórios)
-        natureza = "ENTRADA" if valor_float > 0 else "SAIDA"
-        
-        # 2. Converte valor para Decimal128 para precisão financeira no Mongo
-        valor_decimal = Decimal128(str(valor_float))
-        
-        # ==============================================================================
-        # 🛡️ OPERAÇÃO ATÓMICA (O Fim das Race Conditions)
-        # O MongoDB soma o valor e devolve o documento atualizado na mesma fração de segundo.
-        # ==============================================================================
-        cliente_atualizado = db.clientes.find_one_and_update(
+        # 3. Atualiza o saldo no cadastro do cliente
+        db.clientes.update_one(
             {'id_cliente': id_cliente},
-            {
-                '$inc': {'saldo_atual': valor_decimal},
-                '$set': {'ultima_movimentacao': hora_brasil()}
-            },
-            return_document=pymongo.ReturnDocument.AFTER # Queremos o documento DEPOIS da matemática
+            {'$set': {'saldo_atual': Decimal128(str(saldo_novo))}}
         )
 
-        if not cliente_atualizado:
-            return False, "Cliente não encontrado."
-
-        # 3. Matemática Reversa Precisa (Calcula o que havia antes)
-        saldo_posterior_float = safe_float(cliente_atualizado.get('saldo_atual', 0.00))
-        saldo_anterior_float = saldo_posterior_float - valor_float
-
-        # 4. Grava o Livro-Razão (Extrato à prova de balas)
+        # 4. Grava o histórico (Extrato)
         transacao_doc = {
-            'id_transacao': f"TRX{int(time.time()*1000)}",
             'id_cliente': id_cliente,
             'data_hora': hora_brasil(),
-            'natureza': natureza,           # ENTRADA ou SAIDA
-            'tipo': tipo,                   # A categoria da transação (compra, premio, etc.)
+            'tipo': tipo,
             'valor': valor_decimal,
-            'saldo_anterior': Decimal128(str(saldo_anterior_float)),
-            'saldo_posterior': Decimal128(str(saldo_posterior_float)),
+            'saldo_anterior': Decimal128(str(saldo_anterior)),
+            'saldo_posterior': Decimal128(str(saldo_novo)),
             'descricao': descricao,
             'id_evento': id_evento,
             'id_venda': id_venda,
-            'registrado_por': session.get('nick', 'Sistema') # Rastreabilidade de quem fez a operação
+            'registrado_por': session.get('nick', 'Sistema') # Rastreabilidade
         }
-        
         db.transacoes_clientes.insert_one(transacao_doc)
         
         return True, "Sucesso"
 
     except Exception as e:
-        print(f"❌ [FALHA CRÍTICA FINANCEIRA] Erro ao registrar transação do cliente {id_cliente}: {e}")
-        import traceback
-        traceback.print_exc()
+        print(f"Erro ao registrar transação: {e}")
         return False, str(e)
 
 
@@ -4294,13 +4290,13 @@ def adicionar_credito_cliente():
 
         # Chama a função de transação
         sucesso = registrar_transacao_cliente(
-            db=db, 
-            id_cliente=id_cliente, 
-            valor=valor_recarga, 
-            tipo='credito_manual_admin', # <--- CORRETO
-            descricao=f"Crédito Adicionado por Colaborador ({session.get('nick')})"
-        )      
-  
+            db, 
+            id_cliente, 
+            valor_recarga, 
+            'recarga', 
+            f"Recarga via Colaborador ({session.get('nick')})"
+        )
+        
         if sucesso:
             msg = f"Recarga de R$ {valor_recarga:.2f} realizada com sucesso para o Cliente {id_cliente}."
             return redirect(url_for('cadastro_cliente', view='consulta', success=msg, query=str(id_cliente)))
@@ -5555,140 +5551,6 @@ def corrigir_senhas_faltantes():
         # Log de erro caso algo falhe no processo de banco ou criptografia
         print(f"Erro na manutenção de senhas: {e}")
         return redirect(url_for('cadastro_cliente', error=f"Erro interno na correção: {e}"))
-
-
-@app.route('/submenu_financeiro')
-@login_required
-def submenu_financeiro():
-    # Segurança: Apenas Administradores (Nível 3) acedem ao menu financeiro
-    if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso Negado. Módulo exclusivo para Administradores."))
-    return render_template('submenu_financeiro.html')
-
-
-# ==============================================================================
-# 📊 MÓDULO FINANCEIRO DOS CLIENTES (Sintético e Analítico)
-# ==============================================================================
-@app.route('/financeiro_clientes', methods=['GET'])
-@login_required
-def financeiro_clientes():
-    db = get_vendas_db()
-    if db is None: return redirect(url_for('login'))
-    
-    if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso Negado. Módulo exclusivo para Administradores."))
-
-    # 1. Captura de Filtros (Padrão: Dia de Hoje)
-    hoje = hora_brasil().strftime('%Y-%m-%d')
-    data_inicio = request.args.get('data_inicio', hoje)
-    data_fim = request.args.get('data_fim', hoje)
-    natureza_filtro = request.args.get('natureza', 'TODAS') # ENTRADA, SAIDA, TODAS
-    busca_cliente = request.args.get('busca_cliente', '').strip()
-
-    # 2. Construção da Query Base
-    query = {}
-    
-    # Tratamento de Datas (Garante que pega desde as 00:00 do dia inicial até as 23:59 do dia final)
-    try:
-        dt_inicio = datetime.strptime(data_inicio, '%Y-%m-%d')
-        dt_fim = datetime.strptime(data_fim, '%Y-%m-%d') + timedelta(days=1) - timedelta(microseconds=1)
-        query['data_hora'] = {'$gte': dt_inicio, '$lte': dt_fim}
-    except Exception as e:
-        print(f"Erro no filtro de datas: {e}")
-
-    # Filtro de Natureza
-    if natureza_filtro in ['ENTRADA', 'SAIDA']:
-        query['natureza'] = natureza_filtro
-
-    # Filtro de Cliente (Por ID ou Nick)
-    if busca_cliente:
-        if busca_cliente.isdigit():
-            query['id_cliente'] = int(busca_cliente)
-        else:
-            # Procura o ID do cliente baseado no nick digitado
-            cli = db.clientes.find_one({'nick': {'$regex': f'^{re.escape(busca_cliente)}', '$options': 'i'}})
-            query['id_cliente'] = cli.get('id_cliente') if cli else -1 # Se não achar, força resultado vazio
-
-    try:
-        # ======================================================================
-        # 📈 VISÃO SINTÉTICA (Resumo de Totais)
-        # ======================================================================
-        pipeline_resumo = [
-            {'$match': query},
-            {'$group': {
-                '_id': {'natureza': '$natureza', 'tipo': '$tipo'},
-                'total_valor': {'$sum': '$valor'},
-                'qtd_operacoes': {'$sum': 1}
-            }}
-        ]
-        resumo_raw = list(db.transacoes_clientes.aggregate(pipeline_resumo))
-        
-        resumo = {'total_entradas': 0.0, 'total_saidas': 0.0, 'detalhes': []}
-        
-        for r in resumo_raw:
-            nat = r['_id'].get('natureza', 'Desconhecido')
-            tipo = r['_id'].get('tipo', 'Outros')
-            val = safe_float(r['total_valor'])
-            
-            # Formata os nomes para ficar bonito na tela
-            tipo_formatado = tipo.replace('_', ' ').title()
-            
-            if nat == 'ENTRADA': resumo['total_entradas'] += val
-            else: resumo['total_saidas'] += abs(val)
-            
-            resumo['detalhes'].append({
-                'natureza': nat,
-                'tipo': tipo_formatado,
-                'total': abs(val),
-                'qtd': r['qtd_operacoes']
-            })
-
-        # Ordena detalhes: Entradas primeiro, depois Saídas
-        resumo['detalhes'].sort(key=lambda x: (x['natureza'], x['total']), reverse=True)
-
-        # ======================================================================
-        # 📋 VISÃO ANALÍTICA (Extrato Detalhado com Join)
-        # ======================================================================
-        pipeline_extrato = [
-            {'$match': query},
-            {'$sort': {'data_hora': -1}},
-            {'$limit': 1000}, # Proteção para não travar o navegador
-            # Faz o "Join" com a tabela de clientes para buscar o Nick
-            {'$lookup': {
-                'from': 'clientes',
-                'localField': 'id_cliente',
-                'foreignField': 'id_cliente',
-                'as': 'dados_cliente'
-            }},
-            {'$unwind': {'path': '$dados_cliente', 'preserveNullAndEmptyArrays': True}}
-        ]
-        
-        transacoes_raw = list(db.transacoes_clientes.aggregate(pipeline_extrato))
-        transacoes = []
-        
-        for t in transacoes_raw:
-            t['valor_float'] = safe_float(t.get('valor', 0))
-            t['saldo_ant_float'] = safe_float(t.get('saldo_anterior', 0))
-            t['saldo_pos_float'] = safe_float(t.get('saldo_posterior', 0))
-            t['data_fmt'] = t['data_hora'].strftime("%d/%m/%Y %H:%M:%S") if 'data_hora' in t else 'N/A'
-            t['nick_cliente'] = t.get('dados_cliente', {}).get('nick', 'Desconhecido')
-            t['tipo_fmt'] = str(t.get('tipo', '')).replace('_', ' ').title()
-            transacoes.append(t)
-
-        return render_template('financeiro_clientes.html',
-                               resumo=resumo,
-                               transacoes=transacoes,
-                               filtros={
-                                   'data_inicio': data_inicio, 
-                                   'data_fim': data_fim, 
-                                   'natureza': natureza_filtro, 
-                                   'busca': busca_cliente
-                               },
-                               g=g)
-
-    except Exception as e:
-        print(f"Erro no Financeiro de Clientes: {e}")
-        return redirect(url_for('menu_operacoes', error=f"Erro ao processar relatório financeiro: {e}"))
 
 
 if __name__ == '__main__':

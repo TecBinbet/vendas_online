@@ -84,9 +84,9 @@
        
         {% if nivel >= 3 %} 
             <hr class="my-0 ">
-             <a href="{{ url_for('monitor_saques') }}" onclick="ativarSpinner('Acessando Financeiro...')" class="menu-item gerencial-item">
-                  <span class="emoji">💸</span>
-                  <span class="menu-text">Monitor de Saques</span>
+            <a href="{{ url_for('submenu_financeiro') }}" onclick="ativarSpinner('Acessando Módulo Financeiro...')" class="menu-item gerencial-item">
+                  <span class="emoji">🏦</span>
+                  <span class="menu-text">Menu Financeiro</span>
              </a>
              <a href="{{ url_for('submenu_eventos') }}" onclick="ativarSpinner('Gestão de Eventos...')" class="menu-item gerencial-item">
                  🎉 Menu Eventos
