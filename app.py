@@ -910,8 +910,10 @@ def login():
             if senha_eficaz.lower() == "senha" and tipo_usuario == 'colaborador':
                 #print("[DEBUG] Senha padrão detectada. Forçando troca.")
                 return render_template('trocar_senha_obrigatoria.html', id_sala=id_sala_to_redirect)
-            
+             
             # Redirecionamento Sucesso
+            registrar_log("LOGIN", "ACESSO", f"Colaborador {session.get('nick')} iniciou sessão.")
+
             if tipo_usuario == 'colaborador':
                 return redirect(url_for('menu_operacoes'))
             #else:
@@ -2200,6 +2202,7 @@ def gravar_cliente():
             # Edição
             print(f"[DEBUG] Atualizando ID {id_cliente_raw}")
             db.clientes.update_one({'id_cliente': int(id_cliente_raw)}, {'$set': dados_cliente})
+            registrar_log("EDITAR", "CLIENTES", f"Dados do cliente {nick} alterados.", id_cliente_raw)
             success_msg = f"Cliente {nick} atualizado com sucesso!"
         else:
             # Novo
@@ -2210,7 +2213,7 @@ def gravar_cliente():
             dados_cliente.update({
                 "id_cliente": novo_id,
                 "id_colaborador": session.get('id_colaborador'),
-                "data_cadastro": hora_brasil(),
+                "data_cadastro":hora_brasil() if isinstance(hora_brasil(), datetime) else datetime.now(),
                 "origem": "interno",
                 "em_treinamento": modo_treino, # Marca se o cliente nasceu no treino
                 "saldo_atual": Decimal128("1000.00") if modo_treino else Decimal128("0.00")
@@ -2278,6 +2281,7 @@ def excluir_cliente(id_cliente):
         
         if result.deleted_count == 1:
             success_msg = f"Cliente ID: CLI{id_cliente} excluído com sucesso."
+            registrar_log("EXCLUIR", "CLIENTES", f"Cliente ID {id_cliente} removido permanentemente.", id_cliente)
         else:
             success_msg = f"Cliente ID: CLI{id_cliente} não encontrado para exclusão."
 
@@ -4325,6 +4329,8 @@ def adicionar_credito_cliente():
   
         if sucesso:
             msg = f"Recarga de R$ {valor_recarga:.2f} realizada com sucesso para o Cliente {id_cliente}."
+            valor = request.form.get('valor_recarga')
+            registrar_log("RECARGA", "FINANCEIRO", f"Adicionado R$ {valor} ao cliente {id_cliente}", id_cliente)
             return redirect(url_for('cadastro_cliente', view='consulta', success=msg, query=str(id_cliente)))
         else:
             return redirect(url_for('cadastro_cliente', view='consulta', error="Erro ao registrar recarga."))
@@ -4838,53 +4844,6 @@ def financeiro_evento():
 
 
 
-# --- ROTA UTILITÁRIA: LIMPAR TABELA ESPECÍFICA ---
-@app.route('/admin/limpar_tabela/<string:nome_tabela>', methods=['GET'])
-@login_required
-def limpar_tabela_dinamica(nome_tabela):
-    """
-    Limpa todos os dados de uma tabela específica passada por parâmetro na URL.
-    Uso: /admin/limpar_tabela/nome_da_colecao
-    """
-    db = get_vendas_db()
-    if db is None: 
-        return jsonify({'status': 'error', 'msg': 'Banco de dados offline.'}), 500
-
-    # 1. SEGURANÇA: Apenas Nível 3 (Admin)
-    if session.get('nivel', 0) < 3:
-        return jsonify({'status': 'error', 'msg': 'ACESSO NEGADO: Apenas administradores.'}), 403
-
-    # 2. SEGURANÇA: Lista de tabelas INTOCÁVEIS (Para não quebrar o sistema)
-    tabelas_proibidas = ['colaboradores', 'parametros', 'salas', 'contadores']
-    
-    if nome_tabela in tabelas_proibidas:
-        return jsonify({
-            'status': 'error', 
-            'msg': f'PROIBIDO: A tabela "{nome_tabela}" é crítica para o sistema e não pode ser limpa por aqui.'
-        }), 400
-
-    try:
-        # Verifica se a coleção existe antes de tentar limpar
-        if nome_tabela not in db.list_collection_names():
-             return jsonify({'status': 'error', 'msg': f'A tabela "{nome_tabela}" não existe no banco.'}), 404
-
-        # 3. EXECUÇÃO: Apaga todos os registros (mantém a estrutura e índices)
-        # Se quiser apagar a tabela inteira (drop), use: db[nome_tabela].drop()
-        resultado = db[nome_tabela].delete_many({})
-        
-        msg = f"SUCESSO: Foram removidos {resultado.deleted_count} registros da tabela '{nome_tabela}'."
-        print(f"[AUDITORIA] Admin {session.get('nick')} limpou a tabela {nome_tabela}.")
-        
-        return jsonify({
-            'status': 'success',
-            'msg': msg,
-            'registros_removidos': resultado.deleted_count
-        })
-
-    except Exception as e:
-        return jsonify({'status': 'error', 'msg': f'Erro interno: {e}'}), 500
-
-
 @app.route('/salvar_senha_obrigatoria', methods=['POST'])
 @login_required 
 def salvar_senha_obrigatoria():
@@ -5236,6 +5195,8 @@ def gravar_replicacao():
             msg = f"Sucesso! {qtd} evento(s) replicado(s) com o status '{status_replicas}'."
             return redirect(url_for('cadastro_evento', success=msg, view='listar'))
         
+        registrar_log("REPLICAR", "EVENTOS", f"Geradas {qtd} réplicas a partir do evento {id_evento_molde}.")
+
         return redirect(url_for('cadastro_evento', view='listar'))
 
     except Exception as e:
@@ -5444,7 +5405,7 @@ def gravar_parametros():
         # 3. UPSERT NO MONGODB
         # Atualiza o primeiro documento encontrado ou cria um novo se a coleção estiver vazia
         db.parametros.update_one({}, {'$set': dados_atualizados}, upsert=True)
-        
+        registrar_log("EDITAR", "PARAMETROS", f"Parâmetros da sala {g.id_sala} alterados.")
         print(f"[SYS ADMIN] Parâmetros técnicos atualizados com sucesso por TECBIN.")
         return redirect(url_for('parametros', success="Parâmetros atualizados e gravados na base de dados com sucesso!"))
 
@@ -5767,10 +5728,57 @@ def buscar_proximo_numero_inicial():
         print(f"Erro ao buscar número inicial: {e}")
         return jsonify({'sucesso': False, 'erro': str(e)}), 500
 
-
-
 # =============================
-# Correcções do sistema
+# ROTINA DE REGISTRO DE LOGS (auditoria de operações realizadas)
+# --- FUNÇÃO MESTRE DE AUDITORIA ---
+def registrar_log(acao, categoria, detalhes, alvo_id=None):
+    """
+    Registra uma ação administrativa no banco de dados.
+    """
+    db = get_vendas_db()
+    if db is not None:
+        try:
+            log_doc = {
+                "data_hora": hora_brasil(),
+                "operador_nick": session.get('nick', 'SISTEMA'),
+                "operador_id": session.get('id_colaborador', 'N/A'),
+                "acao": acao.upper(),         # EXCLUIR, EDITAR, LOGIN, RECARGA, EXPURGO
+                "categoria": categoria.upper(), # CLIENTES, EVENTOS, PARAMETROS, FINANCEIRO
+                "detalhes": detalhes,
+                "alvo_id": alvo_id,
+                "ip_origem": request.remote_addr
+            }
+            db.logs_auditoria.insert_one(log_doc)
+        except Exception as e:
+            print(f"Erro ao gravar log: {e}")
+
+# --- ROTA DE VISUALIZAÇÃO ---
+@app.route('/admin/auditoria')
+@login_required
+def auditoria():
+    # Apenas Admin Nível 3 (Engenharia)
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+    
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('menu_operacoes'))
+
+    try:
+        # Busca os últimos 200 logs, do mais recente para o mais antigo
+        logs = list(db.logs_auditoria.find().sort('data_hora', -1).limit(200))
+        
+        for l in logs:
+            l['_id'] = str(l['_id'])
+            if 'data_hora' in l:
+                l['data_fmt'] = l['data_hora'].strftime("%d/%m/%Y %H:%M:%S")
+    except:
+        logs = []
+
+    return render_template('auditoria.html', logs=logs, g=g)
+
+
+# ========================================================================
+# CORREÇÕES DO SISTEMA (Funções com chamadas externas)
 # =============================
 
 @app.route('/admin/popular_bloqueios')
@@ -5831,7 +5839,9 @@ def popular_bloqueios():
         print(f"Erro ao processar limpeza/população de bloqueios: {e}")
         return redirect(url_for('cadastro_cliente', error=f"Erro interno: {e}"))
 
-
+#==================================
+# CORRIGIR CAMPO SENHA VAZIO
+#================================== 
 @app.route('/admin/corrigir_senhas_faltantes')
 @login_required
 def corrigir_senhas_faltantes():
@@ -5868,12 +5878,228 @@ def corrigir_senhas_faltantes():
         msg = f"Manutenção concluída! {resultado.modified_count} clientes foram atualizados com a senha 'Senha'."
         print(f"[MANUTENÇÃO] Admin {session.get('nick')} corrigiu senhas na sala {g.id_sala}.")
         
+        registrar_log("MANUTENÇÃO", "SISTEMA", f"Correção em massa de senhas executada ({resultado.modified_count} afetados).")
         return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
 
     except Exception as e:
         # Log de erro caso algo falhe no processo de banco ou criptografia
         print(f"Erro na manutenção de senhas: {e}")
         return redirect(url_for('cadastro_cliente', error=f"Erro interno na correção: {e}"))
+
+#===============================================
+# --- ROTA UTILITÁRIA: LIMPAR TABELA ESPECÍFICA ---
+# limpar registros de tala tebela; exemplo tabela "requisao_saque"
+# deve estar logando como administrador
+#http://localhost:5001/admin/limpar_tabela/requisao_saque
+#===============================================
+@app.route('/admin/limpar_tabela/<string:nome_tabela>', methods=['GET'])
+@login_required
+def limpar_tabela_dinamica(nome_tabela):
+    """
+    Limpa todos os dados de uma tabela específica passada por parâmetro na URL.
+    Uso: /admin/limpar_tabela/nome_da_colecao
+    """
+    db = get_vendas_db()
+    if db is None: 
+        return jsonify({'status': 'error', 'msg': 'Banco de dados offline.'}), 500
+
+    # 1. SEGURANÇA: Apenas Nível 3 (Admin)
+    if session.get('nivel', 0) < 3:
+        return jsonify({'status': 'error', 'msg': 'ACESSO NEGADO: Apenas administradores.'}), 403
+
+    # 2. SEGURANÇA: Lista de tabelas INTOCÁVEIS (Para não quebrar o sistema)
+    tabelas_proibidas = ['colaboradores', 'parametros', 'salas', 'contadores']
+    
+    if nome_tabela in tabelas_proibidas:
+        return jsonify({
+            'status': 'error', 
+            'msg': f'PROIBIDO: A tabela "{nome_tabela}" é crítica para o sistema e não pode ser limpa por aqui.'
+        }), 400
+
+    try:
+        # Verifica se a coleção existe antes de tentar limpar
+        if nome_tabela not in db.list_collection_names():
+             return jsonify({'status': 'error', 'msg': f'A tabela "{nome_tabela}" não existe no banco.'}), 404
+
+        # 3. EXECUÇÃO: Apaga todos os registros (mantém a estrutura e índices)
+        # Se quiser apagar a tabela inteira (drop), use: db[nome_tabela].drop()
+        resultado = db[nome_tabela].delete_many({})
+        
+        msg = f"SUCESSO: Foram removidos {resultado.deleted_count} registros da tabela '{nome_tabela}'."
+        print(f"[AUDITORIA] Admin {session.get('nick')} limpou a tabela {nome_tabela}.")
+        
+        return jsonify({
+            'status': 'success',
+            'msg': msg,
+            'registros_removidos': resultado.deleted_count
+        })
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'msg': f'Erro interno: {e}'}), 500
+
+
+#==================================
+# EXCLUI OS REGISTRO COM STATUS DE EM_TREINAMENTO DA TABELA CLIENTE 
+# >>>  http://localhost:5001/admin/expurgar_treinamento
+#================================== 
+@app.route('/admin/expurgar_treinamento')
+@login_required
+def expurgar_treinamento():
+    """
+    EXCLUSÃO DEFINITIVA: 
+    Remove do banco todos os clientes marcados com 'em_treinamento': True
+    e apaga todas as suas transações financeiras.
+    """
+    # 1. Segurança: Apenas nível 3 (Administrador Master)
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso negado."))
+
+    db = get_vendas_db()
+    if db is None:
+        return redirect(url_for('cadastro_cliente', error="Erro de conexão com o banco."))
+
+    try:
+        # 2. Identificar os IDs dos clientes que serão apagados (para limpar o financeiro)
+        # Buscamos a lista de IDs antes de deletar o cadastro
+        clientes_treino = list(db.clientes.find({"em_treinamento": True}, {"id_cliente": 1}))
+        ids_para_excluir = [c['id_cliente'] for c in clientes_treino]
+
+        if not ids_para_excluir:
+            return redirect(url_for('cadastro_cliente', success="Nenhum registro de treinamento encontrado para excluir.", view='listar'))
+
+        # 3. EXCLUSÃO 1: Tabela de Clientes
+        res_clientes = db.clientes.delete_many({"em_treinamento": True})
+
+        # 4. EXCLUSÃO 2: Tabela de Transações (Extratos)
+        # Remove qualquer rastro financeiro ligado a esses IDs
+        res_transacoes = db.transacoes_clientes.delete_many({"id_cliente": {"$in": ids_para_excluir}})
+
+        registrar_log("EXPURGO", "SISTEMA", f"Limpeza total de {res_clientes.deleted_count} registros de treinamento.")
+
+        # 5. Log de Auditoria no Console
+        msg = f"EXPURGO CONCLUÍDO: {res_clientes.deleted_count} clientes e {res_transacoes.deleted_count} transações foram removidos permanentemente."
+        print(f"\n[ALERTA DE SEGURANÇA] {session.get('nick')} EXECUTOU EXPURGO DE TREINAMENTO.")
+        print(f"Registros removidos: {res_clientes.deleted_count}\n")
+        
+        return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
+
+    except Exception as e:
+        print(f"Erro crítico no expurgo: {e}")
+        return redirect(url_for('cadastro_cliente', error=f"Falha na exclusão: {e}"))
+
+
+#==================================
+# AJUSTAR CAMPOS DA TABELA CLIENTE 
+# >>>  http://localhost:5001/admin/ativar_modo_treino_retroativo
+#================================== 
+@app.route('/admin/ativar_modo_treino_retroativo')
+@login_required
+def ativar_modo_treino_retroativo():
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso negado."))
+
+    db = get_vendas_db()
+    if db is None:
+        return redirect(url_for('cadastro_cliente', error="Erro de conexão com o banco."))
+
+    try:
+        # 1. Tentativa com objeto DATETIME (Se gravou como objeto de data)
+        data_corte_obj = datetime(2026, 3, 21, 0, 0, 0)
+        
+        # 2. Tentativa com STRING (Se gravou como texto via hora_brasil)
+        # Usamos regex para pegar qualquer hora do dia 21 em diante ou datas posteriores
+        # Nota: Como strings são comparadas caractere a caractere, 
+        # o filtro "$gte" em strings de data brasileira (DD/MM) costuma falhar.
+        # Por isso, vamos tentar primeiro o filtro de objeto.
+        
+        filtro = {
+            "$or": [
+                {"data_cadastro": {"$gte": data_corte_obj}}, # Se for ISODate
+                {"data_cadastro": {"$regex": "^21/03/2026"}} # Se for String começando com 21/03
+            ]
+        }
+        
+        atualizacao = {
+            "$set": {
+                "em_treinamento": True,
+                "saldo_atual": Decimal128("1000.00")
+            }
+        }
+
+        # Executa
+        resultado = db.clientes.update_many(filtro, atualizacao)
+
+        # Se ainda assim der 0, vamos tentar um filtro mais largo para teste
+        if resultado.modified_count == 0:
+            # Tenta buscar APENAS UM para debug no console
+            amostra = db.clientes.find_one({}, {"data_cadastro": 1})
+            print(f"[DEBUG] Tipo de data no banco: {type(amostra.get('data_cadastro'))} - Valor: {amostra.get('data_cadastro')}")
+            msg = "Nenhum registro encontrado com a data de 21/03/2026. Verifique o log do console."
+        else:
+            msg = f"Sucesso! {resultado.modified_count} clientes atualizados."
+
+        return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
+
+    except Exception as e:
+        print(f"Erro na conversão: {e}")
+        return redirect(url_for('cadastro_cliente', error=f"Erro: {e}"))
+
+
+# >>>  http://localhost:5001/admin/corrigir_tipo_data_e_treino
+@app.route('/admin/corrigir_tipo_data_e_treino')
+@login_required
+def corrigir_tipo_data_e_treino():
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso negado."))
+
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('cadastro_cliente', error="Erro de conexão."))
+
+    try:
+        clientes = list(db.clientes.find({}))
+        contagem_convertidos = 0
+        contagem_treino = 0
+        data_corte = datetime(2026, 3, 21, 0, 0, 0)
+
+        for cli in clientes:
+            data_original = cli.get('data_cadastro')
+            data_objeto = None
+            atualizacao = {}
+
+            if isinstance(data_original, str):
+                # Tenta primeiro o formato ISO (que apareceu no seu log: 2026-01-31...)
+                try:
+                    data_objeto = datetime.strptime(data_original[:19], "%Y-%m-%d %H:%M:%S")
+                except:
+                    # Se falhar, tenta o formato Brasileiro (DD/MM/AAAA...)
+                    try:
+                        data_objeto = datetime.strptime(data_original[:19], "%d/%m/%Y %H:%M:%S")
+                    except:
+                        print(f"Não foi possível converter a data do cliente {cli.get('nick')}: {data_original}")
+
+                if data_objeto:
+                    atualizacao["data_cadastro"] = data_objeto
+                    contagem_convertidos += 1
+            else:
+                data_objeto = data_original
+
+            # Aplica regra de treino se a data (já convertida) for após o corte
+            if data_objeto and isinstance(data_objeto, datetime):
+                if data_objeto >= data_corte:
+                    atualizacao["em_treinamento"] = True
+                    atualizacao["saldo_atual"] = Decimal128("1000.00")
+                    contagem_treino += 1
+
+            if atualizacao:
+                db.clientes.update_one({"_id": cli['_id']}, {"$set": atualizacao})
+
+        msg = f"Sucesso! Convertidos: {contagem_convertidos}. Em treino: {contagem_treino}."
+        return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
+
+    except Exception as e:
+        return redirect(url_for('cadastro_cliente', error=f"Erro crítico: {e}"))
+
+
 
 
 
@@ -5889,7 +6115,3 @@ if __name__ == '__main__':
 #====================================
 # db.clientes.delete_many({"em_treinamento": true}
 
-
-# limpar registros de tala tebela; exemplo tabela "requisao_saque"
-# deve estar logando como administrador
-#http://localhost:5001/admin/limpar_tabela/requisao_saque
