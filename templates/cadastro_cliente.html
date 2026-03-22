@@ -225,9 +225,20 @@
 
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-1">
                     <div class="form-group">
-                        <label>ID Cliente:</label>
+                        <label>ID Cliente:</label><th class="py-1 px-4 border-b"</label>
                         <input type="text" value="{% if active_view == 'alterar' %}CLI{{ cliente.get('id_cliente', 'N/A') }}{% else %}Gerado Automaticamente{% endif %}" disabled class="form-control bg-gray-100">
                     </div>
+
+                    <!-- NOVO CAMPO: SALDO ATUAL (Apenas na Alteração) -->
+                    {% if active_view == 'alterar' %}
+                    <div class="form-group">
+                        <label>Saldo Disponível (R$):</label>
+                        <input type="text" 
+                               value="{{ cliente.saldo_float | format_moeda }}" 
+                               disabled 
+                               class="form-control bg-green-50 border-green-200 text-green-700 font-bold text-lg">
+                    </div>
+                    {% endif %}
 
                     {% if "nome_cliente" in campos %}
                     <div class="form-group">
@@ -381,6 +392,7 @@
                             <th class="py-1 px-4 border-b">ID</th>
                             <th class="py-1 px-4 border-b">Nick / Nome</th>
                             <th class="py-1 px-4 border-b">Cidade</th>
+                            <th class="py-1 px-4 border-b">Saldo (R$)</th>
                             <th class="py-1 px-4 border-b text-right">Ações</th>
                         </tr>
                     </thead>
@@ -394,6 +406,9 @@
                                     <div class="font-semibold text-[14px] text-gray-600">{{ cliente.nome_cliente }}</div>
                                 </td>
                                 <td class="py-2 px-4 border-b text-gray-500 font-medium">{{ cliente.cidade | default('—') }}</td>
+                                <td class="py-2 px-4 border-b font-bold text-[16px] {{ 'text-red-600' if cliente.saldo_float < 0 else 'text-green-700' }}">
+                                       {{ cliente.saldo_float | format_moeda }}
+                                </td>
                                 <td class="py-2 px-4 border-b text-right">
                                     <div class="flex justify-end gap-3">
                                         <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="text-blue-500 font-bold hover:underline">Editar</a>

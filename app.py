@@ -2020,6 +2020,7 @@ def cadastro_cliente():
             
             if cliente_edicao:
                 if '_id' in cliente_edicao: cliente_edicao['_id'] = str(cliente_edicao['_id'])
+                cliente_edicao['saldo_float'] = safe_float(cliente_edicao.get('saldo_atual', 0.0))
             else:
                  error = f"Cliente ID {id_cliente_int} não encontrado para edição."
                  active_view = 'listar' 
@@ -2174,6 +2175,10 @@ def gravar_cliente():
                 hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
                 print("[DEBUG] Atualizando senha do cliente (Manual)")
 
+        # Busca se o modo treinamento está ON  
+        params = db.parametros.find_one({})
+        modo_treino = params.get('em_treinamento', False)
+
         # 4. Montagem do dicionário de dados
         dados_cliente = {
             "nome_cliente": nome_cliente,
@@ -2207,10 +2212,27 @@ def gravar_cliente():
                 "id_colaborador": session.get('id_colaborador'),
                 "data_cadastro": hora_brasil(),
                 "origem": "interno",
-                "saldo_atual": Decimal128("0.00") # Inicializa saldo
+                "em_treinamento": modo_treino, # Marca se o cliente nasceu no treino
+                "saldo_atual": Decimal128("1000.00") if modo_treino else Decimal128("0.00")
             })
             
             db.clientes.insert_one(dados_cliente)
+
+            # Se for treino, já gera a primeira transação no extrato para ficar bonito
+            if modo_treino:
+                db.transacoes_clientes.insert_one({
+                    "id_transacao": f"TRX_TREINO_{int(time.time())}",
+                    "id_cliente": novo_id,
+                    "tipo": "recarga_treinamento",
+                    "valor": Decimal128("1000.00"),
+                    "natureza": "ENTRADA",
+                    "saldo_anterior": Decimal128("0.00"), # <-- Adicionado
+                    "saldo_posterior": Decimal128("1000.00"), # <-- Adicionado
+                    "descricao": "Bônus de Boas-vindas (MODO TREINAMENTO)",
+                    "registrado_por": "SISTEMA", # <-- Adicionado
+                    "data_hora": hora_brasil()
+                })
+
             success_msg = f"Cliente {nick} cadastrado! ID: CLI{novo_id}"
 
         print(f"[DEBUG] Sucesso! Redirecionando...\n")
@@ -5117,32 +5139,51 @@ def gravar_replicacao():
 
         eventos_para_inserir = []
 
-        # Dupla verificação de segurança (backend check)
+        # --- BUSCA PARÂMETROS E MODO TREINO (FORA DO LOOP - OTIMIZADO) ---
+        params = db.parametros.find_one({})
+        modo_treino = params.get('em_treinamento', False) if params else False
+
+        # --- BUSCA VENDAS DO MOLDE (ADICIONADO: A busca que faltava!) ---
+        vendas_originais = []
+        if modo_treino:
+            col_vendas_molde = f"vendas{id_evento_molde}"
+            vendas_originais = list(db[col_vendas_molde].find({}))
+
+        # --- FORA DO LOOP i (Otimização Máxima) ---
+        ponteiro_geral_cartela = int(evento_molde.get('numero_inicial', 1))
+        unidade_venda_fixa = int(evento_molde.get('unidade_de_venda', 1))
+
+        # Pré-processamos as vendas do molde para saber o "tamanho" de cada uma
+        vendas_pre_calculadas = []
+        if modo_treino and vendas_originais:
+            for v in vendas_originais:
+                qtd_kits = v.get('quantidade_unidades', 1)
+                t_cartelas = v.get('quantidade_cartelas', qtd_kits * unidade_venda_fixa)
+                vendas_pre_calculadas.append({'dados': v, 'tamanho': t_cartelas})
+
+
+        # Início do Loop de Replicação
         for i in range(1, qtd + 1):
             novo_dt = base_dt + timedelta(minutes=intervalo_minutos * i)
             data_str = novo_dt.strftime("%d/%m/%Y")
             hora_str = novo_dt.strftime("%H:%M")
 
+            # Verificação de conflito (Mantém dentro pois a data muda a cada volta)
             if db.eventos.find_one({"data_evento": data_str, "hora_evento": hora_str}):
                 return redirect(url_for('cadastro_evento', view='alterar', id_evento=id_evento_molde, 
                                         error=f"Conflito de horário detectado em {data_str} {hora_str}. Cancelado."))
 
-            # Gera ID Seguro
             novo_id = get_next_evento_sequence()
-
-            # REGRA 3: Formatação Automática da Descrição
             nova_descricao = f"{novo_dt.strftime('%d/%m')} às {hora_str} - R$ {premio_formatado}"
 
-            # Cópia profunda do dicionário, removendo a raiz do MongoDB
             novo_evento = evento_molde.copy()
-            if '_id' in novo_evento:
-                del novo_evento['_id']
+            if '_id' in novo_evento: del novo_evento['_id']
 
-            # Atualização dos campos específicos da réplica
             novo_evento.update({
                 "id_evento": novo_id,
                 "data_evento": data_str,
                 "hora_evento": hora_str,
+                "numero_inicial": ponteiro_geral_cartela,
                 "data_hora_evento": novo_dt,
                 "descricao": nova_descricao,
                 "status": status_replicas,
@@ -5151,8 +5192,44 @@ def gravar_replicacao():
                 "id_colaborador": session.get('id_colaborador', 'N/A')
             })
 
+            # Adiciona na lista para o Bulk Insert final
             eventos_para_inserir.append(novo_evento)
-
+            
+            # --- LÓGICA DE CLONE DE VENDAS (TREINAMENTO) ---
+            if modo_treino and vendas_pre_calculadas:
+                vendas_clonadas_da_replica = []
+        
+                for item in vendas_pre_calculadas:
+                    v = item['dados']
+                    t_cartelas = item['tamanho']
+            
+                    v_clone = v.copy()
+                    if '_id' in v_clone: del v_clone['_id']
+            
+                    v_clone.update({
+                        'id_evento': novo_id,
+                        'data_venda': novo_dt,
+                        'numero_inicial': ponteiro_geral_cartela,
+                        'numero_final': ponteiro_geral_cartela + t_cartelas - 1,
+                        'id_venda': f"T{novo_id}-{ponteiro_geral_cartela}"
+                    })
+            
+                    vendas_clonadas_da_replica.append(v_clone)
+            
+                    # INCREMENTO CRÍTICO: Move o ponteiro para a próxima venda/réplica
+                    ponteiro_geral_cartela += t_cartelas
+        
+                # Insere as vendas e atualiza o controle_venda para esta réplica
+                if vendas_clonadas_da_replica:
+                    db[f"vendas{novo_id}"].insert_many(vendas_clonadas_da_replica)
+            
+                db.controle_venda.update_one(
+                    {'id_evento': novo_id},
+                    {'$set': {'inicial_proxima_venda': ponteiro_geral_cartela}},
+                    upsert=True
+                )
+        # FIM VENDAS TREINAMENTO        
+ 
         # Inserção em Lote (Bulk Insert)
         if eventos_para_inserir:
             db.eventos.insert_many(eventos_para_inserir)
@@ -5194,6 +5271,7 @@ def parametros():
             'limite_de_credito': 0,
             'acumulado': Decimal128("0.00"),
             'tope': 0,
+            'em_treinamento': False,
             'porcento_premios': 0,
             'porcento_15': {'linha': Decimal128("0.00"), 'bingo': Decimal128("0.00"), 'segundobingo': Decimal128("0.00")},
             'porcento_25': {'linha': Decimal128("0.00"), 'bingo': Decimal128("0.00")},
@@ -5216,6 +5294,8 @@ def parametros():
         'acumulado': safe_get_float(param_doc.get('acumulado', 0)),
         'tope': safe_get_int(param_doc.get('tope', 0)),
         'porcento_premios': safe_get_int(param_doc.get('porcento_premios', 0)),
+        # --- EM TREINAMENTO   ---   
+        'em_treinamento': bool(param_doc.get('em_treinamento', False)), 
 
         # --- NOVOS CAMPOS (ROBÔ E INTEGRAÇÕES) ---
         'tempo_atualizacao_premios': safe_get_int(param_doc.get('tempo_atualizacao_premios', 1)),
@@ -5320,6 +5400,8 @@ def gravar_parametros():
             'acumulado': safe_dec(request.form.get('acumulado', '0')),
             'tope': int(request.form.get('tope', 0)),
             'porcento_premios': int(request.form.get('porcento_premios', 0)),
+
+            'em_treinamento': True if request.form.get('em_treinamento') else False,
 
             # --- NOVOS CAMPOS CORRIGIDOS (ROBÔ E INTEGRAÇÕES) ---
             'tempo_atualizacao_premios': int(request.form.get('tempo_atualizacao_premios', 1)),
@@ -5449,113 +5531,9 @@ def motor_background_premios():
 # Inicia o robô invisível junto com a inicialização do Flask
 threading.Thread(target=motor_background_premios, daemon=True).start()
 
-
-# =============================
-# Correcções do sistema
-# =============================
-
-@app.route('/admin/popular_bloqueios')
-@login_required
-def popular_bloqueios():
-    """
-    Popula a tabela 'config_bloqueio' com um único documento contendo 
-    o array de termos proibidos, apagando qualquer registro anterior.
-    Acessível apenas para administradores de nível 3.
-    """
-    # 1. Verificação de segurança: Apenas administradores nível 3
-    if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso negado. Nível 3 requerido."))
-
-    db = get_vendas_db()
-    if db is None:
-        return redirect(url_for('cadastro_cliente', error="Erro de ligação à base de dados."))
-
-    try:
-        # 2. Lista de termos fornecida para bloqueio
-        termos_para_bloquear = [
-            "site_concorrente", "golpe", "fraude", "puta", "puto", "caralho", 
-            "porra", "buceta", "boceta", "pica", "merda", "cu", "cuzão", 
-            "viado", "arrombado", "foda", "pinto", "rola", "cacete", 
-            "piranha", "vagabundo", "vagabunda", "corno", "xoxota", 
-            "chupa", "chupeta", "putaria", "bicha", "traveco", "rapariga", 
-            "prostituta", "veado", "bichona", "vagina", "bosta", "fuck", 
-            "vaca", "boi", "penis", "xola"
-        ]
-
-        # 3. Limpeza e padronização da lista (remove duplicados e ordena)
-        termos_limpos = sorted(list(set([t.strip().lower() for t in termos_para_bloquear])))
-
-        # 4. ROTINA DE LIMPEZA: Apaga todos os registros existentes na coleção
-        delete_result = db.config_bloqueio.delete_many({})
-        print(f"[MANUTENÇÃO] Removidos {delete_result.deleted_count} registros antigos de bloqueio.")
-
-        # 5. Execução da gravação do novo documento único (Array Format)
-        db.config_bloqueio.update_one(
-            {'tipo': 'nicks_proibidos'},
-            {
-                '$set': {
-                    'tipo': 'nicks_proibidos',
-                    'palavras': termos_limpos,
-                    'data_atualizacao': hora_brasil()
-                }
-            },
-            upsert=True
-        )
-
-        contagem = len(termos_limpos)
-        msg = f"Limpeza concluída e lista atualizada! {contagem} termos salvos no formato oficial."
-        print(f"[LOG ADMIN] {session.get('nick')} resetou e atualizou bloqueios na sala {g.id_sala}.")
-        
-        return redirect(url_for('cadastro_cliente', success=msg, view='bloqueio'))
-
-    except Exception as e:
-        print(f"Erro ao processar limpeza/população de bloqueios: {e}")
-        return redirect(url_for('cadastro_cliente', error=f"Erro interno: {e}"))
-
-
-@app.route('/admin/corrigir_senhas_faltantes')
-@login_required
-def corrigir_senhas_faltantes():
-    """
-    Localiza clientes sem o campo 'senha' no banco de dados da sala atual 
-    e define a senha padrão como 'Senha' (com S maiúsculo) via bcrypt.
-    """
-    # 1. Segurança: Permite acesso apenas para administradores nível 3
-    if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso negado. Nível 3 requerido."))
-
-    # 2. Obtém a conexão com o banco de dados dinâmico da sala ativa
-    db = get_vendas_db()
-    if db is None:
-        return redirect(url_for('cadastro_cliente', error="Erro de conexão com o banco de dados."))
-
-    try:
-        # 3. Gera o hash para a string "Senha"
-        # O salt é gerado automaticamente pelo bcrypt.gensalt()
-        senha_padrao = "Senha"
-        hashed = bcrypt.hashpw(senha_padrao.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-
-        # 4. Filtro para encontrar documentos onde o campo 'senha' NÃO existe
-        filtro = {"senha": {"$exists": False}}
-        
-        # 5. Executa a atualização em massa (update_many)
-        # O operador $set criará o campo para quem não tem
-        resultado = db.clientes.update_many(
-            filtro,
-            {"$set": {"senha": hashed}}
-        )
-
-        # 6. Retorna para a listagem com a contagem de quantos foram corrigidos
-        msg = f"Manutenção concluída! {resultado.modified_count} clientes foram atualizados com a senha 'Senha'."
-        print(f"[MANUTENÇÃO] Admin {session.get('nick')} corrigiu senhas na sala {g.id_sala}.")
-        
-        return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
-
-    except Exception as e:
-        # Log de erro caso algo falhe no processo de banco ou criptografia
-        print(f"Erro na manutenção de senhas: {e}")
-        return redirect(url_for('cadastro_cliente', error=f"Erro interno na correção: {e}"))
-
+# ==============================================================================
+# 📊 MÓDULO FINANCEIRO DOS CLIENTES (Sintético e Analítico)
+# ==============================================================================
 
 @app.route('/submenu_financeiro')
 @login_required
@@ -5566,9 +5544,6 @@ def submenu_financeiro():
     return render_template('submenu_financeiro.html')
 
 
-# ==============================================================================
-# 📊 MÓDULO FINANCEIRO DOS CLIENTES (Sintético e Analítico)
-# ==============================================================================
 @app.route('/financeiro_clientes', methods=['GET'])
 @login_required
 def financeiro_clientes():
@@ -5690,7 +5665,8 @@ def financeiro_clientes():
         print(f"Erro no Financeiro de Clientes: {e}")
         return redirect(url_for('menu_operacoes', error=f"Erro ao processar relatório financeiro: {e}"))
 
-
+#===========================
+# LIMPEZA DOS DADOS
 @app.route('/admin/limpeza_dados', methods=['GET', 'POST'])
 @login_required
 def limpeza_dados():
@@ -5792,12 +5768,126 @@ def buscar_proximo_numero_inicial():
         return jsonify({'sucesso': False, 'erro': str(e)}), 500
 
 
+
+# =============================
+# Correcções do sistema
+# =============================
+
+@app.route('/admin/popular_bloqueios')
+@login_required
+def popular_bloqueios():
+    """
+    Popula a tabela 'config_bloqueio' com um único documento contendo 
+    o array de termos proibidos, apagando qualquer registro anterior.
+    Acessível apenas para administradores de nível 3.
+    """
+    # 1. Verificação de segurança: Apenas administradores nível 3
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso negado. Nível 3 requerido."))
+
+    db = get_vendas_db()
+    if db is None:
+        return redirect(url_for('cadastro_cliente', error="Erro de ligação à base de dados."))
+
+    try:
+        # 2. Lista de termos fornecida para bloqueio
+        termos_para_bloquear = [
+            "site_concorrente", "golpe", "fraude", "puta", "puto", "caralho", 
+            "porra", "buceta", "boceta", "pica", "merda", "cu", "cuzão", 
+            "viado", "arrombado", "foda", "pinto", "rola", "cacete", 
+            "piranha", "vagabundo", "vagabunda", "corno", "xoxota", 
+            "chupa", "chupeta", "putaria", "bicha", "traveco", "rapariga", 
+            "prostituta", "veado", "bichona", "vagina", "bosta", "fuck", 
+            "vaca", "boi", "penis", "xola"
+        ]
+
+        # 3. Limpeza e padronização da lista (remove duplicados e ordena)
+        termos_limpos = sorted(list(set([t.strip().lower() for t in termos_para_bloquear])))
+
+        # 4. ROTINA DE LIMPEZA: Apaga todos os registros existentes na coleção
+        delete_result = db.config_bloqueio.delete_many({})
+        print(f"[MANUTENÇÃO] Removidos {delete_result.deleted_count} registros antigos de bloqueio.")
+
+        # 5. Execução da gravação do novo documento único (Array Format)
+        db.config_bloqueio.update_one(
+            {'tipo': 'nicks_proibidos'},
+            {
+                '$set': {
+                    'tipo': 'nicks_proibidos',
+                    'palavras': termos_limpos,
+                    'data_atualizacao': hora_brasil()
+                }
+            },
+            upsert=True
+        )
+
+        contagem = len(termos_limpos)
+        msg = f"Limpeza concluída e lista atualizada! {contagem} termos salvos no formato oficial."
+        print(f"[LOG ADMIN] {session.get('nick')} resetou e atualizou bloqueios na sala {g.id_sala}.")
+        
+        return redirect(url_for('cadastro_cliente', success=msg, view='bloqueio'))
+
+    except Exception as e:
+        print(f"Erro ao processar limpeza/população de bloqueios: {e}")
+        return redirect(url_for('cadastro_cliente', error=f"Erro interno: {e}"))
+
+
+@app.route('/admin/corrigir_senhas_faltantes')
+@login_required
+def corrigir_senhas_faltantes():
+    """
+    Localiza clientes sem o campo 'senha' no banco de dados da sala atual 
+    e define a senha padrão como 'Senha' (com S maiúsculo) via bcrypt.
+    """
+    # 1. Segurança: Permite acesso apenas para administradores nível 3
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso negado. Nível 3 requerido."))
+
+    # 2. Obtém a conexão com o banco de dados dinâmico da sala ativa
+    db = get_vendas_db()
+    if db is None:
+        return redirect(url_for('cadastro_cliente', error="Erro de conexão com o banco de dados."))
+
+    try:
+        # 3. Gera o hash para a string "Senha"
+        # O salt é gerado automaticamente pelo bcrypt.gensalt()
+        senha_padrao = "Senha"
+        hashed = bcrypt.hashpw(senha_padrao.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        # 4. Filtro para encontrar documentos onde o campo 'senha' NÃO existe
+        filtro = {"senha": {"$exists": False}}
+        
+        # 5. Executa a atualização em massa (update_many)
+        # O operador $set criará o campo para quem não tem
+        resultado = db.clientes.update_many(
+            filtro,
+            {"$set": {"senha": hashed}}
+        )
+
+        # 6. Retorna para a listagem com a contagem de quantos foram corrigidos
+        msg = f"Manutenção concluída! {resultado.modified_count} clientes foram atualizados com a senha 'Senha'."
+        print(f"[MANUTENÇÃO] Admin {session.get('nick')} corrigiu senhas na sala {g.id_sala}.")
+        
+        return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
+
+    except Exception as e:
+        # Log de erro caso algo falhe no processo de banco ou criptografia
+        print(f"Erro na manutenção de senhas: {e}")
+        return redirect(url_for('cadastro_cliente', error=f"Erro interno na correção: {e}"))
+
+
+
 if __name__ == '__main__':
     # Para desenvolvimento local apenas
     if os.environ.get('FLASK_ENV') != 'production':
         app.run(debug=True, host='0.0.0.0', port=5001)
     else:
         print("⚠️  AVISO: Em produção, use Gunicorn. Não execute app.py diretamente!")
+
+#========================================
+# COMO EXCLUIR OS REGISTRO em_treinamento
+#====================================
+# db.clientes.delete_many({"em_treinamento": true}
 
 
 # limpar registros de tala tebela; exemplo tabela "requisao_saque"
