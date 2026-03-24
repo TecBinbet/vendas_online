@@ -42,6 +42,17 @@
     </style>
 </head>
 <body>
+<div id="loading-spinner" class="spinner-overlay" style="position: fixed; inset: 0; background-color: rgba(17, 24, 39, 0.75); display: none; align-items: center; justify-content: center; z-index: 9999;">
+    <div class="flex flex-col items-center">
+        <div class="spinner-animation" style="animation: spin 1s linear infinite; border-radius: 9999px; height: 5rem; width: 5rem; border: 4px solid rgba(255, 255, 255, 0.1); border-top-color: #3B82F6;"></div>
+        <p id="spinner-text" class="text-white mt-4 font-bold animate-pulse uppercase tracking-widest text-sm">Processando...</p>
+    </div>
+</div>
+
+<style>
+    @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+    .spinner-visible { display: flex !important; }
+</style>
 
     <div class="bg-primary text-white shadow mb-1 sticky top-0 z-50">
         <div class="container mx-auto flex justify-between items-center">
@@ -148,11 +159,12 @@
                 </div>
 
                 <div class="flex gap-2">
-                    <a href="{{ url_for('consulta_vendas_detalhes', id_evento=evento_selecionado.id_evento, id_colaborador=target_colab.id_colaborador) }}" 
+                    <a href="{{ url_for('consulta_vendas_detalhes', id_evento=evento_selecionado.id_evento,                     id_colaborador=target_colab.id_colaborador) }}" 
+                       onclick="return ativarLoadingLink(this, 'Carregando relatório...')"
                        class="flex-1 bg-blue-600 text-white text-center py-2 rounded font-bold hover:bg-blue-700 text-sm">
-                        📄 Ver Vendas Detalhadas
-                    </a>
-                    
+                        📄 Ver Vendas Detalhadas                    
+                    </a>        
+            
                     {% if financeiro.saldo_devedor > 0 %}
                     <button onclick="openPaymentModal({{ financeiro.saldo_devedor }})" 
                             class="flex-1 bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700 text-sm shadow-lg animate-pulse">
@@ -218,7 +230,7 @@
             <p class="text-sm text-gray-600 mb-1">Evento: <strong id="modal-evento-nome"></strong></p>
             <p class="text-sm text-gray-600 mb-1">Saldo Devedor Atual: <strong class="text-red-600 text-lg" id="modal-saldo-display"></strong></p>
 
-            <form method="POST" action="{{ url_for('registrar_pagamento') }}">
+            <form method="POST" action="{{ url_for('registrar_pagamento') }}" onsubmit="return ativarLoading(this, 'Registrando pagamento...')">
                 <input type="hidden" name="id_evento" value="{% if evento_selecionado %}{{ evento_selecionado.id_evento }}{% endif %}">
                 <input type="hidden" name="id_colaborador_alvo" value="{{ target_colab.id_colaborador }}">
                 
@@ -298,6 +310,53 @@
             });
         }
 
+        function ativarLoading(form, mensagem) {
+            const spinner = document.getElementById('loading-spinner');
+            const spinnerText = document.getElementById('spinner-text');
+    
+            if (spinner) {
+                if (spinnerText) spinnerText.innerText = mensagem;
+                spinner.classList.add('spinner-visible');
+            }
+
+            // Desativa o botão para evitar duplo clique
+            const btn = form.querySelector('button[type="submit"]');
+            if (btn) {
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+                btn.innerHTML = "Aguarde...";
+            }
+    
+            document.body.style.pointerEvents = 'none'; // Bloqueia cliques na tela toda
+            return true; 
+        }
+
+/**
+ * Ativa o spinner para links (Ver Vendas)
+ */
+function ativarLoadingLink(el, mensagem) {
+    const spinner = document.getElementById('loading-spinner');
+    const spinnerText = document.getElementById('spinner-text');
+    
+    if (spinner) {
+        if (spinnerText) spinnerText.innerText = mensagem;
+        spinner.classList.add('spinner-visible');
+    }
+    
+    el.classList.add('opacity-50', 'cursor-not-allowed');
+    el.innerHTML = "Carregando...";
+    document.body.style.pointerEvents = 'none';
+    return true;
+}
+
+// Previne travamento do spinner se o usuário clicar no botão "Voltar" do navegador
+window.onpageshow = function(event) {
+    const spinner = document.getElementById('loading-spinner');
+    if (spinner) spinner.classList.remove('spinner-visible');
+    document.body.style.pointerEvents = 'auto';
+};
+
+
         // --- LÓGICA DE QR CODE (Mantida e Adaptada) ---
         function acionarGeracaoLink() {
             const idColab = document.getElementById('colab-target-id').value;
@@ -325,6 +384,7 @@
             });
             document.getElementById('qr-modal').style.display = 'flex';
         }
+
 
         function closeQrModal() { document.getElementById('qr-modal').style.display = 'none'; }
 

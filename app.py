@@ -1760,8 +1760,7 @@ def processar_venda():
             valor_debito = -abs(desconto_real)
         
         if valor_debito != 0.0:
-            desc_transacao = f"Compra de {quantidade} kit(s) - {selected_event.get('descricao')}"
-
+            desc_transacao = f"Compra de {quantidade} -( {colaborador_id}: {nick_colaborador} )- {selected_event.get('descricao')}"
             registrar_transacao_cliente(
                 db=db,
                 id_cliente=id_cliente_final,
