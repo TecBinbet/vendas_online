@@ -23,6 +23,11 @@ import certifi  # Para certificados SSL
 import html 
 import unicodedata # Para limpeza de nome de arquivo
 
+MODO_DEBUG = True
+#    log_sistema(f"🚨 ERRO IRRECUPERÁVEL AO CRIAR O CLIENTE DE CONTROLE: {e}", nivel="ERRO")
+
+
+
 # --- VARIÁVEL GLOBAL PARA O CAMINHO DA PASTA ---
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CARTELAS_FOLDER = os.path.join(BASE_DIR, 'cartelas') 
@@ -232,6 +237,13 @@ def hora_brasil():
     # Assim o banco salva exatamente o que vê, sem tentar converter.
     return agora_sp.replace(tzinfo=None)
 
+
+def log_sistema(mensagem, nivel="INFO"):
+    """Função centralizada para controlar o que aparece no console"""
+    if MODO_DEBUG or nivel == "ERRO":
+        prefixo = "[SISTEMA]" if nivel == "INFO" else "[❌ ERRO CRÍTICO]"
+        print(f"{prefixo} {mensagem}")
+
 # --- MOTOR MATEMÁTICO CENTRAL (PRÊMIOS DINÂMICOS) ---
 def calcular_premios_dinamicos(db, evento, param_doc):
     """
@@ -332,7 +344,7 @@ def calcular_premios_dinamicos(db, evento, param_doc):
              db.eventos.update_one({'id_evento': id_evento_int}, {'$set': updates_db})
              #print(f"[MOTOR] Evento {id_evento_int} atualizado no banco. Novo prêmio: R$ {premio_potencial:.2f}")
         except Exception as e:
-             print(f"[MOTOR ERRO] Falha ao gravar reajuste no banco para evento {id_evento_int}: {e}")
+             log_sistema(f"[MOTOR ERRO] Falha ao gravar reajuste no banco para evento {id_evento_int}: {e}", nivel="ERRO")
 
     return evento
 
@@ -366,10 +378,10 @@ try:
         w='majority'
     )
     client_control.admin.command('ping') 
-    print("✅ CLIENTE GLOBAL DE CONTROLE MONGODB CRIADO COM SUCESSO.")
+    log_sistema(f"✅ CLIENTE GLOBAL DE CONTROLE MONGODB CRIADO COM SUCESSO.")
     db_control = client_control[DB_CONTROL_NAME]
 except Exception as e:
-    print(f"🚨 ERRO IRRECUPERÁVEL AO CRIAR O CLIENTE DE CONTROLE: {e}")
+    log_sistema(f"🚨 ERRO IRRECUPERÁVEL AO CRIAR O CLIENTE DE CONTROLE: {e}", nivel="ERRO")
 
 
 # 2. Configuração Dinâmica para Salas de Vendas
@@ -417,8 +429,8 @@ def get_vendas_db():
             
         uri_vendas = f"{sala_info['url_parte1']}{ENCODED_PASSWORD}{sala_info['url_parte2']}"
         
-        print(f"[LOG] get_vendas_db: URI construída. Tentando nova conexão com cluster...")
-        print(f"[LOG] URL: {uri_vendas}")
+        log_sistema(f"[LOG] get_vendas_db: URI construída. Tentando nova conexão com cluster...")
+        log_sistema(f"[LOG] URL: {uri_vendas}")
         # --- FIM DA CORREÇÃO ---
         
         try:
@@ -432,7 +444,7 @@ def get_vendas_db():
             client_vendas.admin.command('ping') 
             
             DB_VENDAS_CLIENT_CACHE[id_sala] = client_vendas
-            #print(f"✅ [LOG] get_vendas_db: Nova conexão para sala '{id_sala}' estabelecida e cacheada.")
+            log_sistema(f"✅ [LOG] get_vendas_db: Nova conexão para sala '{id_sala}' estabelecida e cacheada.")
             
             return client_vendas[DB_NAME_VENDAS]
             
@@ -507,11 +519,11 @@ def get_next_global_sequence(db, sequence_name):
         if update_result and 'sequence_value' in update_result:
             return update_result['sequence_value']
         else:
-            print(f"DEBUG: Falha na atualização do contador {sequence_name}.")
+            log_sistema(f"DEBUG: Falha na atualização do contador {sequence_name}.", nivel = "ERRO")
             return None
             
     except Exception as e:
-        print(f"ERRO CRÍTICO GERAL ao obter valor sequencial para {sequence_name}: {e}")
+        log_sistema(f"ERRO CRÍTICO GERAL ao obter valor sequencial para {sequence_name}: {e}", nivel = "ERRO")
         return None
 
 def get_next_cliente_sequence():
@@ -610,7 +622,7 @@ def get_next_bilhete_sequence(db, id_evento, increment_field, quantidade_cartela
             return None 
             
     except Exception as e:
-        print(f"ERRO CRÍTICO ao obter valor sequencial de bilhete/cartela para {id_evento}: {e}")
+        log_sistema(f"ERRO CRÍTICO ao obter valor sequencial de bilhete/cartela para {id_evento}: {e}", nivel = "ERRO")
         return None
 
 def format_title_case(s):
@@ -667,7 +679,7 @@ def carregar_linha_cartela(numero_cartela, tipo_cartela):
             ]
             
             if int(dados[0]) != numero_cartela:
-                 print(f"ALERTA CRÍTICO: ID no arquivo ({dados[0]}) não corresponde à linha ({numero_cartela}).")
+                 log_sistema(f"ALERTA CRÍTICO: ID no arquivo ({dados[0]}) não corresponde à linha ({numero_cartela}).", nivel = "ERRO")
                  
             return numeros_raw
 
@@ -778,7 +790,7 @@ def before_request():
                     #print(f"[DEBUG] SUCESSO! Documento encontrado.")
                     #print(f"[DEBUG] > Nome Sala no Banco: {params.get('nome_sala')}")
                     #print(f"[DEBUG] > Limite Crédito no Banco: {val_banco} (Tipo: {type(val_banco)})")
-                    print(f"[DEBUG] > 'http_apk:  {params.get('http_apk')}")
+                    #print(f"[DEBUG] > 'http_apk:  {params.get('http_apk')}")
 
                     
                     val_limite_bruto = params.get('limite_de_credito', 100) 
@@ -803,7 +815,7 @@ def before_request():
                     #print(f"[DEBUG] > Parâmetro Global Final 'limite_de_credito': {g.parametros_globais['limite_de_credito']}")
                 else:
                     # Defaults se não achar parametros
-                    print(f"[DEBUG] AVISO: Nenhum parâmetro encontrado no banco. Usando DEFAULTS (Limite 100.0).")
+                    log_sistema(f"[DEBUG] AVISO: Nenhum parâmetro encontrado no banco. Usando DEFAULTS (Limite 100.0).")
                     g.parametros_globais = {'tipo_cadastro_cliente': default_config_cadastro, 'comissao_padrao': 20, 'nome_sala': 'SALA (DEFAULT)', 'id_sala_param': g.id_sala, 'limite_de_credito': 100.00}
 
         except Exception as e:
@@ -922,7 +934,8 @@ def login():
             #else:
                 #return redirect(url_for('minha_carteira'))
         else:
-            print(f"[DEBUG] Falha: Senha incorreta (Testado '{senha_limpa}' e '{senha_limpa.capitalize()}')")
+            print(f"[DEBUG] Falha: Senha incorreta (Testado)")
+            #print(f"[DEBUG] Falha: Senha incorreta (Testado '{senha_limpa}' e '{senha_limpa.capitalize()}')")
 
     return redirect(url_for('login_page', error="Usuário ou senha inválidos.", id_sala=id_sala_to_redirect))
 
@@ -1281,7 +1294,7 @@ def gravar_colaborador():
                 try:
                     id_exclude = int(id_colaborador_edicao)
                     query_pix_colab['id_colaborador'] = {'$ne': id_exclude}
-                    print(f"[DEBUG PIX] Modo EDIÇÃO. Excluindo ID: {id_exclude}")
+                    #print(f"[DEBUG PIX] Modo EDIÇÃO. Excluindo ID: {id_exclude}")
                 except:
                     print(f"[DEBUG PIX] ERRO ao converter ID para exclusão: {id_colaborador_edicao}")
             
@@ -1294,7 +1307,7 @@ def gravar_colaborador():
                 # Busca simples por qualquer coisa que contenha parte da string
                 parecidos = db.colaboradores.find({'chave_pix': {'$regex': re.escape(chave_pix), '$options': 'i'}})
                 for p in parecidos:
-                    print(f"   -> EXISTE NO BANCO: ID {p.get('id_colaborador')} | Pix: '{p.get('chave_pix')}'")
+                    log_sistema(f"   -> EXISTE NO BANCO: ID {p.get('id_colaborador')} | Pix: '{p.get('chave_pix')}'")
             
             if colaborador_existente:
                 nick_encontrado = colaborador_existente.get('nick', 'Desconhecido')
@@ -1679,16 +1692,16 @@ def processar_venda():
     # 🚀 MOTOR DE VENDAS ATÓMICO (SEM LOCKS EM PYTHON)
     # O MongoDB garante a exclusividade das sequências via find_one_and_update
     # ==============================================================================
-    print(f"{log_prefix} LOG 2: Iniciando processamento atómico da venda...")
+    #print(f"{log_prefix} LOG 2: Iniciando processamento atómico da venda...")
     
     try:
-        print(f"{log_prefix} LOG 3A: Gerando ID da Venda...")
+        #print(f"{log_prefix} LOG 3A: Gerando ID da Venda...")
         novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
         if novo_id_venda_int is None:
             raise Exception("Falha ao gerar o ID sequencial da venda.")
         id_venda_formatado = f"V{novo_id_venda_int:05d}" 
 
-        print(f"{log_prefix} LOG 3B: Gerando IDs de Bilhetes...")
+        #print(f"{log_prefix} LOG 3B: Gerando IDs de Bilhetes...")
         numero_inicial_evento = int(selected_event.get('numero_inicial', 1))
         
         # O MONGODB GARANTE QUE NINGUÉM MAIS PEGA ESTA SEQUÊNCIA
@@ -1716,7 +1729,7 @@ def processar_venda():
             numero_final2_atual = numero_final_atual - limite_maximo_cartelas
             numero_final_atual = limite_maximo_cartelas
         
-        print(f"{log_prefix} ... IDs Bilhete gerados: {numero_inicial_atual}-{numero_final_atual}...")
+        #print(f"{log_prefix} ... IDs Bilhete gerados: {numero_inicial_atual}-{numero_final_atual}...")
 
         registro_venda = {
             "id_venda": id_venda_formatado,
@@ -1740,15 +1753,15 @@ def processar_venda():
             "origem": "terminal_colaborador"
         }
         
-        print(f"{log_prefix} LOG 3C: Atualizando cliente {id_cliente_final}...")
+        #print(f"{log_prefix} LOG 3C: Atualizando cliente {id_cliente_final}...")
         db.clientes.update_one(
             {"id_cliente": id_cliente_final}, 
             {"$set": {"data_ultimo_compra": hora_brasil()}}
         )
 
-        print(f"{log_prefix} LOG 3D: Inserindo venda na coleção '{nome_colecao_venda}'...")
+        #print(f"{log_prefix} LOG 3D: Inserindo venda na coleção '{nome_colecao_venda}'...")
         db[nome_colecao_venda].insert_one(registro_venda)
-        print(f"{log_prefix} ... Venda inserida.")
+        #print(f"{log_prefix} ... Venda inserida.")
 
         # --- ATUALIZAÇÃO DO BUFFER PARA O ROBÔ DE PRÊMIOS ---
         db.eventos.update_one(
@@ -1790,7 +1803,7 @@ def processar_venda():
     # FIM DO MOTOR DE VENDAS ATÓMICO
     # ==============================================================================
 
-    print(f"{log_prefix} LOG 4: Venda gravada. Montando comprovante completo...")
+    #print(f"{log_prefix} LOG 4: Venda gravada. Montando comprovante completo...")
     
     try:
         vendas_cliente_cursor = db[nome_colecao_venda].find(
@@ -1868,7 +1881,7 @@ def processar_venda():
             f"<strong> {link_final_limpo} </strong>"
         )
         
-        print(f"{log_prefix} LOG 5: Comprovante completo gerado.")
+        #print(f"{log_prefix} LOG 5: Comprovante completo gerado.")
         
         session['success_message'] = success_msg 
         redirect_kwargs = {
@@ -2166,7 +2179,7 @@ def gravar_cliente():
     next_page = request.form.get('next', 'menu_operacoes')
     view_mode = 'novo' if not id_cliente_raw else 'alterar'
     
-    print(f"\n[DEBUG] --- INICIANDO GRAVAR CLIENTE ---")
+    #print(f"\n[DEBUG] --- INICIANDO GRAVAR CLIENTE ---")
 
     try:
         # 1. Coleta de Dados
@@ -2221,7 +2234,7 @@ def gravar_cliente():
                 
             # Criptografa a senha (seja a digitada ou a padrão "senha")
             hashed_password = bcrypt.hashpw(senha_final.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            print(f"[DEBUG] Definindo senha para novo cliente: {'Padrão' if not senha else 'Manual'}")
+            #print(f"[DEBUG] Definindo senha para novo cliente: {'Padrão' if not senha else 'Manual'}")
             
         else:  # EDIÇÃO
             # Na edição, só processamos se o campo de senha não estiver vazio
@@ -2229,7 +2242,7 @@ def gravar_cliente():
                 if senha != confirma_senha:
                     raise ValueError("As senhas não conferem.")
                 hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                print("[DEBUG] Atualizando senha do cliente (Manual)")
+                #print("[DEBUG] Atualizando senha do cliente (Manual)")
 
         # Busca se o modo treinamento está ON  
         params = db.parametros.find_one({})
@@ -2254,13 +2267,13 @@ def gravar_cliente():
         # 5. Gravação no Banco
         if id_cliente_raw:
             # Edição
-            print(f"[DEBUG] Atualizando ID {id_cliente_raw}")
+            #print(f"[DEBUG] Atualizando ID {id_cliente_raw}")
             db.clientes.update_one({'id_cliente': int(id_cliente_raw)}, {'$set': dados_cliente})
             registrar_log("EDITAR", "CLIENTES", f"Dados do cliente {nick} alterados.", id_cliente_raw)
             success_msg = f"Cliente {nick} atualizado com sucesso!"
         else:
             # Novo
-            print(f"[DEBUG] Criando Novo Cliente")
+            #print(f"[DEBUG] Criando Novo Cliente")
             novo_id = get_next_cliente_sequence()
             if not novo_id: raise Exception("Erro Sequence ID.")
             
@@ -2292,7 +2305,7 @@ def gravar_cliente():
 
             success_msg = f"Cliente {nick} cadastrado! ID: CLI{novo_id}"
 
-        print(f"[DEBUG] Sucesso! Redirecionando...\n")
+        #print(f"[DEBUG] Sucesso! Redirecionando...\n")
         return redirect(url_for('cadastro_cliente', view='listar', success=success_msg))
 
     except ValueError as ve:
@@ -2776,7 +2789,7 @@ def excluir_eventos_lote():
         if falhas > 0:
             msg += f" ({falhas} falharam)."
             
-        print(f"[AUDITORIA] Admin {session.get('nick')} executou exclusão em lote. Sucesso: {excluidos_sucesso}, Falhas: {falhas}")
+        #print(f"[AUDITORIA] Admin {session.get('nick')} executou exclusão em lote. Sucesso: {excluidos_sucesso}, Falhas: {falhas}")
         
         # Redireciona de volta para a aba de exclusão em lote
         return redirect(url_for('cadastro_evento', view='exclusao_lote', success=msg))
@@ -3648,7 +3661,7 @@ def consulta_resultados():
 
                 # 2. Busca Resultados na coleção 'resultados'
                 # NOVA ESTRUTURA: Um único documento contendo array 'ganhadores'
-                print(f"id_evento:   {id_evento_int}")
+                #print(f"id_evento:   {id_evento_int}")
 
             if 'resultados' in db.list_collection_names():
                 resultado_doc = db.resultados.find_one({'id_evento': id_evento_int})
@@ -3903,7 +3916,7 @@ def excluir_venda():
 
         if result.deleted_count == 1:
             # Opcional: Logar quem excluiu (pode ser útil para auditoria)
-            print(f"[AUDITORIA] Venda {id_venda_str} excluída por {session.get('nick')} em {hora_brasil()}")
+            #print(f"[AUDITORIA] Venda {id_venda_str} excluída por {session.get('nick')} em {hora_brasil()}")
             return jsonify({'status': 'success', 'message': 'Venda excluída com sucesso.'})
         else:
             return jsonify({'status': 'error', 'message': 'Não foi possível excluir o registro.'})
@@ -5269,7 +5282,7 @@ def parametros():
     nome_operador = session.get('operador', '').upper()
     
     if nick_operador != 'TECBIN' and nome_operador != 'TECBIN':
-        print(f"[SECURITY] Tentativa de acesso não autorizada a /parametros por: {nick_operador or nome_operador}")
+        #print(f"[SECURITY] Tentativa de acesso não autorizada a /parametros por: {nick_operador or nome_operador}")
         return redirect(url_for('menu_operacoes', error="Acesso Negado: Permissão de Engenharia Necessária."))
 
     db = get_vendas_db()
@@ -5460,7 +5473,7 @@ def gravar_parametros():
         # Atualiza o primeiro documento encontrado ou cria um novo se a coleção estiver vazia
         db.parametros.update_one({}, {'$set': dados_atualizados}, upsert=True)
         registrar_log("EDITAR", "PARAMETROS", f"Parâmetros da sala {g.id_sala} alterados.")
-        print(f"[SYS ADMIN] Parâmetros técnicos atualizados com sucesso por TECBIN.")
+        #print(f"[SYS ADMIN] Parâmetros técnicos atualizados com sucesso por TECBIN.")
         return redirect(url_for('parametros', success="Parâmetros atualizados e gravados na base de dados com sucesso!"))
 
     except Exception as e:
@@ -5474,7 +5487,7 @@ def motor_background_premios():
     Localiza eventos cujo 'valor_pendente_telemovel' atingiu o gatilho,
     recalcula os prêmios e subtrai o valor lido para evitar perda de concorrência.
     """
-    print("[ROBÔ] 🤖 Inicializando thread de recálculo de prêmios...")
+    #print("[ROBÔ] 🤖 Inicializando thread de recálculo de prêmios...")
     
     while True:
         # Aguarda até o banco principal estar conectado
@@ -5532,7 +5545,7 @@ def motor_background_premios():
                                 {"_id": ev["_id"]},
                                 {"$inc": {"valor_pendente_telemovel": -valor_lido}}
                             )
-                            print(f"[ROBÔ SALA {id_sala}] 🚀 Prêmio EVE{ev['id_evento']} atualizado! Buffer abatido em: R$ {valor_lido:.2f}")
+                            #print(f"[ROBÔ SALA {id_sala}] 🚀 Prêmio EVE{ev['id_evento']} atualizado! Buffer abatido em: R$ {valor_lido:.2f}")
 
                 except Exception as e_sala:
                     print(f"[ROBÔ ERRO] Falha ao processar sala {id_sala}: {e_sala}")
@@ -5924,7 +5937,7 @@ def popular_bloqueios():
 
         # 4. ROTINA DE LIMPEZA: Apaga todos os registros existentes na coleção
         delete_result = db.config_bloqueio.delete_many({})
-        print(f"[MANUTENÇÃO] Removidos {delete_result.deleted_count} registros antigos de bloqueio.")
+        #print(f"[MANUTENÇÃO] Removidos {delete_result.deleted_count} registros antigos de bloqueio.")
 
         # 5. Execução da gravação do novo documento único (Array Format)
         db.config_bloqueio.update_one(
@@ -5941,7 +5954,7 @@ def popular_bloqueios():
 
         contagem = len(termos_limpos)
         msg = f"Limpeza concluída e lista atualizada! {contagem} termos salvos no formato oficial."
-        print(f"[LOG ADMIN] {session.get('nick')} resetou e atualizou bloqueios na sala {g.id_sala}.")
+        #print(f"[LOG ADMIN] {session.get('nick')} resetou e atualizou bloqueios na sala {g.id_sala}.")
         
         return redirect(url_for('cadastro_cliente', success=msg, view='bloqueio'))
 
@@ -5986,7 +5999,7 @@ def corrigir_senhas_faltantes():
 
         # 6. Retorna para a listagem com a contagem de quantos foram corrigidos
         msg = f"Manutenção concluída! {resultado.modified_count} clientes foram atualizados com a senha 'Senha'."
-        print(f"[MANUTENÇÃO] Admin {session.get('nick')} corrigiu senhas na sala {g.id_sala}.")
+        #print(f"[MANUTENÇÃO] Admin {session.get('nick')} corrigiu senhas na sala {g.id_sala}.")
         
         registrar_log("MANUTENÇÃO", "SISTEMA", f"Correção em massa de senhas executada ({resultado.modified_count} afetados).")
         return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
@@ -6036,7 +6049,7 @@ def limpar_tabela_dinamica(nome_tabela):
         resultado = db[nome_tabela].delete_many({})
         
         msg = f"SUCESSO: Foram removidos {resultado.deleted_count} registros da tabela '{nome_tabela}'."
-        print(f"[AUDITORIA] Admin {session.get('nick')} limpou a tabela {nome_tabela}.")
+        #print(f"[AUDITORIA] Admin {session.get('nick')} limpou a tabela {nome_tabela}.")
         
         return jsonify({
             'status': 'success',
@@ -6088,8 +6101,8 @@ def expurgar_treinamento():
 
         # 5. Log de Auditoria no Console
         msg = f"EXPURGO CONCLUÍDO: {res_clientes.deleted_count} clientes e {res_transacoes.deleted_count} transações foram removidos permanentemente."
-        print(f"\n[ALERTA DE SEGURANÇA] {session.get('nick')} EXECUTOU EXPURGO DE TREINAMENTO.")
-        print(f"Registros removidos: {res_clientes.deleted_count}\n")
+        #print(f"\n[ALERTA DE SEGURANÇA] {session.get('nick')} EXECUTOU EXPURGO DE TREINAMENTO.")
+        #print(f"Registros removidos: {res_clientes.deleted_count}\n")
         
         return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
 
@@ -6143,7 +6156,7 @@ def ativar_modo_treino_retroativo():
         if resultado.modified_count == 0:
             # Tenta buscar APENAS UM para debug no console
             amostra = db.clientes.find_one({}, {"data_cadastro": 1})
-            print(f"[DEBUG] Tipo de data no banco: {type(amostra.get('data_cadastro'))} - Valor: {amostra.get('data_cadastro')}")
+            #print(f"[DEBUG] Tipo de data no banco: {type(amostra.get('data_cadastro'))} - Valor: {amostra.get('data_cadastro')}")
             msg = "Nenhum registro encontrado com a data de 21/03/2026. Verifique o log do console."
         else:
             msg = f"Sucesso! {resultado.modified_count} clientes atualizados."
