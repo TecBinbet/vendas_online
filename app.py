@@ -17,6 +17,7 @@ import os
 import re # Para a busca de clientes e limpeza de nome
 import bcrypt
 import io # Para manipulação de arquivos em memória
+import csv
 from functools import wraps # Para o decorator login_required
 import certifi  # Para certificados SSL
 import html 
@@ -1065,6 +1066,8 @@ def consulta_status_eventos():
         print(f"ERRO CRÍTICO ao buscar status de eventos: {e}")
         return render_template('consulta_status_eventos.html', error=f"Erro interno: {e}", eventos_status=[], g=g, success=success, mode=view_mode, nivel=nivel_usuario, filtro_atual=filtro_str, limit_atual=limit_atual)
 
+    eventos_status.reverse()
+
     return render_template('consulta_status_eventos.html', 
                            eventos_status=eventos_status, g=g, 
                            mode=view_mode, error=error, success=success, 
@@ -1998,6 +2001,45 @@ def cadastro_cliente():
     form_data_erro = session.pop('form_data', None)
     
     active_view = request.args.get('view', 'novo')
+
+    # --- LÓGICA PARA A ABA DE INDICAÇÕES COM NOMES ---
+    indicacoes_stats = []
+    if active_view == 'indicacoes':
+        try:
+            # 1. Criamos um mapa de nomes (Dicionário) para busca ultra rápida
+            # Buscamos apenas os campos necessários de todos os colaboradores
+            colaboradores_cursor = db.colaboradores.find({}, {"id_colaborador": 1, "nick": 1})
+            mapa_nomes = {c['id_colaborador']: c['nick'] for c in colaboradores_cursor}
+
+            # 2. Pipeline de Agrupamento
+            pipeline = [
+                {"$match": {"id_colaborador": {"$gt": 0}}},
+                {"$group": {
+                    "_id": "$id_colaborador",
+                    "total_clientes": {"$sum": 1}
+                }},
+                {"$sort": {"total_clientes": -1}},
+                {"$limit": 50}
+            ]
+        
+            resultados = list(db.clientes.aggregate(pipeline))
+        
+            # 3. Montagem da lista final cruzando os dados
+            for res in resultados:
+                id_col = res['_id']
+                # Busca o nome no mapa; se não achar, usa o ID como fallback
+                nome_colab = mapa_nomes.get(id_col, f"ID {id_col}")
+            
+                indicacoes_stats.append({
+                    'id_colaborador': id_col,
+                    'nome_colaborador': nome_colab,
+                    'total': res['total_clientes']
+                })
+                
+        except Exception as e:
+            print(f"Erro ao gerar ranking de indicações: {e}")
+    # ---------------------------------------
+
     search_term = request.args.get('query', '').strip()
     next_url = request.args.get('next', 'menu_operacoes')
     id_evento_retorno = request.args.get('id_evento') 
@@ -2037,10 +2079,18 @@ def cadastro_cliente():
     if db_status:
         try:
             total_clientes = db.clientes.count_documents({})
-            
+           
+            filtro_colab = request.args.get('filtro_colab', type=int)     
+       
             if active_view == 'listar':
-               clientes_cursor = db.clientes.find({}).sort("nick", pymongo.ASCENDING)
-               clientes_lista = list(clientes_cursor)
+                if filtro_colab:
+                    query_listagem = {"id_colaborador": filtro_colab}
+                else:
+                    query_listagem = {}
+
+                clientes_cursor = db.clientes.find(query_listagem).sort("nick", pymongo.ASCENDING)
+                clientes_lista = list(clientes_cursor)
+
             elif active_view == 'consulta' and search_term:
                 query_filter = {}
                 
@@ -2095,6 +2145,7 @@ def cadastro_cliente():
         'success': success,
         'g': g,
         'nivel': nivel_usuario,
+        'indicacoes_stats': indicacoes_stats,
         'id_logado': id_logado,  
         'logado': nome_logado,
         'lista_bloqueio': lista_bloqueio
@@ -5780,7 +5831,63 @@ def auditoria():
     return render_template('auditoria.html', logs=logs, g=g)
 
 
-# ========================================================================
+# GERAR PDF DE INDICAÇÕES
+@app.route('/exportar_indicacoes')
+@login_required
+def exportar_indicacoes():
+    db = get_vendas_db()
+    filtro_colab = request.args.get('filtro_colab', type=int)
+    
+    if not filtro_colab:
+        return "Erro: Selecione um colaborador.", 400
+
+    clientes = list(db.clientes.find({"id_colaborador": filtro_colab}).sort("nick", 1))
+    
+    output = io.StringIO()
+    writer = csv.writer(output, delimiter=';')
+    
+    # Cabeçalho atualizado
+    writer.writerow(['ID', 'NICK', 'NOME', 'TELEFONE', 'CADASTRO', 'STATUS ATIVIDADE'])
+    
+    for c in clientes:
+        id_cli = c.get('id_cliente')
+        
+        # --- BUSCA RÁPIDA DE ATIVIDADE ---
+        # Verificamos na coleção de vendas se existe algum registro para este ID
+        # (Ajuste o nome da coleção 'vendas_global' ou similar conforme seu banco)
+        ultima_venda = db.vendas_consolidado.find_one(
+            {"id_cliente": id_cli}, 
+            sort=[("data_hora", -1)]
+        )
+        
+        status_venda = "Sem Compras"
+        if ultima_venda:
+            dt_venda = ultima_venda.get('data_hora')
+            status_venda = f"Ativo em {dt_venda.strftime('%d/%m/%Y')}" if hasattr(dt_venda, 'strftime') else "Ativo"
+
+        data_cad = c.get('data_cadastro')
+        data_cad_fmt = data_cad.strftime('%d/%m/%Y') if hasattr(data_cad, 'strftime') else "N/D"
+            
+        writer.writerow([
+            id_cli,
+            c.get('nick'),
+            c.get('nome_cliente'),
+            c.get('telefone'),
+            data_cad_fmt,
+            status_venda
+        ])
+
+    output.seek(0)
+    filename = f"relatorio_vendedor_{filtro_colab}.csv"
+    
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={"Content-disposition": f"attachment; filename={filename}"}
+    )
+
+
+#=================================================================
 # CORREÇÕES DO SISTEMA (Funções com chamadas externas)
 # =============================
 

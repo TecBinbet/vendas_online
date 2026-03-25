@@ -189,6 +189,11 @@
                 📋 Listar
             </a>
 
+            <a href="{{ url_for('cadastro_cliente', view='indicacoes') }}" 
+               class="nav-link {% if active_view == 'indicacoes' %}bg-purple-600 text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-purple-700">
+                🏆 Indicações
+            </a>
+
             {% if nivel >= 3 %}  
                 <a href="{{ url_for('cadastro_cliente', view='bloqueio') }}" 
                      class="nav-link {% if active_view == 'bloqueio' %}bg-red-600 text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-red-700">
@@ -386,6 +391,33 @@
             </h3>
             
             <div class="overflow-x-auto border border-gray-100 rounded-2xl shadow-sm">
+
+{% if request.args.get('filtro_colab') %}
+<div class="mb-4 p-3 bg-amber-50 border-l-4 border-amber-400 rounded-r-lg flex justify-between items-center shadow-sm">
+    <div class="flex items-center gap-3">
+        <span class="text-xl">🔍</span>
+        <div>
+            <p class="text-[10px] font-black text-amber-600 uppercase tracking-widest">Filtro Ativado</p>
+            <p class="text-sm text-amber-800">
+                Exibindo apenas clientes indicados pelo <strong>Consultor {{ request.args.get('filtro_colab') }}</strong>
+            </p>
+        </div>
+    </div>
+    <div class="flex gap-2">
+        <a href="{{ url_for('exportar_indicacoes', filtro_colab=request.args.get('filtro_colab')) }}" 
+           class="bg-green-600 hover:bg-green-700 text-white text-[10px] font-black px-3 py-2 rounded-lg transition uppercase tracking-tighter flex items-center gap-1">
+            csv 📥 Exportar
+        </a>
+
+        <a href="{{ url_for('cadastro_cliente', view='listar') }}" 
+           class="bg-amber-200 hover:bg-amber-300 text-amber-800 text-[10px] font-black px-3 py-2 rounded-lg transition uppercase tracking-tighter">
+            ❌ Limpar Filtro
+        </a>
+    </div>
+</div>
+{% endif %}
+
+
                 <table class="min-w-full bg-white">
                     <thead>
                         <tr class="list-header bg-gray-50 text-[12px] font-black text-gray-600 uppercase tracking-widest text-left">
@@ -486,6 +518,58 @@
             </form>
         </div>
     </div>
+
+<div id="view-indicacoes" class="{% if active_view != 'indicacoes' %}hidden{% endif %}">
+    <h3 class="text-xl -mt-2 text-purple-700 uppercase tracking-widest flex items-center gap-2">
+        <span class="bg-purple-200 w-2 h-6 rounded-full inline-block"></span> Ranking de Consultores
+    </h3>
+    
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mb-2">
+        <div class="bg-purple-50 p-2 rounded-2xl border border-purple-100 shadow-sm">
+            <p class="text-[10px] font-black text-purple-400 uppercase tracking-widest">Total de Indicações</p>
+            <span class="text-xl3 font-semibold text-purple-700">{{ indicacoes_stats|length }} Consultores Ativos</span>
+        </div>
+    </div>
+
+    <div class="overflow-x-auto border border-gray-100 rounded-2xl shadow-sm">
+        <table class="min-w-full bg-white">
+            <thead>
+                <tr class="bg-gray-50 text-[11px] font-black text-gray-600 uppercase tracking-widest text-left">
+                    <th class="py-1 px-4 border-b">Consultor (ID)</th>
+                    <th class="py-1 px-4 border-b text-center">Qtd. Clientes</th>
+                    <th class="py-1 px-4 border-b text-right">Ação</th>
+                </tr>
+            </thead>
+            <tbody class="text-sm">
+
+    {% if indicacoes_stats %}
+        {% for item in indicacoes_stats %}
+        <tr class="hover:bg-purple-50/30 transition duration-150">
+            <td class="py-1 px-4 border-b">
+                <div class="flex flex-col">
+                    <span class="font-black text-purple-700 uppercase">{{ item.nome_colaborador }}</span>
+                    <span class="text-[10px] text-gray-400 font-bold">ID: {{ item.id_colaborador }}</span>
+                </div>
+            </td>
+            <td class="py-3 px-4 border-b text-center">
+                <span class="bg-purple-100 text-purple-700 px-3 py-1 rounded-full font-black">
+                    {{ item.total }}
+                </span>
+            </td>
+            <td class="py-3 px-4 border-b text-right">
+                <a href="{{ url_for('cadastro_cliente', view='listar', filtro_colab=item.id_colaborador) }}"
+                   class="text-purple-600 font-black hover:underline text-xs">Ver Clientes →</a>
+            </td>
+        </tr>
+        {% endfor %}
+    {% else %}
+        {% endif %}
+
+            </tbody>
+        </table>
+    </div>
+</div>
+
 
     <script>
         /**
