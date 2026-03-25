@@ -122,11 +122,22 @@
         </h2>
 
         <div class="flex flex-wrap justify-center gap-2 mb-2 -mt-4">
-            <button onclick="toggleFilter('ativo')" id="btn-ativo" class="filter-btn">Ativos</button>
-            <button onclick="toggleFilter('paralizado')" id="btn-paralizado" class="filter-btn">Paralisados</button>
-            <button onclick="toggleFilter('finalizado')" id="btn-finalizado" class="filter-btn">Finalizados</button>
-            <div class="w-px h-8 bg-gray-300 mx-2"></div>
-            <button onclick="setFilter('todos')" id="btn-todos" class="filter-btn">Todos</button>
+<div class="flex gap-2">
+        <button onclick="toggleFilter('ativo')" id="btn-ativo" class="filter-btn">Ativos</button>
+        <button onclick="toggleFilter('paralizado')" id="btn-paralizado" class="filter-btn">Paralisados</button>
+        <button onclick="toggleFilter('finalizado')" id="btn-finalizado" class="filter-btn">Finalizados</button>
+        <button onclick="setFilter('todos')" id="btn-todos" class="filter-btn">Todos</button>
+    </div>
+
+    <div class="flex items-center gap-2 pr-2">
+        <label for="limitInput" class="text-xs font-black text-gray-500 uppercase tracking-widest">Ver:</label>
+        <input type="number" id="limitInput" value="{{ limit_atual }}" min="1" max="500"
+               class="w-16 p-1.5 border border-gray-300 rounded-lg text-center font-bold text-blue-800 focus:ring-2 focus:ring-blue-500 outline-none">
+        <button onclick="atualizarLimite()" 
+                class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs transition shadow-sm">
+            OK
+        </button>
+    </div>
         </div>
 
         {% if error %}
@@ -360,6 +371,25 @@
                 });
             }
         }, true);
+
+function atualizarLimite() {
+    const novoLimite = document.getElementById('limitInput').value;
+    const url = new URL(window.location.href);
+    
+    ativarSpinner(`Carregando últimos ${novoLimite} eventos...`);
+    
+    url.searchParams.set('limit', novoLimite);
+    window.location.href = url.toString();
+}
+
+// Permitir o "Enter" no campo de limite
+document.getElementById('limitInput').addEventListener('keypress', function (e) {
+    if (e.key === 'Enter') {
+        atualizarLimite();
+    }
+});
+
+
     </script>
 
 </body>

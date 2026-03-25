@@ -99,9 +99,11 @@
                        <div class="flex justify-between items-center">
                            <span class="font-bold text-gray-700">{{ target_colab.nick }}</span>
                            <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Nível {{ nivel }}</span>
-                           <input type="hidden" name="target_id" value="{{ target_colab.id_colaborador }}">
                        </div>
                     {% endif %}
+                    <input type="hidden" id="base-http-apk" value="{{ g.parametros_globais.http_apk }}">
+
+
 
                     <div>
                         <label class="block text-gray-500 text-xs font-bold uppercase mb-1">Selecionar Evento para Balanço:</label>
@@ -268,7 +270,7 @@
         </div>
     </div>
 
-    <input type="hidden" id="base-http-apk" value="{{ g.parametros_globais.http_vendas }}">
+    <input type="hidden" id="base-http-apk" value="{{ g.parametros_globais.http_apk }}">
     <input type="hidden" id="current-id-sala" value="{{ g.id_sala }}">
     <input type="hidden" id="colab-target-id" value="{{ target_colab.id_colaborador }}">
     <input type="hidden" id="colab-target-nick" value="{{ target_colab.nick }}">
@@ -364,26 +366,48 @@ window.onpageshow = function(event) {
             gerarQRCode(idColab, nickColab);
         }
 
-        function gerarQRCode(idColaborador, nick) {
-            const container = document.getElementById('qrcode-container');
-            container.innerHTML = '';
-            
-            let baseUrl = document.getElementById('base-http-apk').value;
-            if (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
-            const idSala = document.getElementById('current-id-sala').value;
-            const finalUrl = `${baseUrl}?id_sala=${idSala}&ref=${idColaborador}`;
+function gerarQRCode(idColaborador, nick) {
+    const container = document.getElementById('qrcode-container');
+    container.innerHTML = '';
+    
+    // 1. Obtém a URL do input hidden
+    let baseUrl = document.getElementById('base-http-apk').value;
+    
+    // DEBUG: Veja no console do navegador (F12) o que está chegando aqui
+    console.log("URL Base detectada:", baseUrl);
 
-            document.getElementById('qr-link-text').textContent = finalUrl;
-            document.getElementById('btn-copy-link').textContent = "📋 Copiar Link";
+    if (!baseUrl || baseUrl === "http://localhost:5000") {
+        console.error("ERRO: URL do APK não carregada corretamente do banco.");
+    }
 
-            new QRCode(container, {
-                text: finalUrl,
-                width: 200, height: 200,
-                colorDark : "#000000", colorLight : "#ffffff",
-                correctLevel : QRCode.CorrectLevel.H
-            });
-            document.getElementById('qr-modal').style.display = 'flex';
-        }
+    // 2. Garante que a URL termine com "/" antes de adicionar o parâmetro
+    if (!baseUrl.endsWith('/')) {
+        baseUrl += '/';
+    }
+
+    // 3. Formata o ID com 3 dígitos (ex: 15 -> "015")
+    const idFormatado = String(idColaborador).padStart(3, '0');
+
+    // 4. Monta a URL final exatamente como solicitado
+    const finalUrl = `${baseUrl}?id_col=${idFormatado}`;
+    
+    console.log("URL Final Gerada:", finalUrl);
+
+    // 5. Atualiza a tela e gera o QR
+    document.getElementById('qr-link-text').textContent = finalUrl;
+    document.getElementById('btn-copy-link').textContent = "📋 Copiar Link";
+
+    new QRCode(container, {
+        text: finalUrl,
+        width: 200,
+        height: 200,
+        colorDark : "#000000",
+        colorLight : "#ffffff",
+        correctLevel : QRCode.CorrectLevel.H
+    });
+
+    document.getElementById('qr-modal').style.display = 'flex';
+}
 
 
         function closeQrModal() { document.getElementById('qr-modal').style.display = 'none'; }

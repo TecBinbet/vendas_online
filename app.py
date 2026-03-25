@@ -777,6 +777,8 @@ def before_request():
                     #print(f"[DEBUG] SUCESSO! Documento encontrado.")
                     #print(f"[DEBUG] > Nome Sala no Banco: {params.get('nome_sala')}")
                     #print(f"[DEBUG] > Limite Crédito no Banco: {val_banco} (Tipo: {type(val_banco)})")
+                    print(f"[DEBUG] > 'http_apk:  {params.get('http_apk')}")
+
                     
                     val_limite_bruto = params.get('limite_de_credito', 100) 
                     limite_convertido = float(str(val_limite_bruto))
@@ -962,6 +964,10 @@ def consulta_status_eventos():
     nivel_usuario = session.get('nivel', 0) 
     view_mode = request.args.get('mode', 'detailed') 
     
+    # --- AJUSTE DE LIMITE (Padrão 15) ---
+    limit_atual = request.args.get('limit', 15, type=int)
+    # ------------------------------------
+
     # Busca configurações globais antes do loop para otimização
     param_doc_global = {}
     if g.db_status:
@@ -988,7 +994,10 @@ def consulta_status_eventos():
         return f"R$ {safe_float(value):.2f}".replace('.', ',')
 
     try:
-        eventos_cursor = db.eventos.find({'status': {'$in': status_regex_list}}).sort("data_hora_evento", pymongo.ASCENDING)
+        # AJUSTE: Ordenação DESCENDING para mostrar os mais novos e aplicação do LIMIT
+        eventos_cursor = db.eventos.find(
+            {'status': {'$in': status_regex_list}}
+        ).sort("data_hora_evento", pymongo.DESCENDING).limit(limit_atual)
         
         for evento in eventos_cursor:
             id_evento_int = evento.get('id_evento')
@@ -1006,17 +1015,13 @@ def consulta_status_eventos():
             valor_vendas_float = safe_float(vendas_data.get('total_valor', 0) if vendas_data else 0)
 
             # --- 2. INJEÇÃO DO MOTOR MATEMÁTICO ---
-            # Prepara os dados que a função calcular_premios_dinamicos exige ler do evento
             evento['qtd_vendas'] = total_unidades
-            
-            # Converte os campos críticos para float nativo antes de passar para o motor
             for k in ['valor_de_venda', 'premio_quadra', 'premio_linha', 'premio_bingo', 'premio_segundobingo', 'premio_faltaum', 'premio_total']:
                 if k in evento: evento[k] = safe_float(evento[k])
                 
-            # Roda a função para engordar o prémio caso o lucro o permita
             evento = calcular_premios_dinamicos(db, evento, param_doc_global)
 
-            # 3. Agora extrai os totais (já atualizados pelo motor, se for o caso)
+            # 3. Extrai totais atualizados
             premio_total_float = safe_float(evento.get('premio_total', 0))
             saldo_float = valor_vendas_float - premio_total_float
             # --------------------------------------
@@ -1037,7 +1042,6 @@ def consulta_status_eventos():
             evento_info = {
                 'id_evento': evento.get('id_evento'),
                 'descricao': evento.get('descricao'),
-                # Garantia da DATA que estava faltando
                 'data_evento': evento.get('data_evento', 'N/A'),
                 'hora_evento': evento.get('hora_evento', 'N/A'),
                 'data_hora': f"{evento.get('data_evento', 'N/A')} às {evento.get('hora_evento', 'N/A')}",
@@ -1053,20 +1057,20 @@ def consulta_status_eventos():
                 'numeracao_atual': num_atual,
                 'is_ativo': evento.get('status').lower() == 'ativo' if evento.get('status') else False, 
                 'limite_maximo': evento.get('numero_maximo'),
-                # Flag para exibir o foguetinho no HTML
                 'is_premio_dinamico': evento.get('is_premio_dinamico_ativo', False)
             }
             eventos_status.append(evento_info)
 
     except Exception as e:
         print(f"ERRO CRÍTICO ao buscar status de eventos: {e}")
-        return render_template('consulta_status_eventos.html', error=f"Erro interno: {e}", eventos_status=[], g=g, success=success, mode=view_mode, nivel=nivel_usuario, filtro_atual=filtro_str)
+        return render_template('consulta_status_eventos.html', error=f"Erro interno: {e}", eventos_status=[], g=g, success=success, mode=view_mode, nivel=nivel_usuario, filtro_atual=filtro_str, limit_atual=limit_atual)
 
     return render_template('consulta_status_eventos.html', 
                            eventos_status=eventos_status, g=g, 
                            mode=view_mode, error=error, success=success, 
                            nivel=nivel_usuario, 
-                           filtro_atual=filtro_str)
+                           filtro_atual=filtro_str,
+                           limit_atual=limit_atual) # Passando limit_atual para o template
 
 
 @app.route('/evento/mudar_status', methods=['POST'])
