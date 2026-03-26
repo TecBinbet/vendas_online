@@ -2732,6 +2732,61 @@ def cadastro_evento():
     return render_template('cadastro_evento.html', **context)
 
 
+@app.route('/excluir_eventos_periodo', methods=['POST'])
+def excluir_eventos_periodo():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    # Validação de nível de acesso (Admin Nível 3)
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('cadastro_evento', view='exclusao_lote', error="Acesso negado."))
+
+    try:
+        # 1. Captura as datas do formulário (formato datetime-local do HTML)
+        inicio_raw = request.form.get('inicio')
+        fim_raw = request.form.get('fim')
+        
+        if not inicio_raw or not fim_raw:
+            return redirect(url_for('cadastro_evento', view='exclusao_lote', error="Informe as duas datas."))
+
+        # Converte para objeto datetime do Python
+        inicio_dt = datetime.strptime(inicio_raw, '%Y-%m-%dT%H:%M')
+        fim_dt = datetime.strptime(fim_raw, '%Y-%m-%dT%H:%M')
+
+        # 2. Busca eventos que estão DENTRO desse período
+        query_periodo = {"data_hora_evento": {"$gte": inicio_dt, "$lte": fim_dt}}
+        eventos_para_excluir = list(db.eventos.find(query_periodo, {"id_evento": 1, "descricao": 1}))
+        
+        if not eventos_para_excluir:
+            return redirect(url_for('cadastro_evento', view='exclusao_lote', error="Nenhum evento encontrado nesse intervalo."))
+
+        contagem = 0
+        for ev in eventos_para_excluir:
+            id_ev = ev['id_evento']
+            
+            # --- LIMPEZA PROFUNDA (REGRAS DE NEGÓCIO) ---
+            # A. Remove o documento do evento
+            db.eventos.delete_one({'id_evento': id_ev})
+            
+            # B. Remove tabelas dinâmicas de vendas e pagamentos
+            for sufixo in [f"vendas{id_ev}", f"vendas_sorte_extra{id_ev}", f"pagamentos{id_ev}", f"snapshot_vendas_{id_ev}"]:
+                if sufixo in db.list_collection_names():
+                    db[sufixo].drop()
+            
+            # C. Limpa registros de apoio
+            db.resultados.delete_many({'id_evento': id_ev})
+            db.controle_venda.delete_many({'id_evento': id_ev})
+            
+            contagem += 1
+
+        print(f"🔥 EXPURGO: {contagem} eventos removidos entre {inicio_raw} e {fim_raw}")
+        return redirect(url_for('cadastro_evento', view='exclusao_lote', success=f"Sucesso! {contagem} eventos e todas as suas tabelas de vendas foram excluídos."))
+
+    except Exception as e:
+        print(f"ERRO NO EXPURGO: {e}")
+        return redirect(url_for('cadastro_evento', view='exclusao_lote', error=f"Erro ao processar expurgo: {e}"))
+
+
 @app.route('/excluir_eventos_lote', methods=['POST'])
 @login_required
 def excluir_eventos_lote():
