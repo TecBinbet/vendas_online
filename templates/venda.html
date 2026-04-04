@@ -122,7 +122,14 @@
             <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
         </div>
 
-        <h2 class="text-xl font-bold text-gray-900 text-center">⭐ Nova Venda</h2>
+        <div class="flex justify-center items-center gap-3 mb-2">
+            <h2 class="text-xl font-bold text-gray-900 m-0">⭐ Nova Venda</h2>
+            <button type="button" id="btn-printer-toggle" onclick="togglePrinter()" 
+                    class="p-2 rounded-full transition-colors shadow-sm" 
+                    title="Configurar Impressora 58mm">
+                🖨️
+            </button>
+        </div>
 
         {% if error %}
             <div class="alert alert-danger">{{ error }}</div>
@@ -132,12 +139,14 @@
           <div id="success-block">
             <div class="alert alert-success text-center">
                 <h3 class="text-lg font-bold -mt-2">Venda Registrada com Sucesso!</h3>
-                <div id="receipt-content">{{ success | safe }}</div>
+                <!-- O cupom agora nasce oculto -->
+                <div id="receipt-content" style="display: none;">{{ success | safe }}</div>
             </div>
             <div class="flex justify-center mb-1 gap-3 flex-wrap">
                 <button onclick="copyReceiptText()" class="btn btn-primary shadow-lg">📋 Copiar Texto</button>
                 <button onclick="shareReceiptImage()" class="btn btn-warning shadow-lg">🖼️ Gerar Imagem</button>
-                <button onclick="hideReceipt()" class="btn bg-gray-500 text-white hover:bg-gray-700 shadow-lg">👁️ Ocultar Cupom</button>
+                <!-- Botão transformado em um 'Interruptor' -->
+                <button id="btn-toggle-cupom" onclick="toggleReceipt()" class="btn bg-green-500 text-white hover:bg-green-700 shadow-lg">👁️ Mostrar Cupom</button>
             </div>
           </div>
         {% endif %}
@@ -154,8 +163,8 @@
             </div>
 
             {% if selected_event %}
-                <div class="alert alert-info -mt-3 mb-1">
-                    <h4 class="text-lg font-bold -mt-2.5 -mb-1">
+                <div class="alert alert-info mb-1 text-center">
+                    <h4 class="text-lg -mt-2.5 -mb-1">
                         {{ selected_event.descricao }}
                         {% if selected_event.tipo_de_evento == 'Especial' %}
                             <span class="ml-2 text-xs bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full font-black">⭐ ESPECIAL</span>
@@ -163,7 +172,7 @@
                     </h4>
                     <p>Data: <strong>{{ selected_event.data_evento }}</strong> - | - Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
                     <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
-                    <p class="text-lg text-red-600 text-center font-semibold -mt-1.5 -mb-2.5 ">  Numeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
+                    <p class="text-lg text-red-600 -mt-1.5 -mb-2.5 ">  Numeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
                 </div>
 
                 <div class="form-group relative">
@@ -279,6 +288,8 @@
         let Venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}");
         let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
         let searchTimeout = null;
+        const dadosImpressaoStr = '{{ print_data | tojson | safe if print_data else "null" }}';
+        const dadosImpressao = dadosImpressaoStr !== "null" ? JSON.parse(dadosImpressaoStr) : null;
 
         // --- FUNÇÃO DO SPINNER ---
         function ativarSpinner(mensagem) {
@@ -411,11 +422,31 @@
             });
         }
 
-        function hideReceipt() {
-            const block = document.getElementById('success-block');
-            if (block) block.style.display = 'none';
+        // Variável para guardar o tempo do sumiço automático
+        let autoHideTimeout;
+
+        function toggleReceipt() {
+            const content = document.getElementById('receipt-content');
+            const btn = document.getElementById('btn-toggle-cupom');
             const inputBusca = document.getElementById('id_cliente_busca');
-            if (inputBusca) inputBusca.focus();
+            const successBlock = document.getElementById('success-block');
+            
+            // Se o usuário interagiu com o botão, cancelamos o cronômetro de auto-ocultar
+            if (autoHideTimeout) clearTimeout(autoHideTimeout);
+            
+            // Garante que o bloco fique 100% visível caso estivesse no meio da animação de sumir
+            if (successBlock) {
+                successBlock.style.opacity = "1";
+            }
+
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                btn.innerHTML = '👁️ Ocultar Cupom';
+            } else {
+                content.style.display = 'none';
+                btn.innerHTML = '👁️ Mostrar Cupom';
+                if (inputBusca) inputBusca.focus();
+            }
         }
 
         function clearSearch() {
@@ -425,11 +456,108 @@
             if (results) results.style.display = 'none';
         }
 
+        // ==========================================
+        // --- LÓGICA DA IMPRESSORA TÉRMICA 58MM ---
+        // ==========================================
+        function initPrinterConfig() {
+            let printConfig = localStorage.getItem('imprimirCartelas');
+            
+            if (printConfig === null) {
+                const desejaImprimir = confirm("🖨️ CONFIGURAÇÃO DE IMPRESSORA\n\nDeseja habilitar a IMPRESSÃO AUTOMÁTICA de cartelas via mini impressora térmica (58mm) neste celular?\n\nVocê pode ligar/desligar isso depois clicando no ícone da impressora no topo da tela.");
+                printConfig = desejaImprimir ? 'true' : 'false';
+                localStorage.setItem('imprimirCartelas', printConfig);
+            }
+            
+            updatePrinterUI(printConfig === 'true');
+            
+            const successBlock = document.getElementById('success-block');
+            
+            // SE a venda for concluída E a impressora estiver ativa E existirem dados
+            if (successBlock && printConfig === 'true' && dadosImpressao) {
+                console.log("Iniciando impressão automática 58mm...");
+                imprimirCartelas58mm(dadosImpressao);
+            }
+        }
+
+        // --- FUNÇÃO QUE GERA O QUADRO INVISÍVEL E MANDA IMPRIMIR ---
+        function imprimirCartelas58mm(dados) {
+            // Decide a rota correta baseada no tipo de cartela do evento
+            const baseUrl = dados.tipo_cartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
+            
+            const params = new URLSearchParams({
+                numero_inicial: dados.numero_inicial,
+                numero_final: dados.numero_final,
+                id_evento: dados.id_evento,
+                nome_cliente: dados.nome_cliente
+            });
+            
+            const urlCompleta = `${baseUrl}?${params.toString()}`;
+            
+            // Cria um iFrame invisível para carregar a cartela sem tirar o operador da tela
+            let printFrame = document.createElement('iframe');
+            printFrame.style.display = 'none';
+            printFrame.src = urlCompleta;
+            document.body.appendChild(printFrame);
+            
+            // Opcional: Remove o frame da memória após 5 segundos para não pesar o navegador
+            setTimeout(() => {
+                document.body.removeChild(printFrame);
+            }, 5000);
+        }
+
+        function togglePrinter() {
+            let currentState = localStorage.getItem('imprimirCartelas') === 'true';
+            let newState = !currentState; // Inverte o valor
+            
+            // Salva a nova escolha no celular do operador
+            localStorage.setItem('imprimirCartelas', newState ? 'true' : 'false');
+            
+            // Atualiza o visual do botão
+            updatePrinterUI(newState);
+            
+            // Mostra um aviso rápido na tela
+            const msg = newState ? "🖨️ Impressão Automática ATIVADA!" : "🚫 Impressão Automática DESATIVADA!";
+            alert(msg); // Mais tarde podemos trocar pelo seu toast personalizado
+        }
+
+        function updatePrinterUI(isActive) {
+            const btn = document.getElementById('btn-printer-toggle');
+            if (!btn) return;
+            
+            if (isActive) {
+                // Estilo ATIVADO (Verde)
+                btn.classList.remove('bg-gray-200', 'text-gray-500');
+                btn.classList.add('bg-green-100', 'text-green-800', 'border', 'border-green-400');
+            } else {
+                // Estilo DESATIVADO (Cinza)
+                btn.classList.remove('bg-green-100', 'text-green-800', 'border', 'border-green-400');
+                btn.classList.add('bg-gray-200', 'text-gray-500');
+            }
+        }
+
+
         document.addEventListener('DOMContentLoaded', () => {
+            initPrinterConfig();
+
             const inputId = document.getElementById('input_id_evento');
+
             if (!inputId || !inputId.value) openEventSelector();
             updateTotalCost();
             updateCartelasDisplay();
+
+            // --- NOVA LÓGICA: Auto-ocultar o bloco de sucesso após 5 segundos ---
+            const successBlock = document.getElementById('success-block');
+            if (successBlock) {
+                autoHideTimeout = setTimeout(() => {
+                    // Adiciona um efeito suave de "esmaecer" (fade out)
+                    successBlock.style.transition = "opacity 0.5s ease";
+                    successBlock.style.opacity = "0";
+                    // Após os 0.5s da animação, remove o bloco da tela
+                    setTimeout(() => {
+                        successBlock.style.display = 'none';
+                    }, 500);
+                }, 8000); // 8000 milissegundos = 8 segundos
+            }
         });
     </script>
 </body>

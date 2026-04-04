@@ -1473,13 +1473,14 @@ def nova_venda():
                                       error="⛔ ACESSO BLOQUEADO: Seu usuário está restrito para realizar vendas."))
         except Exception as e:
             print(f"Erro ao verificar bloqueio de usuário: {e}")
-    # -------------------------------------------------------
 
     error = request.args.get('error')
     success = session.pop('success_message', None) 
+    print_data = session.pop('print_data', None)
 
     id_cliente_final = None
     cliente_encontrado = None
+    id_colaborador_indicacao = 0
     custo = 0.00
     
     id_evento_param = request.args.get('id_evento')
@@ -1572,6 +1573,7 @@ def nova_venda():
         if cliente:
             cliente_encontrado = cliente
             id_cliente_final = cliente.get('id_cliente')
+            id_colaborador_indicacao  = cliente.get('id_colaborador')
 
             # --- NOVO: Prepara o saldo para exibição ---
             val_decimal = cliente_encontrado.get('saldo_atual', 0.0)
@@ -1580,7 +1582,6 @@ def nova_venda():
                 cliente_encontrado['saldo_float'] = float(str(val_decimal))
             else:
                 cliente_encontrado['saldo_float'] = float(val_decimal)
-            # -------------------------------------------
             
             valor_unitario = safe_float(selected_event.get('valor_de_venda', 0.00))
             custo = valor_unitario * quantidade
@@ -1593,16 +1594,18 @@ def nova_venda():
                            db_status=g.db_status,
                            error=error,
                            success=success,
+                           print_data=print_data,
                            eventos=eventos_enriquecidos,
                            selected_event=selected_event,
                            id_cliente_final=id_cliente_final,
                            cliente_busca=id_cliente_busca,
+                           id_colaborador_indicacao = id_colaborador_indicacao,
                            cliente_encontrado=cliente_encontrado,
                            quantidade=quantidade,
                            custo=custo,
                            g=g)
 
-
+#  xyx
 @app.route('/processar_venda', methods=['POST'])
 @login_required
 def processar_venda():
@@ -1619,6 +1622,7 @@ def processar_venda():
     id_evento_string = request.form.get('id_evento') 
     id_cliente_final_str = request.form.get('id_cliente_final') 
     quantidade_str = request.form.get('quantidade', '0')
+    id_colaboradorIndicacao = request.form.get('id_colaborador_indicacao', '0')   #  checar aqui
     
     log_prefix = f"[VENDA REQ_COLAB:{session.get('nick', 'N/A')}_CLI:{id_cliente_final_str}_QTD:{quantidade_str}]"
     
@@ -1687,6 +1691,7 @@ def processar_venda():
     numero_final_atual = None
     numero_inicial2_atual = 0 
     numero_final2_atual = 0 
+    id_colaborador_indicacao = 0
     
     # ==============================================================================
     # 🚀 MOTOR DE VENDAS ATÓMICO (SEM LOCKS EM PYTHON)
@@ -1730,7 +1735,7 @@ def processar_venda():
             numero_final_atual = limite_maximo_cartelas
         
         #print(f"{log_prefix} ... IDs Bilhete gerados: {numero_inicial_atual}-{numero_final_atual}...")
-
+        # "id_vendedor" tenho que buscar o id do colaborador cadastro
         registro_venda = {
             "id_venda": id_venda_formatado,
             "id_evento_ObjectId": id_evento_mongo, 
@@ -1739,8 +1744,9 @@ def processar_venda():
             "id_cliente": id_cliente_final, 
             "nome_cliente": cliente_doc.get('nick'),
             "telefone_cliente": cliente_doc.get('telefone',''),
-            "id_colaborador": colaborador_id,
+            "id_colaborador":  id_colaboradorIndicacao,
             "nick_colaborador": nick_colaborador,
+            "id_vendedor": colaborador_id,
             "data_venda": hora_brasil(),
             "quantidade_unidades": quantidade,
             "quantidade_cartelas": quantidade_cartelas_atual,
@@ -1884,6 +1890,15 @@ def processar_venda():
         #print(f"{log_prefix} LOG 5: Comprovante completo gerado.")
         
         session['success_message'] = success_msg 
+        # --- DADOS PARA A IMPRESSÃO AUTOMÁTICA 58MM ---
+        session['print_data'] = {
+            'id_evento': id_evento_int_para_controle,
+            'nome_cliente': cliente_doc.get('nick'),
+            'numero_inicial': numero_inicial_atual,
+            'numero_final': numero_final_atual,
+            'tipo_cartela': tipo_de_cartela
+        }
+        # ----------------------------------------------
         redirect_kwargs = {
             'id_evento': id_evento_string,
             'quantidade': '',
@@ -4359,6 +4374,99 @@ def gerar_cartelas_pdf_15():
         return f"Erro interno: {e}"
 
 
+@app.route('/imprimir_cartelas_58mm_15')
+@login_required
+def imprimir_cartelas_58mm_15():
+    """ Rota exclusiva para impressão térmica 58mm de Cartelas 3x5 (15 dezenas) """
+    db = get_vendas_db()
+    if db is None: return "Erro de Conexão: DB Offline.", 500
+
+    try:
+        numero_inicial = int(request.args.get('numero_inicial', 0))
+        numero_final = int(request.args.get('numero_final', 0))
+        id_evento = int(request.args.get('id_evento', 0))
+        nome_cliente = request.args.get('nome_cliente', 'Cliente')
+
+        if numero_inicial > numero_final or numero_inicial == 0:
+            return "Erro: Numeração inválida."
+
+        evento = db.eventos.find_one({'id_evento': id_evento})
+        if not evento: return "Erro: Evento não encontrado."
+
+        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
+        http_apk = g.parametros_globais.get('http_apk', '')
+
+        # Garante que vai buscar no TXT correto de 15 dezenas
+        tipo_cartela = 15 
+
+        data_str = evento.get('data_evento', '')
+        if '-' in str(data_str):
+            try: data_str = datetime.strptime(str(data_str), '%Y-%m-%d').strftime('%d/%m/%Y')
+            except: pass
+
+        lista_cartelas = []
+        for num_cartela in range(numero_inicial, numero_final + 1):
+            dados_matriz = buscar_dados_cartela_2d(num_cartela, tipo_cartela)
+            if dados_matriz:
+                lista_cartelas.append({'numero': num_cartela, 'matriz': dados_matriz})
+
+        return render_template('cartelas_58mm_15.html',
+                               cartelas=lista_cartelas,
+                               nome_sala=nome_sala,
+                               descricao_evento=evento.get('descricao', ''),
+                               data_hora=f"{data_str} as {evento.get('hora_evento', '')}",
+                               nome_cliente=nome_cliente,
+                               http_apk=http_apk)
+    except Exception as e:
+        return f"Erro interno: {e}"
+
+
+@app.route('/imprimir_cartelas_58mm_25')
+@login_required
+def imprimir_cartelas_58mm_25():
+    """ Rota exclusiva para impressão térmica 58mm de Cartelas 5x5 (25 dezenas) """
+    db = get_vendas_db()
+    if db is None: return "Erro de Conexão: DB Offline.", 500
+
+    try:
+        numero_inicial = int(request.args.get('numero_inicial', 0))
+        numero_final = int(request.args.get('numero_final', 0))
+        id_evento = int(request.args.get('id_evento', 0))
+        nome_cliente = request.args.get('nome_cliente', 'Cliente')
+
+        if numero_inicial > numero_final or numero_inicial == 0:
+            return "Erro: Numeração inválida."
+
+        evento = db.eventos.find_one({'id_evento': id_evento})
+        if not evento: return "Erro: Evento não encontrado."
+
+        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
+        http_apk = g.parametros_globais.get('http_apk', '')
+
+        # Garante que vai buscar no TXT correto de 25 dezenas
+        tipo_cartela = 25 
+
+        data_str = evento.get('data_evento', '')
+        if '-' in str(data_str):
+            try: data_str = datetime.strptime(str(data_str), '%Y-%m-%d').strftime('%d/%m/%Y')
+            except: pass
+
+        lista_cartelas = []
+        for num_cartela in range(numero_inicial, numero_final + 1):
+            dados_matriz = buscar_dados_cartela_2d(num_cartela, tipo_cartela)
+            if dados_matriz:
+                lista_cartelas.append({'numero': num_cartela, 'matriz': dados_matriz})
+
+        return render_template('cartelas_58mm_25.html',
+                               cartelas=lista_cartelas,
+                               nome_sala=nome_sala,
+                               descricao_evento=evento.get('descricao', ''),
+                               data_hora=f"{data_str} as {evento.get('hora_evento', '')}",
+                               nome_cliente=nome_cliente,
+                               http_apk=http_apk)
+    except Exception as e:
+        return f"Erro interno: {e}"
+
 # controle de movimentação dos clientes
 def registrar_transacao_cliente(db, id_cliente, valor, tipo, descricao, id_evento=None, id_venda=None):
     """
@@ -5920,7 +6028,7 @@ def exportar_indicacoes():
     for c in clientes:
         id_cli = c.get('id_cliente')
         
-        # --- BUSCA RÁPIDA DE ATIVIDADE ---
+        # --- BUSCA RÁPIDA DE ATIVIDADE ---xxx
         # Verificamos na coleção de vendas se existe algum registro para este ID
         # (Ajuste o nome da coleção 'vendas_global' ou similar conforme seu banco)
         ultima_venda = db.vendas_consolidado.find_one(
@@ -6200,7 +6308,7 @@ def ativar_modo_treino_retroativo():
         atualizacao = {
             "$set": {
                 "em_treinamento": True,
-                "saldo_atual": Decimal128("1000.00")
+                "saldo_atual": Decimal128("10000.00")
             }
         }
 
