@@ -77,7 +77,7 @@
         <div class="text-center texto-info" style="font-size: 12px; margin-top: 2px;">CLI.: {{ nome_cliente | upper }}</div>
          <!-- LÓGICA DO PERÍODO -->
         {% if cartelas|length > 1 %}
-        <div class="text-center texto-header" style="margin-top: 4px; font-size: 13px;">PERÍODO:[{{ cartelas[0].numero }}-{{ cartelas[-1].numero }}]</div>
+        <div class="text-center texto-header" style="margin-top: 4px; font-size: 13px;">PER.:[{{ cartelas[0].numero }} - {{ cartelas[-1].numero }}]</div>
         {% endif %}
         <div class="separador"></div>
         {% endif %}

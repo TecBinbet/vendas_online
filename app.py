@@ -1589,7 +1589,59 @@ def nova_venda():
     elif selected_event:
         valor_unitario = safe_float(selected_event.get('valor_de_venda', 0.00))
         custo = valor_unitario * quantidade
+   
+    # ========================================================
+    # --- NOVO: BUSCA AS 5 ÚLTIMAS VENDAS DO OPERADOR ATUAL ---
+    # ========================================================
+    ultimas_vendas = []
+    if selected_event and g.db_status:
+        id_evento_int = selected_event.get('id_evento')
+        nome_colecao_venda = f"vendas{id_evento_int}"
+        id_colaborador_logado = session.get('id_colaborador')
         
+        #print(f"\n[DEBUG - ÚLTIMAS VENDAS] Iniciando busca para evento: {id_evento_int}")
+        #print(f"[DEBUG - ÚLTIMAS VENDAS] Operador Logado na Sessão: '{id_colaborador_logado}' (Tipo: {type(id_colaborador_logado)})")
+        
+        if nome_colecao_venda in db.list_collection_names():
+            try:
+                # 1. Trata o ID (Converte para int se possível, para cobrir os dois mundos)
+                try:
+                    id_colab_int = int(id_colaborador_logado)
+                except (ValueError, TypeError):
+                    id_colab_int = id_colaborador_logado
+                
+                # 2. Monta a Query Inteligente
+                # Cobre tanto o 'id_vendedor' (operador do caixa) quanto o 'id_colaborador',
+                # e busca tanto pelo número (Int) quanto pelo texto (String)
+                query_ultimas = {
+                    '$or': [
+                        {'id_vendedor': {'$in': [id_colaborador_logado, id_colab_int, str(id_colab_int)]}},
+                        {'id_colaborador': {'$in': [id_colaborador_logado, id_colab_int, str(id_colab_int)]}}
+                    ]
+                }
+                
+                #print(f"[DEBUG - ÚLTIMAS VENDAS] Query montada: {query_ultimas}")
+                
+                # 3. Executa a busca
+                cursor = db[nome_colecao_venda].find(query_ultimas).sort('data_venda', pymongo.DESCENDING).limit(5)
+                
+                for v in cursor:
+                    v['valor_total_float'] = safe_float(v.get('valor_total'))
+                    ultimas_vendas.append(v)
+                    
+                #print(f"[DEBUG - ÚLTIMAS VENDAS] SUCESSO! Encontradas {len(ultimas_vendas)} vendas.")
+                for uv in ultimas_vendas:
+                    print(f"  -> Venda: {uv.get('id_venda')} | Cliente: {uv.get('nome_cliente')} | Cartelas: {uv.get('numero_inicial')} a {uv.get('numero_final')} | R$ {uv.get('valor_total_float')}")
+                print("------------------------------------------------------------\n")
+                    
+            except Exception as e:
+                #print(f"[DEBUG - ÚLTIMAS VENDAS] ❌ ERRO CRÍTICO: {e}")
+                import traceback
+                traceback.print_exc()
+        else:
+            print(f"[DEBUG - ÚLTIMAS VENDAS] A coleção '{nome_colecao_venda}' ainda não existe (Nenhuma venda neste evento).")
+
+
     return render_template('venda.html', 
                            db_status=g.db_status,
                            error=error,
@@ -1603,9 +1655,10 @@ def nova_venda():
                            cliente_encontrado=cliente_encontrado,
                            quantidade=quantidade,
                            custo=custo,
+                           ultimas_vendas=ultimas_vendas,
                            g=g)
 
-#  xyx
+
 @app.route('/processar_venda', methods=['POST'])
 @login_required
 def processar_venda():
@@ -4384,7 +4437,18 @@ def imprimir_cartelas_58mm_15():
     try:
         numero_inicial = int(request.args.get('numero_inicial', 0))
         numero_final = int(request.args.get('numero_final', 0))
-        id_evento = int(request.args.get('id_evento', 0))
+
+        id_evento_raw = request.args.get('id_evento', 0)
+        try:
+            # Tenta converter para número (se vier da impressão automática)
+            id_evento = int(id_evento_raw)
+            query_evento = {'id_evento': id_evento}
+        except (ValueError, TypeError):
+            # Se for texto (veio da reimpressão via HTML), usa o ObjectId do Mongo
+            from bson.objectid import ObjectId
+            id_evento = str(id_evento_raw)
+            query_evento = {'_id': ObjectId(id_evento)} if len(id_evento) == 24 else {'id_evento': id_evento}
+
         nome_cliente = request.args.get('nome_cliente', 'Cliente')
 
         if numero_inicial > numero_final or numero_inicial == 0:
@@ -4431,7 +4495,18 @@ def imprimir_cartelas_58mm_25():
     try:
         numero_inicial = int(request.args.get('numero_inicial', 0))
         numero_final = int(request.args.get('numero_final', 0))
-        id_evento = int(request.args.get('id_evento', 0))
+
+        id_evento_raw = request.args.get('id_evento', 0)
+        try:
+            # Tenta converter para número (se vier da impressão automática)
+            id_evento = int(id_evento_raw)
+            query_evento = {'id_evento': id_evento}
+        except (ValueError, TypeError):
+            # Se for texto (veio da reimpressão via HTML), usa o ObjectId do Mongo
+            from bson.objectid import ObjectId
+            id_evento = str(id_evento_raw)
+            query_evento = {'_id': ObjectId(id_evento)} if len(id_evento) == 24 else {'id_evento': id_evento}
+
         nome_cliente = request.args.get('nome_cliente', 'Cliente')
 
         if numero_inicial > numero_final or numero_inicial == 0:
