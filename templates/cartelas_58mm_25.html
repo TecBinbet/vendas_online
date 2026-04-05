@@ -71,22 +71,54 @@
         .texto-header { font-size: 16px; text-transform: uppercase; font-weight: bold; }
         .texto-info { font-size: 13px; line-height: 1.2; font-weight: bold; }
         .free-text { font-size: 12px; font-weight: bold; }
+
+        /* --- MODO EXCLUSIVO PARA COMPUTADOR (WINDOWS) --- */
+        body.pc-mode { 
+            width: 58mm !important; 
+            max-width: none !important; 
+        }
+        body.pc-mode table.bingo-table { 
+            width: 42.5mm !important; 
+        }
+        body.pc-mode .numero-cartela { 
+            font-size: 19px !important; 
+        }
+        body.pc-mode table.bingo-table th { 
+            font-size: 16px !important; 
+            height: 6mm !important; 
+        }
+        body.pc-mode table.bingo-table td { 
+            font-size: 17px !important; 
+            height: 7mm !important; 
+        }
+
     </style>
 </head>
 
-<body onload="setTimeout(function() { window.print(); }, 500);">
+<body onload="verificarDispositivo(); setTimeout(function() { window.print(); }, 500);">
 
-    <!-- MÁGICA DO RETORNO COM ATRASO: Dá fôlego para a impressora e sai da tela -->
+    <!-- MÁGICA CONDICIONAL: Separa o comportamento do Celular e do PC -->
     <script>
+        // Radar: Descobre se é celular ou computador
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
+
+        function verificarDispositivo() {
+            if (!isMobile) {
+                // Se for PC, avisa o CSS para encolher a tabela para não cortar
+                document.body.classList.add('pc-mode');
+            }
+        }
+
         window.addEventListener('afterprint', function() {
-            // Aguarda 3 segundos (3000 milissegundos) após você confirmar a impressão
-            setTimeout(function() {
-                // Tenta fechar a aba (se o sistema estiver abrindo abas novas)
-                window.close();
-                
-                // Se o navegador ignorar o close, ele volta para o caixa (se for na mesma aba)
-                window.history.back();
-            }, 3000); 
+            if (isMobile) {
+                // NO CELULAR: Dá o fôlego de 4 segundos para o RawBT ler a imagem e depois volta pro caixa
+                setTimeout(function() { 
+                    window.history.back(); 
+                }, 4000); 
+            } else {
+                // NO COMPUTADOR: Não fica contando tempo. Imprimiu, a aba fecha imediatamente!
+                window.close(); 
+            }
         });
     </script>
 
