@@ -70,21 +70,7 @@
     </style>
 </head>
 
-<body>
-    <!-- ÁREA DE CONTROLE (Não sai na impressão) -->
-    <div class="no-print" style="text-align: center; padding: 15px; background-color: #f3f4f6; border-bottom: 2px solid #ccc; margin-bottom: 10px;">
-        <button onclick="window.print()" style="padding: 15px 30px; font-size: 18px; background-color: #2563eb; color: white; border: none; border-radius: 8px; font-weight: bold; width: 100%; box-shadow: 0 4px 6px rgba(0,0,0,0.1);">
-            🖨️ CONFIRMAR IMPRESSÃO
-        </button>
-        <p style="font-size: 12px; color: #666; margin-top: 10px;">Toque acima para abrir a escolha de impressora.</p>
-    </div>
-
-    <!-- MÁGICA DA AUTOMAÇÃO: Espera a impressão terminar e fecha sozinho -->
-    <script>
-        window.addEventListener('afterprint', function() {
-            window.close();
-        });
-    </script>
+<body onload="setTimeout(function() { window.print(); setTimeout(() => window.close(), 1500); }, 500);">
 
     {% for cartela in cartelas %}
     <div class="cartela">
