@@ -72,6 +72,20 @@
 
 <body onload="setTimeout(function() { window.print(); }, 500);">
 
+    <!-- MÁGICA DO RETORNO COM ATRASO: Dá fôlego para a impressora e sai da tela -->
+    <script>
+        window.addEventListener('afterprint', function() {
+            // Aguarda 3 segundos (3000 milissegundos) após você confirmar a impressão
+            setTimeout(function() {
+                // Tenta fechar a aba (se o sistema estiver abrindo abas novas)
+                window.close();
+                
+                // Se o navegador ignorar o close, ele volta para o caixa (se for na mesma aba)
+                window.history.back();
+            }, 3000); 
+        });
+    </script>
+
     {% for cartela in cartelas %}
     <div class="cartela">
         
