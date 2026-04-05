@@ -6,6 +6,26 @@
     <style>
 
         @media print {
+            /* Isso arranca a margem branca imposta pelo Android/RawBT */
+            @page {
+                margin: 0 !important;
+            }
+            
+            body, html {
+                margin: 0 !important;
+                padding: 0 !important;
+                width: 100% !important;
+            }
+
+            /* Se a sua div principal tem uma borda preta configurada no CSS, 
+               isso garante que ela não seja impressa como um quadro duplo */
+            .container, .cartela { 
+                border: none !important; 
+                box-shadow: none !important;
+            }
+        }
+
+        @media print {
             .no-print { display: none !important; }
         }
         @page { margin: 0; }
