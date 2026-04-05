@@ -613,7 +613,6 @@
                 alert("A impressora 58mm está DESATIVADA neste celular.\n\nAtive clicando no ícone da impressora (🖨️) no topo da tela antes de reimprimir.");
                 return;
             }
-            
             // Agora pegamos o ID do Evento direto do botão, limpo e perfeito (ex: 145)
             const dadosReimpressao = {
                 id_evento: idEvento,
@@ -622,14 +621,12 @@
                 numero_final: numFinal,
                 tipo_cartela: parseInt('{{ selected_event.tipo_de_cartela | default(25) }}')
             };
-            
             console.log("Reimprimindo recuperação em 58mm...", dadosReimpressao);
             imprimirCartelas58mm(dadosReimpressao); 
         }
 
         async function reimprimirReciboTxt(idVenda, idCliente) {
             ativarSpinner("Puxando o cupom...");
-            
             const data = {
                 tipo_reimpressao: 'unica', // Puxa apenas a venda específica
                 id_venda: idVenda,

@@ -65,7 +65,15 @@
         .free-text { font-size: 10px; }
     </style>
 </head>
-<body onload="setTimeout(function() { window.print(); setTimeout(() => window.close(), 1500); }, 500);">
+<body onload="setTimeout(function() { window.print(); }, 500);">
+    
+    <!-- MÁGICA DA AUTOMAÇÃO: Espera a impressão terminar e fecha sozinho -->
+    <script>
+        window.addEventListener('afterprint', function() {
+            window.close();
+        });
+    </script>
+
     {% for cartela in cartelas %}
     <div class="cartela">
         

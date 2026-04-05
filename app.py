@@ -1630,9 +1630,9 @@ def nova_venda():
                     ultimas_vendas.append(v)
                     
                 #print(f"[DEBUG - ÚLTIMAS VENDAS] SUCESSO! Encontradas {len(ultimas_vendas)} vendas.")
-                for uv in ultimas_vendas:
-                    print(f"  -> Venda: {uv.get('id_venda')} | Cliente: {uv.get('nome_cliente')} | Cartelas: {uv.get('numero_inicial')} a {uv.get('numero_final')} | R$ {uv.get('valor_total_float')}")
-                print("------------------------------------------------------------\n")
+                #for uv in ultimas_vendas:
+                    #print(f"  -> Venda: {uv.get('id_venda')} | Cliente: {uv.get('nome_cliente')} | Cartelas: {uv.get('numero_inicial')} a {uv.get('numero_final')} | R$ {uv.get('valor_total_float')}")
+                #print("------------------------------------------------------------\n")
                     
             except Exception as e:
                 #print(f"[DEBUG - ÚLTIMAS VENDAS] ❌ ERRO CRÍTICO: {e}")
