@@ -521,9 +521,8 @@
             }
         }
 
-        // --- FUNÇÃO QUE MANDA IMPRIMIR (HÍBRIDA: INTENT MOBILE / ABA WINDOWS) ---
+// --- FUNÇÃO QUE MANDA IMPRIMIR (HÍBRIDA: INTENT MOBILE / ABA WINDOWS) ---
         function imprimirCartelas58mm(dados) {
-            // Decide a rota correta baseada no tipo de cartela do evento
             const baseUrl = dados.tipo_cartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
             
             const params = new URLSearchParams({
@@ -533,17 +532,18 @@
                 nome_cliente: dados.nome_cliente
             });
             
-            // O Deep Link exige a URL completa (com o seu IP da rede, ex: http://192.168.1.X:5000/...)
+            // Pega a URL completa do seu sistema (http://vendasonline-...)
             const urlAbsoluta = window.location.origin + baseUrl + '?' + params.toString();
             
-            // Detecta se o operador está no celular
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
             
             if (isMobile) {
-                // NO CELULAR: Dispara o gatilho nativo do RawBT
-                // O Chrome manda o comando invisível, a impressora cospe o papel e o operador não sai da tela de venda!
-                console.log("Modo Mobile detectado. Disparando Deep Link RawBT...");
-                window.location.href = "rawbt:" + urlAbsoluta;
+                // NO CELULAR: Deep Link oficial do Android focando no motor WEB do RawBT
+                // Em vez de ler como texto, ele vai acessar a URL invisivelmente e imprimir a cartela
+                const intentUrl = "intent:" + urlAbsoluta + "#Intent;package=ru.a402d.rawbt;end;";
+                
+                console.log("Modo Mobile: Enviando Intent WEB para RawBT...");
+                window.location.href = intentUrl;
             } else {
                 // NO COMPUTADOR: Abre a aba para impressão via navegador (USB)
                 console.log("Modo Desktop detectado. Abrindo aba de impressão...");
