@@ -70,7 +70,17 @@
     </style>
 </head>
 
-<body onload="setTimeout(function() { window.print(); setTimeout(() => window.close(), 1500); }, 500);">
+<body onload="setTimeout(function() { window.print(); }, 500);">
+
+     <!-- MÁGICA DO BUMERANGUE COM FÔLEGO: Espera o RawBT processar e volta sozinho -->
+    <script>
+        window.addEventListener('afterprint', function() {
+            // Dá 3 segundos para o Android transferir a página pro Bluetooth antes de voltar
+            setTimeout(function() {
+                window.history.back();
+            }, 3000); 
+        });
+    </script>
 
     {% for cartela in cartelas %}
     <div class="cartela">
