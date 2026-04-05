@@ -72,16 +72,6 @@
 
 <body onload="setTimeout(function() { window.print(); }, 500);">
 
-     <!-- MÁGICA DO BUMERANGUE COM FÔLEGO: Espera o RawBT processar e volta sozinho -->
-    <script>
-        window.addEventListener('afterprint', function() {
-            // Dá 5 segundos para o Android transferir a página pro Bluetooth antes de voltar
-            setTimeout(function() {
-                window.history.back();
-            }, 5000); 
-        });
-    </script>
-
     {% for cartela in cartelas %}
     <div class="cartela">
         
