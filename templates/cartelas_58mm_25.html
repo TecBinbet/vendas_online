@@ -4,54 +4,36 @@
     <meta charset="UTF-8">
     <title>Impressão 25 Dezenas</title>
     <style>
-
-        @media print {
-            /* Isso arranca a margem branca imposta pelo Android/RawBT */
-            @page {
-                margin: 0 !important;
-            }
-            
-            body, html {
-                margin: 0 !important;
-                padding: 0 !important;
-                width: 100% !important;
-            }
-
-            /* Se a sua div principal tem uma borda preta configurada no CSS, 
-               isso garante que ela não seja impressa como um quadro duplo */
-            .container, .cartela { 
-                border: none !important; 
-                box-shadow: none !important;
-            }
-        }
-
+        /* Remove as margens do sistema */
+        @page { margin: 0; }
+        
         @media print {
             .no-print { display: none !important; }
         }
-        @page { margin: 0; }
+        
         body {
             font-family: 'Courier New', Courier, monospace;
-            width: 58mm; 
+            width: 100%;
+            max-width: 56mm; /* Limita ao espaço real de impressão da bobina de 58mm */
             margin: 0 auto; 
-            padding: 0 2mm; 
+            padding: 0; 
             color: #000; 
             background: #FFF; 
-            font-size: 12px;
-            font-weight: bold; 
             box-sizing: border-box;
         }
+
         .cartela {
-            border: 1px dashed #000;
-            margin-top: 2mm;
-            margin-bottom: 4mm; 
-            padding: 2mm 1mm;
+            border: 2px dashed #000; /* Borda mais grossa para destacar no papel térmico */
+            margin: 0 auto 5mm auto;
+            padding: 2mm;
             page-break-inside: avoid;
         }
+
         .text-center { text-align: center; }
-        .separador { border-top: 1px dashed #000; margin: 3px 0; }
+        .separador { border-top: 1px dashed #000; margin: 4px 0; }
         
         .numero-cartela { 
-            font-size: 19px; 
+            font-size: 22px; /* Fonte aumentada */
             text-align: center; 
             margin: 4px 0; 
             font-weight: 900; 
@@ -59,34 +41,36 @@
         }
         
         table.bingo-table {
-            width: 42.5mm; 
+            width: 100%; /* Agora a tabela usa toda a largura da cartela */
             margin: 0 auto;
             border-collapse: collapse;
         }
+        
         table.bingo-table th {
-            width: 8.5mm;
-            height: 6mm;
-            border: 1px solid #000;
-            border-bottom: 2px solid #000;
+            height: 7mm;
+            border: 2px solid #000;
+            border-bottom: 3px solid #000;
             text-align: center;
             vertical-align: middle;
-            font-size: 16px;
+            font-size: 18px; /* Letras B I N G O maiores */
+            font-weight: bold;
             padding: 0;
             background-color: #f4f4f4;
         }
+        
         table.bingo-table td {
-            width: 8.5mm; 
-            height: 7mm;  
-            border: 1px solid #000;
+            height: 8mm; /* Células um pouco mais altas */
+            border: 2px solid #000;
             text-align: center;
             vertical-align: middle;
-            font-size: 17px; 
+            font-size: 20px; /* Números maiores */
+            font-weight: bold;
             padding: 0;
         }
         
-        .texto-header { font-size: 14px; text-transform: uppercase; }
-        .texto-info { font-size: 11px; line-height: 1.2; }
-        .free-text { font-size: 10px; }
+        .texto-header { font-size: 16px; text-transform: uppercase; font-weight: bold; }
+        .texto-info { font-size: 13px; line-height: 1.2; font-weight: bold; }
+        .free-text { font-size: 12px; font-weight: bold; }
     </style>
 </head>
 
