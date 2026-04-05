@@ -521,7 +521,7 @@
             }
         }
 
-// --- FUNÇÃO QUE MANDA IMPRIMIR (HÍBRIDA: INTENT MOBILE / ABA WINDOWS) ---
+        // --- FUNÇÃO QUE MANDA IMPRIMIR (HÍBRIDA: INTENT MOBILE / ABA WINDOWS) ---
         function imprimirCartelas58mm(dados) {
             const baseUrl = dados.tipo_cartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
             
@@ -532,49 +532,26 @@
                 nome_cliente: dados.nome_cliente
             });
             
-            // Pega a URL completa do seu sistema (http://vendasonline-...)
+            // Pega a URL completa do seu sistema
             const urlAbsoluta = window.location.origin + baseUrl + '?' + params.toString();
             
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
             
             if (isMobile) {
-                // NO CELULAR: Deep Link oficial do Android focando no motor WEB do RawBT
-                // Em vez de ler como texto, ele vai acessar a URL invisivelmente e imprimir a cartela
-                const intentUrl = "intent:" + urlAbsoluta + "#Intent;package=ru.a402d.rawbt;end;";
+                // Separa o "http/https" do restante do link (Exigência do Android)
+                const urlSemProtocolo = urlAbsoluta.split('://')[1];
+                const protocolo = urlAbsoluta.split('://')[0]; 
                 
-                console.log("Modo Mobile: Enviando Intent WEB para RawBT...");
+                // Deep Link no formato oficial da API do Android
+                const intentUrl = "intent://" + urlSemProtocolo + "#Intent;scheme=" + protocolo + ";action=android.intent.action.VIEW;package=ru.a402d.rawbt;end;";
+                
+                console.log("Modo Mobile: Enviando Intent WEB estruturado para RawBT...");
                 window.location.href = intentUrl;
             } else {
                 // NO COMPUTADOR: Abre a aba para impressão via navegador (USB)
                 console.log("Modo Desktop detectado. Abrindo aba de impressão...");
                 window.open(urlAbsoluta, '_blank');
             }
-        }
-
-        // --- FUNÇÃO QUE GERA O QUADRO INVISÍVEL E MANDA IMPRIMIR ---
-        function imprimirCartelas58mm2(dados) {
-            // Decide a rota correta baseada no tipo de cartela do evento
-            const baseUrl = dados.tipo_cartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
-            
-            const params = new URLSearchParams({
-                numero_inicial: dados.numero_inicial,
-                numero_final: dados.numero_final,
-                id_evento: dados.id_evento,
-                nome_cliente: dados.nome_cliente
-            });
-            
-            const urlCompleta = `${baseUrl}?${params.toString()}`;
-            
-            // Cria um iFrame invisível para carregar a cartela sem tirar o operador da tela
-            let printFrame = document.createElement('iframe');
-            printFrame.style.display = 'none';
-            printFrame.src = urlCompleta;
-            document.body.appendChild(printFrame);
-            
-            // Opcional: Remove o frame da memória após 5 segundos para não pesar o navegador
-            setTimeout(() => {
-                document.body.removeChild(printFrame);
-            }, 5000);
         }
 
         function togglePrinter() {
