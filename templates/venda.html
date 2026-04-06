@@ -406,6 +406,11 @@
         }
         
         function updateCartelasDisplay() {
+            const campoQuantidade = document.getElementById('quantidade');
+            
+            // Trava de segurança: Se o campo não existir na tela, aborta a função silenciosamente
+            if (!campoQuantidade) return;
+            
             const q = parseInt(document.getElementById('quantidade').value) || 0;
             const display = document.getElementById('cartelas-display');
             if (display) display.textContent = (q * Venda_UnidadeCartelas);
@@ -616,7 +621,8 @@
 
             try {
                 // Consulta nossa API de textos
-                const response = await fetch("/reimprimir_comprovante_txt", {
+                const urlAbsoluta = window.location.origin + "/reimprimir_comprovante_txt";    
+                const response = await fetch(urlAbsoluta, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(data)

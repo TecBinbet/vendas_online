@@ -978,8 +978,8 @@ def consulta_status_eventos():
     nivel_usuario = session.get('nivel', 0) 
     view_mode = request.args.get('mode', 'detailed') 
     
-    # --- AJUSTE DE LIMITE (Padrão 15) ---
-    limit_atual = request.args.get('limit', 15, type=int)
+    # --- AJUSTE DE LIMITE (Padrão 10) ---
+    limit_atual = request.args.get('limit', 10, type=int)
     # ------------------------------------
 
     # Busca configurações globais antes do loop para otimização
@@ -1008,10 +1008,14 @@ def consulta_status_eventos():
         return f"R$ {safe_float(value):.2f}".replace('.', ',')
 
     try:
-        # AJUSTE: Ordenação DESCENDING para mostrar os mais novos e aplicação do LIMIT
+
+        # AJUSTE: Ordenação do primeiro ao último (18:00 -> 23:59)
         eventos_cursor = db.eventos.find(
             {'status': {'$in': status_regex_list}}
-        ).sort("data_hora_evento", pymongo.DESCENDING).limit(limit_atual)
+        ).sort([
+            ("data_evento", pymongo.ASCENDING), 
+            ("hora_evento", pymongo.ASCENDING)
+        ]).limit(limit_atual)
         
         for evento in eventos_cursor:
             id_evento_int = evento.get('id_evento')
@@ -1079,7 +1083,7 @@ def consulta_status_eventos():
         print(f"ERRO CRÍTICO ao buscar status de eventos: {e}")
         return render_template('consulta_status_eventos.html', error=f"Erro interno: {e}", eventos_status=[], g=g, success=success, mode=view_mode, nivel=nivel_usuario, filtro_atual=filtro_str, limit_atual=limit_atual)
 
-    eventos_status.reverse()
+    #eventos_status.reverse()
 
     return render_template('consulta_status_eventos.html', 
                            eventos_status=eventos_status, g=g, 
@@ -1489,8 +1493,35 @@ def nova_venda():
     
     quantidade = int(quantidade_param) if quantidade_param and str(quantidade_param).isdigit() else 0
     
-    eventos_ativos_cursor = db.eventos.find({'status': 'ativo'}).sort('data_evento', pymongo.ASCENDING)
-    
+    #eventos_ativos_cursor = db.eventos.find({'status': 'ativo'}).sort('data_evento', pymongo.ASCENDING)   <<< troca aqui
+
+    # 1. Busca no banco ordenando por Data e, em seguida, por Hora (Cronológico Perfeito)
+    eventos_ativos_cursor = db.eventos.find({'status': 'ativo'}).sort([
+        ('data_evento', pymongo.ASCENDING),
+        ('hora_evento', pymongo.ASCENDING)
+    ])
+
+    # 2. Converte o cursor do Mongo para uma lista manipulável do Python
+    eventos_lista = list(eventos_ativos_cursor)
+
+    # 3. Isola a "Rodada Especial" (remove da lista temporariamente)
+    evento_especial = None
+    for i in range(len(eventos_lista)):
+        if eventos_lista[i].get('tipo_de_evento') == 'Especial':
+            evento_especial = eventos_lista.pop(i)
+            break # Achou o especial, para de procurar
+
+    # 4. Encaixa a Rodada Especial na posição desejada (index 2 = 3º item)
+    if evento_especial:
+        # Se houver menos de 2 eventos normais, ele entra no final sem dar erro
+        index_insercao = min(2, len(eventos_lista))
+        eventos_lista.insert(index_insercao, evento_especial)
+
+    # DICA IMPORTANTE: Agora, na hora de passar para o render_template, 
+    # certifique-se de passar a variável 'eventos_lista' em vez do cursor original.
+    # Exemplo: render_template('venda.html', eventos=eventos_lista, ...)    
+
+
     eventos_enriquecidos = []
     selected_event = None
 
@@ -1501,8 +1532,8 @@ def nova_venda():
         except Exception:
             pass
     
-    for evento in eventos_ativos_cursor:
-        
+    for evento in eventos_lista:   
+    
         evento['valor_de_venda_float'] = safe_float(evento.get('valor_de_venda', 0.00))
 
         controle = db.controle_venda.find_one({
@@ -3869,12 +3900,26 @@ def reimprimir_comprovante_txt():
         data = request.json
         tipo_reimpressao = data.get('tipo_reimpressao') 
         id_venda_str = data.get('id_venda')           
-        id_evento_int = int(data.get('id_evento'))
         id_cliente_int = int(data.get('id_cliente'))
-        
-        evento = db.eventos.find_one({'id_evento': id_evento_int})
+ 
+        valor_id_evento = str(data.get('id_evento'))
+   
+        # --- BLINDAGEM DO EVENTO ---
+        if len(valor_id_evento) == 24: # Se tem 24 caracteres, é o hash (ObjectId)
+            # Busca pelo _id original do evento ou pelo campo id_evento_ObjectId
+            evento = db.eventos.find_one({
+                '$or': [
+                    {'_id': ObjectId(valor_id_evento)},
+                    {'id_evento_ObjectId': ObjectId(valor_id_evento)}
+                ]
+            })
+        else: # Se for curtinho, é o número inteiro puro
+            evento = db.eventos.find_one({'id_evento': int(valor_id_evento)})
+    
         if not evento:
             return jsonify({'status': 'error', 'message': 'Evento não encontrado'})
+        
+        id_evento_int = evento.get('id_evento')
 
         http_apk = g.parametros_globais.get('http_apk', '')
         nome_sala = g.parametros_globais.get('nome_sala', '')
@@ -5146,7 +5191,6 @@ def financeiro_evento():
         import traceback
         traceback.print_exc()
         return redirect(url_for('financeiro_evento', error=f"Erro interno: {e}"))
-
 
 
 @app.route('/salvar_senha_obrigatoria', methods=['POST'])
