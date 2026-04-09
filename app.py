@@ -5524,8 +5524,13 @@ def gravar_replicacao():
             
                     vendas_clonadas_da_replica.append(v_clone)
             
-                    # INCREMENTO CRÍTICO: Move o ponteiro para a próxima venda/réplica
-                    ponteiro_geral_cartela += t_cartelas
+                    # =========================================================
+                    # INCREMENTO CRÍTICO EM STAND-BY
+                    # Desabilitado temporariamente para evitar a quebra do limite de numeração.
+                    # Quando for reativar, a lógica do limite máximo entrará aqui.
+                    # =========================================================
+                    # ponteiro_geral_cartela += t_cartelas
+                    # =========================================================
         
                 # Insere as vendas e atualiza o controle_venda para esta réplica
                 if vendas_clonadas_da_replica:
