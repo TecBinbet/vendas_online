@@ -2,6 +2,7 @@
 
 import time
 import threading
+import traceback
 import pymongo
 from zoneinfo import ZoneInfo
 from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response
@@ -1373,7 +1374,6 @@ def gravar_colaborador():
         
     except Exception as e:
         print(f"ERRO CRÍTICO colab: {e}")
-        import traceback
         traceback.print_exc()
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_colaborador_edicao else 'novo'
@@ -1667,7 +1667,6 @@ def nova_venda():
                     
             except Exception as e:
                 #print(f"[DEBUG - ÚLTIMAS VENDAS] ❌ ERRO CRÍTICO: {e}")
-                import traceback
                 traceback.print_exc()
         else:
             print(f"[DEBUG - ÚLTIMAS VENDAS] A coleção '{nome_colecao_venda}' ainda não existe (Nenhuma venda neste evento).")
@@ -1883,7 +1882,6 @@ def processar_venda():
         
     except Exception as e:
         print(f"{log_prefix} LOG 5 (ERRO INTERNO): Erro crítico durante a transação: {e}")
-        import traceback
         traceback.print_exc()
         error_redirect_kwargs['error'] = f"Erro interno no DB: Falha ao gravar a transação."
         error_redirect_kwargs['quantidade'] = quantidade
@@ -2425,7 +2423,6 @@ def gravar_cliente():
 
     except Exception as e:
         print(f"[DEBUG] ERRO CRÍTICO: {e}")
-        import traceback
         traceback.print_exc()
         return render_template('cadastro_cliente.html', 
                                error=f"Erro interno: {e}",
@@ -2665,7 +2662,6 @@ def salvar_auto_cadastro():
     except Exception as e:
         # Log do erro no console para debug real
         print(f"ERRO CRÍTICO NO AUTO CADASTRO: {e}")
-        import traceback
         traceback.print_exc() # Imprime onde foi o erro exatamente
         
         return render_template('auto_cadastro.html', 
@@ -2950,7 +2946,6 @@ def excluir_eventos_lote():
 
     except Exception as e:
         print(f"ERRO CRÍTICO na exclusão em lote: {e}")
-        import traceback
         traceback.print_exc()
         return redirect(url_for('cadastro_evento', view='exclusao_lote', error=f"Ocorreu um erro interno durante o processo: {e}"))
 
@@ -3124,7 +3119,6 @@ def excluir_evento(id_evento):
 
     except Exception as e:
         print(f"ERRO CRÍTICO na exclusão de evento ID {id_evento}: {e}")
-        import traceback
         traceback.print_exc()
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento.", view='listar'))
 
@@ -3310,7 +3304,6 @@ def consulta_vendas():
     except Exception as e:
         print(f"Erro em consulta_vendas: {e}")
         error = f"Erro interno ao processar consulta: {e}"
-        import traceback
         traceback.print_exc()
 
     return render_template('consulta_vendas.html',
@@ -3454,7 +3447,6 @@ def consulta_vendas_detalhes():
     except Exception as e:
         print(f"Erro em consulta_vendas_detalhes: {e}")
         error = f"Erro interno: {e}"
-        import traceback
         traceback.print_exc()
 
     return render_template('consulta_vendas_detalhes.html',
@@ -4044,7 +4036,6 @@ def reimprimir_comprovante_txt():
 
     except Exception as e:
         print(f"Erro ao reimprimir comprovante: {e}")
-        import traceback
         traceback.print_exc()
         return jsonify({'status': 'error', 'message': f'Erro interno: {e}'})
 
@@ -4340,7 +4331,6 @@ def gerar_cartelas_pdf_25():
 
     except Exception as e:
         print(f"ERRO CRÍTICO ao gerar PDF 25: {e}")
-        import traceback
         traceback.print_exc()
         return f"Erro interno: {e}"
 
@@ -4467,7 +4457,6 @@ def gerar_cartelas_pdf_15():
 
     except Exception as e:
         print(f"ERRO CRÍTICO ao gerar PDF 15: {e}")
-        import traceback
         traceback.print_exc()
         return f"Erro interno: {e}"
 
@@ -4649,7 +4638,6 @@ def registrar_transacao_cliente(db, id_cliente, valor, tipo, descricao, id_event
 
     except Exception as e:
         print(f"❌ [FALHA CRÍTICA FINANCEIRA] Erro ao registrar transação do cliente {id_cliente}: {e}")
-        import traceback
         traceback.print_exc()
         return False, str(e)
 
@@ -5188,7 +5176,6 @@ def financeiro_evento():
 
     except Exception as e:
         print(f"Erro financeiro_evento: {e}")
-        import traceback
         traceback.print_exc()
         return redirect(url_for('financeiro_evento', error=f"Erro interno: {e}"))
 
@@ -5401,7 +5388,6 @@ def previa_replicacao():
         return jsonify({"previa": lista_previa})
 
     except Exception as e:
-        import traceback
         traceback.print_exc() # Imprime a stack trace completa no console para ajudar no debug
         return jsonify({"error": "Erro interno ao calcular horários."}), 500
 
@@ -5434,34 +5420,33 @@ def gravar_replicacao():
             raise ValueError("Evento molde não localizado.")
 
         # Data Base
-        base_dt = datetime.strptime(f"{evento_molde['data_evento']} {evento_molde['hora_evento']}", "%d/%m/%Y %H:%M")
+        data_molde = evento_molde.get('data_evento', '')
+        hora_molde = evento_molde.get('hora_evento', '')
+        base_dt = datetime.strptime(f"{data_molde} {hora_molde}", "%d/%m/%Y %H:%M")
         
-        # Resgatar e formatar o prémio para a nova descrição
-        # Trata o Decimal128 caso venha do Mongo
+        # Resgatar e formatar o prémio
         premio_bruto = evento_molde.get('premio_total', Decimal128("0.00"))
         if isinstance(premio_bruto, Decimal128):
             premio_bruto = float(premio_bruto.to_decimal())
         
-        # Formatação: 1500.0 -> "1.500,00" (Ajuste padrão brasileiro de moeda)
         premio_formatado = f"{premio_bruto:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
         eventos_para_inserir = []
 
-        # --- BUSCA PARÂMETROS E MODO TREINO (FORA DO LOOP - OTIMIZADO) ---
+        # Parâmetros e Modo Treino
         params = db.parametros.find_one({})
         modo_treino = params.get('em_treinamento', False) if params else False
 
-        # --- BUSCA VENDAS DO MOLDE (ADICIONADO: A busca que faltava!) ---
+        # Busca vendas originais do molde (CORRIGIDO COM COLCHETES)
         vendas_originais = []
         if modo_treino:
             col_vendas_molde = f"vendas{id_evento_molde}"
             vendas_originais = list(db[col_vendas_molde].find({}))
 
-        # --- FORA DO LOOP i (Otimização Máxima) ---
         ponteiro_geral_cartela = int(evento_molde.get('numero_inicial', 1))
         unidade_venda_fixa = int(evento_molde.get('unidade_de_venda', 1))
 
-        # Pré-processamos as vendas do molde para saber o "tamanho" de cada uma
+        # Pré-processa as vendas
         vendas_pre_calculadas = []
         if modo_treino and vendas_originais:
             for v in vendas_originais:
@@ -5469,14 +5454,12 @@ def gravar_replicacao():
                 t_cartelas = v.get('quantidade_cartelas', qtd_kits * unidade_venda_fixa)
                 vendas_pre_calculadas.append({'dados': v, 'tamanho': t_cartelas})
 
-
-        # Início do Loop de Replicação
+        # Início do Loop
         for i in range(1, qtd + 1):
             novo_dt = base_dt + timedelta(minutes=intervalo_minutos * i)
             data_str = novo_dt.strftime("%d/%m/%Y")
             hora_str = novo_dt.strftime("%H:%M")
 
-            # Verificação de conflito (Mantém dentro pois a data muda a cada volta)
             if db.eventos.find_one({"data_evento": data_str, "hora_evento": hora_str}):
                 return redirect(url_for('cadastro_evento', view='alterar', id_evento=id_evento_molde, 
                                         error=f"Conflito de horário detectado em {data_str} {hora_str}. Cancelado."))
@@ -5485,7 +5468,8 @@ def gravar_replicacao():
             nova_descricao = f"{novo_dt.strftime('%d/%m')} às {hora_str} - R$ {premio_formatado}"
 
             novo_evento = evento_molde.copy()
-            if '_id' in novo_evento: del novo_evento['_id']
+            if '_id' in novo_evento: 
+                del novo_evento['_id']
 
             novo_evento.update({
                 "id_evento": novo_id,
@@ -5500,10 +5484,11 @@ def gravar_replicacao():
                 "id_colaborador": session.get('id_colaborador', 'N/A')
             })
 
-            # Adiciona na lista para o Bulk Insert final
             eventos_para_inserir.append(novo_evento)
             
-            # --- LÓGICA DE CLONE DE VENDAS (TREINAMENTO) ---
+            proxima_venda_fixo = int(evento_molde.get('numero_inicial', 1))
+
+            # --- CLONE DE VENDAS (TREINAMENTO) ---
             if modo_treino and vendas_pre_calculadas:
                 vendas_clonadas_da_replica = []
         
@@ -5512,48 +5497,45 @@ def gravar_replicacao():
                     t_cartelas = item['tamanho']
             
                     v_clone = v.copy()
-                    if '_id' in v_clone: del v_clone['_id']
+                    if '_id' in v_clone: 
+                        del v_clone['_id']
             
                     v_clone.update({
                         'id_evento': novo_id,
                         'data_venda': novo_dt,
-                        'numero_inicial': ponteiro_geral_cartela,
-                        'numero_final': ponteiro_geral_cartela + t_cartelas - 1,
-                        'id_venda': f"T{novo_id}-{ponteiro_geral_cartela}"
+                        'numero_inicial': v.get('numero_inicial'), # Puxa o original do clone
+                        'numero_final': v.get('numero_final'),     # Puxa o original do clone
+                        'id_venda': f"T{novo_id}-{v.get('numero_inicial')}"
                     })
             
                     vendas_clonadas_da_replica.append(v_clone)
-            
-                    # =========================================================
-                    # INCREMENTO CRÍTICO EM STAND-BY
-                    # Desabilitado temporariamente para evitar a quebra do limite de numeração.
-                    # Quando for reativar, a lógica do limite máximo entrará aqui.
-                    # =========================================================
-                    # ponteiro_geral_cartela += t_cartelas
-                    # =========================================================
+
+                    proxima_venda_fixo = int(v.get('numero_final', 0)) + 1
         
-                # Insere as vendas e atualiza o controle_venda para esta réplica
+                # Insere vendas clonadas na tabela certa (CORRIGIDO COM COLCHETES)
                 if vendas_clonadas_da_replica:
-                    db[f"vendas{novo_id}"].insert_many(vendas_clonadas_da_replica)
+                    nome_colecao_replica = f"vendas{novo_id}"
+                    db[nome_colecao_replica].insert_many(vendas_clonadas_da_replica)
             
+                # Atualiza controle com o valor congelado do molde
                 db.controle_venda.update_one(
                     {'id_evento': novo_id},
-                    {'$set': {'inicial_proxima_venda': ponteiro_geral_cartela}},
+                    {'$set': {'inicial_proxima_venda':  proxima_venda_fixo}},
                     upsert=True
                 )
-        # FIM VENDAS TREINAMENTO        
  
-        # Inserção em Lote (Bulk Insert)
         if eventos_para_inserir:
             db.eventos.insert_many(eventos_para_inserir)
             msg = f"Sucesso! {qtd} evento(s) replicado(s) com o status '{status_replicas}'."
             return redirect(url_for('cadastro_evento', success=msg, view='listar'))
         
         registrar_log("REPLICAR", "EVENTOS", f"Geradas {qtd} réplicas a partir do evento {id_evento_molde}.")
-
         return redirect(url_for('cadastro_evento', view='listar'))
 
     except Exception as e:
+        print("\n--- ERRO NA REPLICAÇÃO ---")
+        traceback.print_exc()
+        print("--------------------------\n")
         return redirect(url_for('cadastro_evento', view='alterar', id_evento=id_evento_molde, error="Falha ao replicar eventos."))
 
 
