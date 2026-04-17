@@ -403,7 +403,10 @@
 
         <div id="view-listar" class="view-content {% if active_view == 'listar' %}active-view-show{% endif %}">
             <h3 class="text-lg font-bold mb-0 -mt-1 text-gray-700">Lista de Eventos (Ordenada por Data)</h3>
-            
+            <p class="text-xs font-bold text-blue-600 mb-1 bg-blue-50 inline-block px-2 py-1 rounded">
+                ⚠️ Exibindo apenas os 100 eventos mais recentes para manter o sistema rápido. Use a aba "Consulta" para localizar eventos antigos.
+            </p>
+           
             <div class="overflow-x-auto shadow-md rounded-lg mt-2">
                 <table class="min-w-full bg-white border border-gray-200">
                     <thead>
@@ -581,8 +584,8 @@
                 <div>
                     <label class="block text-xs font-bold text-gray-600 uppercase mb-1">Status Inicial das Cópias</label>
                     <select id="rep_status" class="form-control">
-                        <option value="paralizado" selected>Paralisado (Padrão e Recomendado)</option>
-                        <option value="ativo">Ativo</option>
+                        <option value="paralizado">Paralisado</option>
+                        <option value="ativo" selected>Ativo (Padrão)</option>
                     </select>
                 </div>
 

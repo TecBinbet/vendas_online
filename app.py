@@ -733,6 +733,104 @@ def buscar_dados_cartela_2d(numero_cartela, tipo_cartela):
     return None
 
 
+def calcular_comissoes_colaborador(db, id_colaborador, id_evento):
+    """
+    Motor financeiro de alta performance usando Aggregation Pipeline.
+    Calcula as 3 regras de comissão em uma única ida ao banco de dados.
+    """
+    try:
+        # 1. Busca as porcentagens configuradas na tabela de parâmetros
+        params = db.parametros.find_one({}) or {}
+        
+        # Converte de Decimal128 para float para os cálculos de multiplicação
+        perc_direta = float(params.get('perc_venda_direta', 0.15).to_decimal()) if hasattr(params.get('perc_venda_direta', ''), 'to_decimal') else 0.15
+        perc_indireta_a = float(params.get('perc_venda_indireta_a', 0.05).to_decimal()) if hasattr(params.get('perc_venda_indireta_a', ''), 'to_decimal') else 0.05
+        perc_indireta_b = float(params.get('perc_venda_indireta_b', 0.10).to_decimal()) if hasattr(params.get('perc_venda_indireta_b', ''), 'to_decimal') else 0.10
+
+        nome_colecao = f"vendas{id_evento}"
+        if nome_colecao not in db.list_collection_names():
+            return {"direta": 0, "indireta_a": 0, "indireta_b": 0, "total": 0, "volume": 0}
+
+        # Garante que o ID do colaborador é inteiro para bater com a gravação da venda
+        colab_id = int(id_colaborador)
+
+        # 2. A Mágica da Agregação (Usa os índices que criamos no Tópico 1)
+        pipeline = [
+            { 
+                # Passo A: Filtra apenas vendas onde o colaborador está envolvido (como vendedor OU dono do cliente)
+                "$match": {
+                    "$or": [
+                        {"id_vendedor": colab_id},
+                        {"id_colaborador": colab_id}
+                    ]
+                }
+            },
+            {
+                # Passo B: Separa os volumes financeiros nas 3 caixas de regras
+                "$group": {
+                    "_id": None,
+                    "vol_direta": {
+                        "$sum": {
+                            "$cond": [
+                                # SE Vendedor == Eu E Dono do Cliente == Eu
+                                {"$and": [{"$eq": ["$id_vendedor", colab_id]}, {"$eq": ["$id_colaborador", colab_id]}]},
+                                {"$toDouble": "$valor_total"}, 0
+                            ]
+                        }
+                    },
+                    "vol_indireta_a": {
+                        "$sum": {
+                            "$cond": [
+                                # SE Vendedor != Eu E Dono do Cliente == Eu (Renda Passiva)
+                                {"$and": [{"$ne": ["$id_vendedor", colab_id]}, {"$eq": ["$id_colaborador", colab_id]}]},
+                                {"$toDouble": "$valor_total"}, 0
+                            ]
+                        }
+                    },
+                    "vol_indireta_b": {
+                        "$sum": {
+                            "$cond": [
+                                # SE Vendedor == Eu E Dono do Cliente != Eu (Venda de balcão de outro colega)
+                                {"$and": [{"$eq": ["$id_vendedor", colab_id]}, {"$ne": ["$id_colaborador", colab_id]}]},
+                                {"$toDouble": "$valor_total"}, 0
+                            ]
+                        }
+                    }
+                }
+            }
+        ]
+
+        resultado = list(db[nome_colecao].aggregate(pipeline))
+        
+        if not resultado:
+            return {"direta": 0, "indireta_a": 0, "indireta_b": 0, "total": 0, "volume": 0}
+
+        totais = resultado[0]
+        
+        # 3. Aplica as porcentagens sobre o volume movimentado
+        comissao_direta = totais.get("vol_direta", 0) * perc_direta
+        comissao_indireta_a = totais.get("vol_indireta_a", 0) * perc_indireta_a
+        comissao_indireta_b = totais.get("vol_indireta_b", 0) * perc_indireta_b
+        
+        total_geral = comissao_direta + comissao_indireta_a + comissao_indireta_b
+        volume_total = totais.get("vol_direta", 0) + totais.get("vol_indireta_a", 0) + totais.get("vol_indireta_b", 0)
+
+        # Devolve os dados empacotados e formatados
+        return {
+            "direta": round(comissao_direta, 2),
+            "indireta_a": round(comissao_indireta_a, 2),
+            "indireta_b": round(comissao_indireta_b, 2),
+            "total": round(total_geral, 2),
+            "volume": round(volume_total, 2)
+        }
+
+    except Exception as e:
+        print(f"[ERRO FINANCEIRO] Falha ao calcular comissões: {e}")
+        return {"direta": 0, "indireta_a": 0, "indireta_b": 0, "total": 0, "volume": 0}
+
+
+
+
 # --- HOOKS DA APLICAÇÃO ---@app.before_request
 @app.before_request
 def before_request():
@@ -2766,7 +2864,8 @@ def cadastro_evento():
     if db_status:
         try:
             total_eventos = db.eventos.count_documents({})
-            if active_view in ['listar', 'exclusao_lote']: eventos_lista = list(db.eventos.find({}).sort([("data_evento", 1), ("hora_evento", 1)]))
+            if active_view in ['listar', 'exclusao_lote']:
+                eventos_lista = list(db.eventos.find({}).sort([("data_evento", 1), ("hora_evento", 1)]).limit(100))
             elif active_view == 'consulta' and search_term:
                 query_filter = {'id_evento': int(search_term)} if search_term.isdigit() else {'$or': [{'descricao': {'$regex': re.compile(re.escape(search_term), re.IGNORECASE)}}, {'data_evento': {'$regex': re.compile(re.escape(search_term), re.IGNORECASE)}}]}
                 eventos_lista = list(db.eventos.find(query_filter).sort("data_evento", -1))
@@ -3062,7 +3161,32 @@ def gravar_evento():
                 "data_ativado": None,
                 "data_cadastro": hora_brasil()
             })
-            db.eventos.insert_one(dados_evento)
+
+            db.eventos.insert_one(dados_evento)               
+            # --- AÇÃO B: AUTOMAÇÃO DE ÍNDICES DE PERFORMANCE ---
+            id_ev_int = dados_evento.get('id_evento')
+            nome_colecao_vendas = f"vendas{id_ev_int}"
+                
+            try:
+                # Cria índices para busca ultra rápida nas comissões
+                # Usamos os campos que você definiu no registro_venda (Ação A)
+                db[nome_colecao_vendas].create_index([("id_vendedor", 1)])
+                db[nome_colecao_vendas].create_index([("id_colaborador", 1)])
+                db[nome_colecao_vendas].create_index([("id_cliente", 1)])
+                    
+                # Índice composto: Otimiza o cálculo das 3 regras de comissão simultaneamente
+                db[nome_colecao_vendas].create_index([
+                    ("id_colaborador", 1), 
+                    ("id_vendedor", 1)
+                ])
+                    
+                if MODO_DEBUG:
+                    print(f"[SISTEMA] Índices de performance criados em {nome_colecao_vendas}")
+                
+            except Exception as e:
+                print(f"Erro ao criar índices automáticos: {e}")
+            # --------------------------------------------------
+
             success_msg = f"Evento '{dados_evento['descricao']}' salvo com sucesso! ID: {novo_id}."
         
         return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
@@ -3339,7 +3463,7 @@ def consulta_vendas_detalhes():
     info_colaborador = "N/A"
     info_tipo_cartela = 25 
     info_telefone_cliente = ''
-    
+
     # --- 1. PREPARA AS TAXAS ---
     default_comissao = g.parametros_globais.get('comissao_padrao', 0)
     comissao_autoatendimento = g.parametros_globais.get('comissao_autoatendimento', 0)
@@ -3410,7 +3534,6 @@ def consulta_vendas_detalhes():
                  
         vendas_cursor = db[nome_colecao_venda].find(query_filter).sort('data_venda', pymongo.DESCENDING)
         
-        # --- LOOP CORRIGIDO COM TAXA MISTA ---
         for venda in vendas_cursor:
             venda['valor_total_float'] = safe_float(venda.get('valor_total'))
             
@@ -3432,23 +3555,19 @@ def consulta_vendas_detalhes():
                 taxa_final = comissao_map.get(colab_id, default_comissao)
                 venda['tipo_taxa'] = 'NORMAL'
 
-            # CÁLCULO
             venda['valor_comissao_float'] = (venda['valor_total_float'] * taxa_final) / 100.0
             
             # Grava a taxa aplicada para exibir na tabela se quiser
             venda['taxa_comissao_aplicada'] = taxa_final
             
             vendas_detalhadas.append(venda)
-        # -------------------------------------
-            
+
         if not vendas_detalhadas:
             error = "Nenhuma venda detalhada encontrada."
-
     except Exception as e:
         print(f"Erro em consulta_vendas_detalhes: {e}")
         error = f"Erro interno: {e}"
         traceback.print_exc()
-
     return render_template('consulta_vendas_detalhes.html',
                            g=g,
                            error=error,
@@ -3460,7 +3579,22 @@ def consulta_vendas_detalhes():
                            info_telefone_cliente=info_telefone_cliente)
 
 
-# Minha Conta
+@app.route('/atualizar_parametros_comissao')
+def atualizar_parametros_comissao():
+    db = get_vendas_db()   
+    resultado = db.parametros.update_one(
+        {}, 
+        {"$set": {
+            "perc_venda_direta": Decimal128("0.15"),
+            "perc_venda_indireta_a": Decimal128("0.05"),
+            "perc_venda_indireta_b": Decimal128("0.10")
+        }},
+        upsert=True
+    )  
+    return f"Parâmetros de comissão atualizados em Decimal128! Modificados: {resultado.modified_count}"
+
+
+# Minha Conta xxx
 # --- ATUALIZAÇÃO DA ROTA MINHA CONTA ---
 @app.route('/minha_conta', methods=['GET'])
 @login_required
@@ -3469,121 +3603,122 @@ def minha_conta():
     if db is None: return redirect(url_for('login'))
 
     nivel_usuario = session.get('nivel', 1)
-    # Se for admin (nivel 3), pode ver a conta de outros se passar o parametro
     id_logado_session = session.get('id_colaborador')
-    nick_logado_session = session.get('nick')
     
-    # ID do colaborador alvo da consulta
+    # ID do colaborador alvo (Admin pode ver outros)
     target_id_colaborador = request.args.get('target_id', id_logado_session)
-    
-    # Se tentar ver outro sem ser admin, força o próprio
     if str(target_id_colaborador) != str(id_logado_session) and nivel_usuario < 3:
         target_id_colaborador = id_logado_session
 
-    # Conversão segura para int
     try:
-        target_id_colaborador_int = int(target_id_colaborador)
+        target_id_int = int(target_id_colaborador)
     except:
-        target_id_colaborador_int = None
+        return redirect(url_for('menu_operacoes', error="ID de colaborador inválido."))
 
-    # Busca dados do colaborador alvo (para pegar comissão e nick correto)
-    colaborador_alvo = db.colaboradores.find_one({'id_colaborador': target_id_colaborador_int})
+    colaborador_alvo = db.colaboradores.find_one({'id_colaborador': target_id_int})
     if not colaborador_alvo:
         return redirect(url_for('menu_operacoes', error="Colaborador não encontrado."))
 
-    taxa_comissao = colaborador_alvo.get('comissao', g.parametros_globais.get('comissao_padrao', 20))
-    
-    # Lista de colaboradores para o dropdown (apenas se admin)
-    colaboradores_para_selecao = []
-    if nivel_usuario > 1:
-        colaboradores_para_selecao = list(db.colaboradores.find({}, {'id_colaborador': 1, 'nick': 1}).sort('nick', 1))
+    # 1. BUSCA PARÂMETROS DE COMISSÃO
+    params = db.parametros.find_one({}) or {}
+    def get_perc(key, default):
+        val = params.get(key)
+        return float(val.to_decimal()) if hasattr(val, 'to_decimal') else default
 
-    # Eventos Ativos para o Dropdown
-    eventos_ativos = list(db.eventos.find({'status': 'ativo'}).sort('data_evento', pymongo.ASCENDING))
+    p_direta = get_perc('perc_venda_direta', 0.15)
+    p_ind_a = get_perc('perc_venda_indireta_a', 0.05)
+    p_ind_b = get_perc('perc_venda_indireta_b', 0.10)
+
+    # Listas para filtros
+    colaboradores_selecao = list(db.colaboradores.find({}, {'id_colaborador': 1, 'nick': 1}).sort('nick', 1)) if nivel_usuario > 1 else []
+    eventos_ativos = list(db.eventos.find({'status': 'ativo'}).sort('id_evento', -1))
     
-    # Dados Financeiros (Inicializa zerado)
-    resumo_financeiro = {
-        'total_vendas_qty': 0,
-        'total_vendas_valor': 0.0,
-        'comissao_valor': 0.0,
-        'total_pago': 0.0,
-        'saldo_devedor': 0.0
+    # Captura de Filtros (Evento ou Período)
+    id_evento_selected = request.args.get('id_evento')
+    data_inicio_raw = request.args.get('data_inicio')
+    data_fim_raw = request.args.get('data_fim')
+    
+    # Inicialização do Resumo Consolidado
+    resumo = {
+        'vol_direto': 0.0, 'com_direta': 0.0,
+        'vol_ind_a': 0.0, 'com_ind_a': 0.0,
+        'vol_ind_b': 0.0, 'com_ind_b': 0.0,
+        'total_comissao': 0.0, 'total_pago': 0.0, 'saldo_devedor': 0.0, 'total_vendas_valor': 0.0,
+        'eventos_processados': 0
     }
     historico_pagamentos = []
-    
-    id_evento_selected = request.args.get('id_evento')
+    lista_ids_eventos = []
     evento_selecionado = None
 
-    if id_evento_selected:
-        try:
-            id_evento_int = int(id_evento_selected)
-            evento_selecionado = db.eventos.find_one({'id_evento': id_evento_int})
+    try:
+        # 2. DEFINIÇÃO DO ESCOPO DE BUSCA
+        if data_inicio_raw and data_fim_raw:
+            # Modo Período
+            dt_ini = datetime.strptime(data_inicio_raw, '%Y-%m-%dT%H:%M')
+            dt_fim = datetime.strptime(data_fim_raw, '%Y-%m-%dT%H:%M')
+            eventos_no_periodo = db.eventos.find({"data_hora_evento": {"$gte": dt_ini, "$lte": dt_fim}}, {"id_evento": 1})
+            lista_ids_eventos = [e['id_evento'] for e in eventos_no_periodo]
             
-            if evento_selecionado:
-                nome_colecao_vendas = f"vendas{id_evento_int}"
-                nome_colecao_pagtos = f"pagamentos{id_evento_int}"
-                
-                # 1. Agregação de Vendas
-                if nome_colecao_vendas in db.list_collection_names():
-                    pipeline_vendas = [
-                        {'$match': {'id_colaborador': target_id_colaborador_int}},
-                        {'$group': {
-                            '_id': None,
-                            'total_qty': {'$sum': '$quantidade_unidades'},
-                            'total_val': {'$sum': '$valor_total'}
-                        }}
-                    ]
-                    res_vendas = list(db[nome_colecao_vendas].aggregate(pipeline_vendas))
-                    if res_vendas:
-                        resumo_financeiro['total_vendas_qty'] = res_vendas[0]['total_qty']
-                        resumo_financeiro['total_vendas_valor'] = safe_float(res_vendas[0]['total_val'])
-                
-                # 2. Cálculo de Comissão
-                resumo_financeiro['comissao_valor'] = (resumo_financeiro['total_vendas_valor'] * taxa_comissao) / 100.0
-                
-                # 3. Agregação de Pagamentos
-                if nome_colecao_pagtos in db.list_collection_names():
-                    # Lista Detalhada
-                    historico_pagamentos = list(db[nome_colecao_pagtos].find(
-                        {'id_colaborador': target_id_colaborador_int}
-                    ).sort('data_hora', pymongo.DESCENDING))
-                    
-                    # Soma Total Pago
-                    pipeline_pagtos = [
-                        {'$match': {'id_colaborador': target_id_colaborador_int}},
-                        {'$group': {
-                            '_id': None,
-                            'total_pago': {'$sum': '$valor_pago'}
-                        }}
-                    ]
-                    res_pagtos = list(db[nome_colecao_pagtos].aggregate(pipeline_pagtos))
-                    if res_pagtos:
-                        resumo_financeiro['total_pago'] = safe_float(res_pagtos[0]['total_pago'])
+            # Cria um "evento fake" só para mostrar o título na tela
+            evento_selecionado = {'descricao': f"Período: {dt_ini.strftime('%d/%m/%Y')} a {dt_fim.strftime('%d/%m/%Y')}", 'id_evento': 'Vários'}
+            
+        elif id_evento_selected:
+            # Modo Evento Único
+            lista_ids_eventos = [int(id_evento_selected)]
+            evento_selecionado = db.eventos.find_one({'id_evento': int(id_evento_selected)})
 
-                # 4. Cálculo do Saldo Devedor (Total Vendas - Total Pago)
-                # OBS: O saldo devedor é sobre o bruto. A comissão é lucro do colab, mas aqui calculamos o acerto com a banca.
-                # Se a regra for pagar o líquido, altere aqui. Assumindo que paga o Bruto e recebe comissão ou abate depois.
-                # Lógica Padrão: Deve pagar o que vendeu.
-                resumo_financeiro['saldo_devedor'] = resumo_financeiro['total_vendas_valor'] - resumo_financeiro['total_pago']
+        # 3. CONSOLIDAÇÃO MULTI-TABELAS
+        for id_ev in lista_ids_eventos:
+            nome_col_vendas = f"vendas{id_ev}"
+            nome_col_pagtos = f"pagamentos{id_ev}"
 
-        except Exception as e:
-            print(f"Erro ao calcular financeiro: {e}")
+            # Soma Vendas do Evento
+            if nome_col_vendas in db.list_collection_names():
+                pipeline = [
+                    { "$match": { "$or": [{"id_vendedor": target_id_int}, {"id_colaborador": target_id_int}] } },
+                    { "$group": {
+                        "_id": None,
+                        "vd_vol": { "$sum": { "$cond": [{"$and": [{"$eq": ["$id_vendedor", target_id_int]}, {"$eq": ["$id_colaborador", target_id_int]}]}, {"$toDouble": "$valor_total"}, 0] } },
+                        "ia_vol": { "$sum": { "$cond": [{"$and": [{"$ne": ["$id_vendedor", target_id_int]}, {"$eq": ["$id_colaborador", target_id_int]}]}, {"$toDouble": "$valor_total"}, 0] } },
+                        "ib_vol": { "$sum": { "$cond": [{"$and": [{"$eq": ["$id_vendedor", target_id_int]}, {"$ne": ["$id_colaborador", target_id_int]}]}, {"$toDouble": "$valor_total"}, 0] } }
+                    }}
+                ]
+                res = list(db[nome_col_vendas].aggregate(pipeline))
+                if res:
+                    d = res[0]
+                    resumo['vol_direto'] += d['vd_vol']
+                    resumo['vol_ind_a'] += d['ia_vol']
+                    resumo['vol_ind_b'] += d['ib_vol']
+                    resumo['eventos_processados'] += 1
 
-    # Formata datas do histórico
-    for pag in historico_pagamentos:
-        if '_id' in pag: pag['_id'] = str(pag['_id'])
-        if 'data_hora' in pag and isinstance(pag['data_hora'], datetime):
-            pag['data_hora_fmt'] = pag['data_hora'].strftime("%d/%m/%Y %H:%M")
+            # Soma Pagamentos do Evento
+            if nome_col_pagtos in db.list_collection_names():
+                pagtos_evento = list(db[nome_col_pagtos].find({'id_colaborador': target_id_int}))
+                for p in pagtos_evento:
+                    resumo['total_pago'] += safe_float(p.get('valor_pago', 0))
+                    p['data_hora_fmt'] = p['data_hora'].strftime("%d/%m/%Y %H:%M") if isinstance(p.get('data_hora'), datetime) else "N/A"
+                    historico_pagamentos.append(p)
+
+        # 4. CÁLCULO FINAL DAS COMISSÕES
+        resumo['com_direta'] = resumo['vol_direto'] * p_direta
+        resumo['com_ind_a'] = resumo['vol_ind_a'] * p_ind_a
+        resumo['com_ind_b'] = resumo['vol_ind_b'] * p_ind_b
+        resumo['total_comissao'] = resumo['com_direta'] + resumo['com_ind_a'] + resumo['com_ind_b']
+        resumo['total_vendas_valor'] = resumo['vol_direto'] + resumo['vol_ind_b']
+        resumo['saldo_devedor'] = resumo['total_vendas_valor'] - resumo['total_pago']
+
+        # Ordena pagamentos do mais recente para o mais antigo
+        historico_pagamentos.sort(key=lambda x: x.get('data_hora', datetime.min), reverse=True)
+
+    except Exception as e:
+        print(f"Erro na consolidação financeira: {e}")
 
     return render_template('minha_conta.html', 
-                           nivel=nivel_usuario, 
-                           colaboradores=colaboradores_para_selecao,
-                           target_colab=colaborador_alvo, # Objeto completo do alvo
-                           eventos=eventos_ativos,
-                           evento_selecionado=evento_selecionado,
-                           financeiro=resumo_financeiro,
-                           pagamentos=historico_pagamentos,
-                           g=g)
+                           nivel=nivel_usuario, colaboradores=colaboradores_selecao,
+                           target_colab=colaborador_alvo, eventos=eventos_ativos,
+                           evento_selecionado=evento_selecionado, financeiro=resumo,
+                           pagamentos=historico_pagamentos, g=g)
+
 
 
 # --- NOVA ROTA: REGISTRAR PAGAMENTO ---
@@ -5398,6 +5533,7 @@ def gravar_replicacao():
     """
     Rota final que grava as cópias caso o operador confirme.
     Refaz a verificação de segurança por precaução.
+    INCLUI: Criação automática de Índices de Alta Performance para cada réplica.
     """
     if session.get('nivel', 0) < 3:
         return redirect(url_for('menu_operacoes', error="Acesso Negado."))
@@ -5437,7 +5573,7 @@ def gravar_replicacao():
         params = db.parametros.find_one({})
         modo_treino = params.get('em_treinamento', False) if params else False
 
-        # Busca vendas originais do molde (CORRIGIDO COM COLCHETES)
+        # Busca vendas originais do molde
         vendas_originais = []
         if modo_treino:
             col_vendas_molde = f"vendas{id_evento_molde}"
@@ -5488,6 +5624,26 @@ def gravar_replicacao():
             
             proxima_venda_fixo = int(evento_molde.get('numero_inicial', 1))
 
+            # ==========================================================
+            # AÇÃO B (AUTOMAÇÃO): CRIAÇÃO DOS ÍNDICES PARA A NOVA RÉPLICA
+            # ==========================================================
+            nome_colecao_replica = f"vendas{novo_id}"
+            try:
+                # Criamos os índices independentemente de ter vendas clonadas ou não,
+                # pois essa tabela receberá vendas futuras e precisará ser rápida no painel de comissões.
+                db[nome_colecao_replica].create_index([("id_vendedor", 1)])
+                db[nome_colecao_replica].create_index([("id_colaborador", 1)])
+                db[nome_colecao_replica].create_index([("id_cliente", 1)])
+                db[nome_colecao_replica].create_index([
+                    ("id_colaborador", 1), 
+                    ("id_vendedor", 1)
+                ])
+                if MODO_DEBUG:
+                    print(f"[SISTEMA] Índices criados para réplica {nome_colecao_replica}")
+            except Exception as e:
+                print(f"[ERRO] Falha ao criar índices para réplica {nome_colecao_replica}: {e}")
+            # ==========================================================
+
             # --- CLONE DE VENDAS (TREINAMENTO) ---
             if modo_treino and vendas_pre_calculadas:
                 vendas_clonadas_da_replica = []
@@ -5512,9 +5668,8 @@ def gravar_replicacao():
 
                     proxima_venda_fixo = int(v.get('numero_final', 0)) + 1
         
-                # Insere vendas clonadas na tabela certa (CORRIGIDO COM COLCHETES)
+                # Insere vendas clonadas na tabela certa
                 if vendas_clonadas_da_replica:
-                    nome_colecao_replica = f"vendas{novo_id}"
                     db[nome_colecao_replica].insert_many(vendas_clonadas_da_replica)
             
                 # Atualiza controle com o valor congelado do molde
@@ -5526,14 +5681,15 @@ def gravar_replicacao():
  
         if eventos_para_inserir:
             db.eventos.insert_many(eventos_para_inserir)
+            registrar_log("REPLICAR", "EVENTOS", f"Geradas {qtd} réplicas a partir do evento {id_evento_molde}.")
             msg = f"Sucesso! {qtd} evento(s) replicado(s) com o status '{status_replicas}'."
             return redirect(url_for('cadastro_evento', success=msg, view='listar'))
         
-        registrar_log("REPLICAR", "EVENTOS", f"Geradas {qtd} réplicas a partir do evento {id_evento_molde}.")
         return redirect(url_for('cadastro_evento', view='listar'))
 
     except Exception as e:
         print("\n--- ERRO NA REPLICAÇÃO ---")
+        import traceback
         traceback.print_exc()
         print("--------------------------\n")
         return redirect(url_for('cadastro_evento', view='alterar', id_evento=id_evento_molde, error="Falha ao replicar eventos."))

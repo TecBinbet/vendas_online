@@ -25,9 +25,9 @@
         body { font-family: 'Inter', sans-serif; background-color: #F3F4F6; }
         .container { max-width: 800px; margin: 5px auto; padding: 10px; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 15px; }
-        .stat-card { text-align: center; padding: 5px; border-radius: 8px; background-color: #F9FAFB; border: 1px solid #E5E7EB; }
-        .stat-value { font-size: 1.25rem; font-weight: 800; color: #1F2937; }
-        .stat-label { font-size: 0.75rem; color: #6B7280; text-transform: uppercase; font-weight: 600; }
+        .stat-card { text-align: center; padding: 10px 5px; border-radius: 8px; background-color: #F9FAFB; border: 1px solid #E5E7EB; }
+        .stat-value { font-size: 1.15rem; font-weight: 900; color: #1F2937; line-height: 1.2;}
+        .stat-label { font-size: 0.70rem; color: #6B7280; text-transform: uppercase; font-weight: 700; margin-top: 4px; line-height: 1.1;}
         
         /* Modal Styles */
         .modal-overlay {
@@ -57,19 +57,19 @@
     <div class="bg-primary text-white shadow mb-1 sticky top-0 z-50">
         <div class="container mx-auto flex justify-between items-center">
             <h1 class="text-lg font-bold">Minha Conta</h1>
-            <a href="{{ url_for('menu_operacoes') }}" class="text-xs bg-white text-primary px-6 py-1 rounded font-bold hover:bg-gray-100">Voltar</a>
+            <a href="{{ url_for('menu_operacoes') }}" class="text-xs bg-white text-primary px-6 py-1 rounded font-bold hover:bg-gray-100 transition">Voltar</a>
         </div>
     </div>
 
     <div class="container">
         
         {% if request.args.get('error') %}
-            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-1 rounded -mt-2 text-sm font-bold">
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded mb-3 text-sm font-bold shadow-sm">
                 {{ request.args.get('error') }}
             </div>
         {% endif %}
         {% if request.args.get('success') %}
-            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-1 rounded -mt-2 text-sm font-bold">
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-2 rounded mb-3 text-sm font-bold shadow-sm">
                 {{ request.args.get('success') }}
             </div>
         {% endif %}
@@ -80,8 +80,8 @@
                     
                     {% if nivel > 1 %}
                         <div>
-                            <label class="block text-gray-500 text-xs font-bold uppercase mb-1">Visualizar Conta De:</label>
-                            <select name="target_id" class="w-full p-2 border rounded bg-gray-50 text-sm font-semibold" onchange="this.form.submit()">
+                            <label class="block text-gray-500 text-[10px] font-black uppercase tracking-wider mb-1">Visualizar Conta De:</label>
+                            <select name="target_id" class="w-full p-2 border border-gray-300 rounded bg-gray-50 text-sm font-bold text-gray-700 focus:ring-2 focus:ring-primary outline-none" onchange="this.form.submit()">
                                 <option value="{{ session['id_colaborador'] }}" {% if target_colab.id_colaborador == session['id_colaborador']|int %}selected{% endif %}>
                                     Eu ({{ session['nick'] }})
                                 </option>
@@ -96,19 +96,35 @@
                             </select>
                         </div>
                     {% else %}
-                       <div class="flex justify-between items-center">
-                           <span class="font-bold text-gray-700">{{ target_colab.nick }}</span>
-                           <span class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">Nível {{ nivel }}</span>
+                       <div class="flex justify-between items-center bg-gray-50 p-2 rounded border border-gray-200">
+                           <span class="font-black text-gray-800">{{ target_colab.nick }}</span>
+                           <span class="text-[10px] font-black uppercase tracking-wider bg-blue-100 text-blue-800 px-2 py-1 rounded">Nível {{ nivel }}</span>
                        </div>
                     {% endif %}
+                    
                     <input type="hidden" id="base-http-apk" value="{{ g.parametros_globais.http_apk }}">
 
+                    <div class="mb-4 flex gap-2 p-1 bg-gray-100 rounded-lg">
+                        <button type="button" onclick="setFiltro('unico')" id="btn-filtro-unico" class="flex-1 py-1.5 text-[10px] font-black uppercase rounded-md shadow-sm bg-white text-blue-600">Evento Único</button>
+                        <button type="button" onclick="setFiltro('periodo')" id="btn-filtro-periodo" class="flex-1 py-1.5 text-[10px] font-black uppercase rounded-md text-gray-500">Por Período</button>
+                    </div>
 
+                    <div id="campos-periodo" class="hidden grid grid-cols-2 gap-2 mb-3">
+                        <div>
+                            <label class="text-[9px] font-bold text-gray-400 uppercase">Início</label>
+                            <input type="datetime-local" name="data_inicio" class="w-full p-2 text-xs border rounded-lg">
+                        </div>
+                        <div>
+                            <label class="text-[9px] font-bold text-gray-400 uppercase">Fim</label>
+                            <input type="datetime-local" name="data_fim" class="w-full p-2 text-xs border rounded-lg">
+                        </div>
+                        <button type="submit" class="col-span-2 bg-blue-600 text-white font-black py-2 rounded-lg text-xs uppercase">📊 Gerar Relatório Consolidado</button>
+                    </div>
 
                     <div>
-                        <label class="block text-gray-500 text-xs font-bold uppercase mb-1">Selecionar Evento para Balanço:</label>
-                        <select name="id_evento" class="w-full p-2 border border-blue-300 rounded bg-white text-lg font-semibold text-blue-900" onchange="this.form.submit()">
-                            <option value="">-- Selecione um Evento --</option>
+                        <label class="block text-gray-500 text-[10px] font-black uppercase tracking-wider mb-1">Selecionar Evento para Balanço:</label>
+                        <select name="id_evento" class="w-full p-2 border-2 border-blue-400 rounded-lg bg-blue-50 text-base font-bold text-blue-900 focus:ring-2 focus:ring-blue-500 outline-none" onchange="this.form.submit()">
+                            <option value="">-- Escolha um Evento --</option>
                             {% for evento in eventos %}
                                 <option value="{{ evento.id_evento }}" {% if evento_selecionado and evento.id_evento == evento_selecionado.id_evento %}selected{% endif %}>
                                     {{ evento.data_evento }} - {{ evento.descricao }}
@@ -119,96 +135,125 @@
                 </div>
             </form>
             
-            <div class="-mt-2 pt-4 border-t border-dashed">
+            <div class="mt-4 pt-4 border-t border-dashed border-gray-300">
                 <button onclick="acionarGeracaoLink()" 
-                        class="w-full bg-gray-200 hover:bg-green-300 text-gray-700 font-semibold py-3 rounded flex items-center justify-center gap-2 text-sm transition">
-                    <span>🔗</span> Gerar Link de Cadastro/Venda
+                        class="w-full bg-gray-100 hover:bg-green-100 border border-gray-300 hover:border-green-400 text-gray-700 hover:text-green-800 font-bold py-3 rounded-lg flex items-center justify-center gap-2 text-sm transition transform active:scale-95 shadow-sm">
+                    <span class="text-lg">🔗</span> Gerar Link de Cadastro / Venda
                 </button>
             </div>
         </div>
 
         {% if evento_selecionado %}
-            <div class="card bg-gradient-to-b from-white to-blue-50">
-                <h3 class="text-gray-700 font-bold mb-2 flex items-center gap-2 -mt-4">
-                    📊 Balanço: <span class="text-blue-600">{{ evento_selecionado.descricao }}</span>
+            <div class="card bg-white border-t-4 border-t-blue-500 shadow-md">
+                <h3 class="text-gray-800 font-black text-lg mb-4 flex items-center gap-2 border-b pb-2">
+                    <span>📊</span> Resumo: <span class="text-blue-600">{{ evento_selecionado.descricao }}</span>
                 </h3>
                 
-                <div class="grid grid-cols-2 md:grid-cols-4 gap-1 mb-1">
-                    <div class="stat-card border-blue-200">
-                        <div class="stat-value text-blue-600">{{ financeiro.total_vendas_qty }}</div>
-                        <div class="stat-label">Vendas (Qtd)</div>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-2 mb-4">
+                    <div class="stat-card border-blue-200 bg-blue-50">
+                        <div class="stat-value text-blue-700">R$ {{ financeiro.total_vendas_valor | format_moeda }}</div>
+                        <div class="stat-label" title="Soma das vendas feitas fisicamente no seu caixa">Movimentação Caixa</div>
                     </div>
-                    <div class="stat-card border-blue-200">
-                        <div class="stat-value text-blue-600">R$ {{ financeiro.total_vendas_valor | format_moeda }}</div>
-                        <div class="stat-label">Total Vendas</div>
-                    </div>
-                    <div class="stat-card border-green-200 bg-green-50">
-                        <div class="stat-value text-green-600">R$ {{ financeiro.comissao_valor | format_moeda }}</div>
+                    <div class="stat-card border-green-300 bg-green-50 shadow-sm relative overflow-hidden">
+                        <div class="absolute top-0 left-0 w-1 h-full bg-green-500"></div>
+                        <div class="stat-value text-green-700">R$ {{ financeiro.total_comissao | format_moeda }}</div>
                         <div class="stat-label">Minha Comissão</div>
                     </div>
-                    
-                    <div class="stat-card border-yellow-200 bg-yellow-50">
-                        <div class="stat-value text-yellow-600">R$ {{ financeiro.total_pago | format_moeda }}</div>
-                        <div class="stat-label">Total Pago</div>
+                    <div class="stat-card border-gray-200 bg-gray-50">
+                        <div class="stat-value text-gray-600">R$ {{ financeiro.total_pago | format_moeda }}</div>
+                        <div class="stat-label">Já Pago à Banca</div>
+                    </div>
+                    <div class="stat-card border-red-200 bg-red-50">
+                        <div class="stat-value {% if financeiro.saldo_devedor > 0 %}text-red-600{% else %}text-green-600{% endif %}">
+                            R$ {{ financeiro.saldo_devedor | format_moeda }}
+                        </div>
+                        <div class="stat-label">Acerto (A Pagar)</div>
                     </div>
                 </div>
 
-                <div class="bg-white p-2 rounded-lg border border-red-200 shadow-sm flex justify-between items-center mb-2">
-                    <span class="text-gray-500 font-bold text-sm uppercase">Saldo Devedor (A Pagar):</span>
-                    <span class="text-xl font-black {% if financeiro.saldo_devedor > 0 %}text-red-600{% else %}text-green-600{% endif %}">
-                        R$ {{ financeiro.saldo_devedor | format_moeda }}
-                    </span>
+                <div class="bg-gray-50 border border-gray-200 rounded-xl p-3 mb-5 shadow-inner">
+                    <h4 class="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 flex items-center gap-1">
+                        <span>🔍</span> Origem dos seus Ganhos
+                    </h4>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div class="bg-white p-2.5 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm">
+                            <div>
+                                <p class="text-[11px] font-black text-gray-700 uppercase leading-tight">Venda Direta</p>
+                                <p class="text-[10px] text-gray-400 font-semibold mt-0.5">Vol: R$ {{ financeiro.vol_direto | format_moeda }}</p>
+                            </div>
+                            <span class="text-sm font-black text-green-600 bg-green-50 px-2 py-1 rounded">+ R$ {{ financeiro.com_direta | format_moeda }}</span>
+                        </div>
+
+                        <div class="bg-white p-2.5 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm">
+                            <div>
+                                <p class="text-[11px] font-black text-gray-700 uppercase leading-tight" title="Clientes seus que compraram pelo app ou com outros caixas">Indireta (Passiva)</p>
+                                <p class="text-[10px] text-gray-400 font-semibold mt-0.5">Vol: R$ {{ financeiro.vol_ind_a | format_moeda }}</p>
+                            </div>
+                            <span class="text-sm font-black text-green-600 bg-green-50 px-2 py-1 rounded">+ R$ {{ financeiro.com_ind_a | format_moeda }}</span>
+                        </div>
+
+                        <div class="bg-white p-2.5 rounded-lg border border-gray-200 flex justify-between items-center shadow-sm">
+                            <div>
+                                <p class="text-[11px] font-black text-gray-700 uppercase leading-tight" title="Clientes de outros caixas que compraram com você">Indireta (Balcão)</p>
+                                <p class="text-[10px] text-gray-400 font-semibold mt-0.5">Vol: R$ {{ financeiro.vol_ind_b | format_moeda }}</p>
+                            </div>
+                            <span class="text-sm font-black text-green-600 bg-green-50 px-2 py-1 rounded">+ R$ {{ financeiro.com_ind_b | format_moeda }}</span>
+                        </div>
+                    </div>
                 </div>
 
-                <div class="flex gap-2">
-                    <a href="{{ url_for('consulta_vendas_detalhes', id_evento=evento_selecionado.id_evento,                     id_colaborador=target_colab.id_colaborador) }}" 
+                <div class="flex gap-3">
+                    <a href="{{ url_for('consulta_vendas_detalhes', id_evento=evento_selecionado.id_evento, id_colaborador=target_colab.id_colaborador) }}" 
                        onclick="return ativarLoadingLink(this, 'Carregando relatório...')"
-                       class="flex-1 bg-blue-600 text-white text-center py-2 rounded font-bold hover:bg-blue-700 text-sm">
-                        📄 Ver Vendas Detalhadas                    
+                       class="flex-1 bg-white border-2 border-blue-600 text-blue-700 text-center py-2.5 rounded-lg font-black hover:bg-blue-50 transition text-sm flex justify-center items-center gap-2">
+                        <span>📄</span> Extrato Detalhado                    
                     </a>        
             
                     {% if financeiro.saldo_devedor > 0 %}
-                    <button onclick="openPaymentModal({{ financeiro.saldo_devedor }})" 
-                            class="flex-1 bg-green-600 text-white py-2 rounded font-bold hover:bg-green-700 text-sm shadow-lg animate-pulse">
-                        💸 Informar Pagamento
-                    </button>
+                        <button onclick="openPaymentModal({{ financeiro.saldo_devedor }})" 
+                                class="flex-1 bg-green-600 text-white py-2.5 rounded-lg font-black hover:bg-green-700 transition text-sm shadow-md flex justify-center items-center gap-2">
+                            <span>💸</span> Prestar Contas (Pagar)
+                        </button>
                     {% else %}
-                    <button disabled class="flex-1 bg-gray-300 text-gray-500 py-2 rounded font-bold text-sm cursor-not-allowed">
-                        Quitado ✅
-                    </button>
+                        <button disabled class="flex-1 bg-gray-100 text-gray-400 py-2.5 rounded-lg font-black text-sm cursor-not-allowed border border-gray-200 flex justify-center items-center gap-2">
+                            <span>✅</span> Acerto Quitado
+                        </button>
                     {% endif %}
                 </div>
             </div>
 
             <div class="card">
-                <h3 class="text-gray-500 text-xs font-bold uppercase mb-1 -mt-4 border-b pb-2">Histórico de Pagamentos Realizados</h3>
+                <h3 class="text-gray-500 text-[10px] font-black uppercase tracking-widest mb-3 border-b pb-2 flex items-center gap-1">
+                    <span>🕒</span> Histórico de Pagamentos à Banca
+                </h3>
                 
                 {% if pagamentos %}
-                    <div class="overflow-x-auto">
-                        <table class="w-full text-sm text-left">
-                            <thead class="bg-gray-300 text-gray-700 uppercase text-xs">
+                    <div class="overflow-x-auto rounded-lg border border-gray-200">
+                        <table class="min-w-full text-sm text-left">
+                            <thead class="bg-gray-100 text-gray-600 uppercase text-[10px] font-black tracking-wider">
                                 <tr>
-                                    <th class="px-2 py-1">Data</th>
-                                    <th class="px-2 py-1">Valor</th>
-                                    <th class="px-2 py-1">Registrado Por</th>
+                                    <th class="px-3 py-2">Data/Hora</th>
+                                    <th class="px-3 py-2">Valor</th>
+                                    <th class="px-3 py-2">Recibo Por</th>
                                     {% if nivel >= 3 %}
-                                    <th class="px-2 py-1 text-center">Ação</th>
+                                    <th class="px-3 py-2 text-center">Ação</th>
                                     {% endif %}
                                 </tr>
                             </thead>
-                            <tbody class="divide-y divide-gray-200">
+                            <tbody class="divide-y divide-gray-100 bg-white">
                                 {% for pag in pagamentos %}
-                                <tr>
-                                    <td class="px-2 py-3">{{ pag.data_hora_fmt }}</td>
-                                    <td class="px-2 py-3 font-bold text-green-700">R$ {{ pag.valor_pago | format_moeda }}</td>
-                                    <td class="px-2 py-3 text-xs text-gray-500">{{ pag.registrado_por_nick }}</td>
+                                <tr class="hover:bg-gray-50 transition">
+                                    <td class="px-3 py-2 text-gray-700 font-medium">{{ pag.data_hora_fmt }}</td>
+                                    <td class="px-3 py-2 font-black text-green-600">R$ {{ pag.valor_pago | format_moeda }}</td>
+                                    <td class="px-3 py-2 text-[11px] text-gray-500 uppercase">{{ pag.registrado_por_nick }}</td>
                                     {% if nivel >= 3 %}
-                                    <td class="px-2 py-3 text-center">
-                                        <form method="POST" action="{{ url_for('excluir_pagamento') }}" onsubmit="return confirm('Tem certeza que deseja excluir este pagamento?')">
+                                    <td class="px-3 py-2 text-center">
+                                        <form method="POST" action="{{ url_for('excluir_pagamento') }}" onsubmit="return confirm('ATENÇÃO: Tem certeza que deseja estornar e excluir este pagamento? O valor voltará para o saldo devedor do colaborador.')">
                                             <input type="hidden" name="id_pagamento" value="{{ pag._id }}">
                                             <input type="hidden" name="id_evento" value="{{ evento_selecionado.id_evento }}">
                                             <input type="hidden" name="target_id" value="{{ target_colab.id_colaborador }}">
-                                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold">🗑️</button>
+                                            <button type="submit" class="text-red-500 hover:text-red-700 font-bold bg-red-50 hover:bg-red-100 p-1.5 rounded transition" title="Estornar Pagamento">🗑️</button>
                                         </form>
                                     </td>
                                     {% endif %}
@@ -218,7 +263,9 @@
                         </table>
                     </div>
                 {% else %}
-                    <p class="text-center text-gray-400 py-4 text-sm">Nenhum pagamento registrado para este evento.</p>
+                    <div class="bg-gray-50 p-6 rounded-lg text-center border border-gray-200">
+                        <p class="text-gray-400 font-bold text-sm">Nenhum pagamento registrado nesta rodada.</p>
+                    </div>
                 {% endif %}
             </div>
         {% endif %}
@@ -226,32 +273,39 @@
     </div>
 
     <div id="payment-modal" class="modal-overlay">
-        <div class="modal-content">
-            <h3 class="text-xl font-bold text-gray-800 mb-1 -mt-4">Registrar Pagamento</h3>
+        <div class="modal-content border-t-4 border-t-green-500">
+            <h3 class="text-xl font-black text-gray-800 mb-4 flex items-center gap-2">
+                <span>💰</span> Informar Pagamento
+            </h3>
             
-            <p class="text-sm text-gray-600 mb-1">Evento: <strong id="modal-evento-nome"></strong></p>
-            <p class="text-sm text-gray-600 mb-1">Saldo Devedor Atual: <strong class="text-red-600 text-lg" id="modal-saldo-display"></strong></p>
+            <div class="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4">
+                <p class="text-xs text-gray-500 uppercase font-bold mb-1">Evento</p>
+                <p class="text-sm text-gray-800 font-bold mb-3" id="modal-evento-nome"></p>
+                
+                <p class="text-xs text-gray-500 uppercase font-bold mb-1">Saldo Devedor Atual</p>
+                <p class="text-red-600 text-2xl font-black" id="modal-saldo-display"></p>
+            </div>
 
             <form method="POST" action="{{ url_for('registrar_pagamento') }}" onsubmit="return ativarLoading(this, 'Registrando pagamento...')">
                 <input type="hidden" name="id_evento" value="{% if evento_selecionado %}{{ evento_selecionado.id_evento }}{% endif %}">
                 <input type="hidden" name="id_colaborador_alvo" value="{{ target_colab.id_colaborador }}">
                 
-                <div class="mb-2">
-                    <label class="block text-gray-700 text-sm font-bold mb-1">Valor a Pagar (R$):</label>
+                <div class="mb-4">
+                    <label class="block text-gray-700 text-[11px] uppercase font-black tracking-wider mb-2">Valor Entregue (R$):</label>
                     <input type="number" id="valor_pagamento" name="valor_pagamento" step="0.01" min="0.01" required
-                           class="w-full p-2 border border-gray-300 rounded focus:ring-2 focus:ring-green-500 outline-none text-xl font-bold text-center"
+                           class="w-full p-3 border-2 border-gray-300 rounded-xl focus:border-green-500 focus:ring-0 outline-none text-2xl font-black text-center text-green-700 transition"
                            placeholder="0,00">
-                    <small class="text-red-500 hidden" id="erro-valor">O valor não pode exceder o saldo devedor.</small>
+                    <small class="text-red-500 font-bold mt-1 block hidden" id="erro-valor">⚠️ O valor informado é maior que a dívida atual.</small>
                 </div>
 
                 <div class="flex gap-2">
                     <button type="button" onclick="document.getElementById('payment-modal').style.display='none'" 
-                            class="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 rounded">
+                            class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 rounded-lg transition">
                         Cancelar
                     </button>
                     <button type="submit" id="btn-submit-pagto"
-                            class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded shadow">
-                        Confirmar Pagamento
+                            class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg shadow-md transition transform active:scale-95 flex justify-center items-center gap-2">
+                        <span>✓</span> Confirmar
                     </button>
                 </div>
             </form>
@@ -304,10 +358,14 @@
                     erro.classList.remove('hidden');
                     btn.disabled = true;
                     btn.classList.add('opacity-50', 'cursor-not-allowed');
+                    this.classList.add('border-red-500', 'text-red-600');
+                    this.classList.remove('border-gray-300', 'text-green-700');
                 } else {
                     erro.classList.add('hidden');
                     btn.disabled = false;
                     btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                    this.classList.remove('border-red-500', 'text-red-600');
+                    this.classList.add('border-gray-300', 'text-green-700');
                 }
             });
         }
@@ -326,89 +384,81 @@
             if (btn) {
                 btn.disabled = true;
                 btn.classList.add('opacity-50', 'cursor-not-allowed');
-                btn.innerHTML = "Aguarde...";
+                btn.innerHTML = "Processando...";
             }
     
             document.body.style.pointerEvents = 'none'; // Bloqueia cliques na tela toda
             return true; 
         }
 
-/**
- * Ativa o spinner para links (Ver Vendas)
- */
-function ativarLoadingLink(el, mensagem) {
-    const spinner = document.getElementById('loading-spinner');
-    const spinnerText = document.getElementById('spinner-text');
-    
-    if (spinner) {
-        if (spinnerText) spinnerText.innerText = mensagem;
-        spinner.classList.add('spinner-visible');
-    }
-    
-    el.classList.add('opacity-50', 'cursor-not-allowed');
-    el.innerHTML = "Carregando...";
-    document.body.style.pointerEvents = 'none';
-    return true;
-}
+        /**
+         * Ativa o spinner para links (Ver Vendas)
+         */
+        function ativarLoadingLink(el, mensagem) {
+            const spinner = document.getElementById('loading-spinner');
+            const spinnerText = document.getElementById('spinner-text');
+            
+            if (spinner) {
+                if (spinnerText) spinnerText.innerText = mensagem;
+                spinner.classList.add('spinner-visible');
+            }
+            
+            el.classList.add('opacity-50', 'cursor-not-allowed');
+            el.innerHTML = "A carregar...";
+            document.body.style.pointerEvents = 'none';
+            return true;
+        }
 
-// Previne travamento do spinner se o usuário clicar no botão "Voltar" do navegador
-window.onpageshow = function(event) {
-    const spinner = document.getElementById('loading-spinner');
-    if (spinner) spinner.classList.remove('spinner-visible');
-    document.body.style.pointerEvents = 'auto';
-};
+        // Previne travamento do spinner se o usuário clicar no botão "Voltar" do navegador
+        window.onpageshow = function(event) {
+            const spinner = document.getElementById('loading-spinner');
+            if (spinner) spinner.classList.remove('spinner-visible');
+            document.body.style.pointerEvents = 'auto';
+        };
 
 
-        // --- LÓGICA DE QR CODE (Mantida e Adaptada) ---
+        // --- LÓGICA DE QR CODE (Inalterada) ---
         function acionarGeracaoLink() {
             const idColab = document.getElementById('colab-target-id').value;
             const nickColab = document.getElementById('colab-target-nick').value;
             gerarQRCode(idColab, nickColab);
         }
 
-function gerarQRCode(idColaborador, nick) {
-    const container = document.getElementById('qrcode-container');
-    container.innerHTML = '';
-    
-    // 1. Obtém a URL do input hidden
-    let baseUrl = document.getElementById('base-http-apk').value;
-    
-    // DEBUG: Veja no console do navegador (F12) o que está chegando aqui
-    console.log("URL Base detectada:", baseUrl);
+        function gerarQRCode(idColaborador, nick) {
+            const container = document.getElementById('qrcode-container');
+            container.innerHTML = '';
+            
+            let baseUrl = document.getElementById('base-http-apk').value;
+            
+            console.log("URL Base detectada:", baseUrl);
 
-    if (!baseUrl || baseUrl === "http://localhost:5000") {
-        console.error("ERRO: URL do APK não carregada corretamente do banco.");
-    }
+            if (!baseUrl || baseUrl === "http://localhost:5000") {
+                console.error("ERRO: URL do APK não carregada corretamente do banco.");
+            }
 
-    // 2. Garante que a URL termine com "/" antes de adicionar o parâmetro
-    if (!baseUrl.endsWith('/')) {
-        baseUrl += '/';
-    }
+            if (!baseUrl.endsWith('/')) {
+                baseUrl += '/';
+            }
 
-    // 3. Formata o ID com 3 dígitos (ex: 15 -> "015")
-    const idFormatado = String(idColaborador).padStart(3, '0');
+            const idFormatado = String(idColaborador).padStart(3, '0');
+            const finalUrl = `${baseUrl}?id_col=${idFormatado}`;
+            
+            console.log("URL Final Gerada:", finalUrl);
 
-    // 4. Monta a URL final exatamente como solicitado
-    const finalUrl = `${baseUrl}?id_col=${idFormatado}`;
-    
-    console.log("URL Final Gerada:", finalUrl);
+            document.getElementById('qr-link-text').textContent = finalUrl;
+            document.getElementById('btn-copy-link').textContent = "📋 Copiar Link";
 
-    // 5. Atualiza a tela e gera o QR
-    document.getElementById('qr-link-text').textContent = finalUrl;
-    document.getElementById('btn-copy-link').textContent = "📋 Copiar Link";
+            new QRCode(container, {
+                text: finalUrl,
+                width: 200,
+                height: 200,
+                colorDark : "#000000",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
 
-    new QRCode(container, {
-        text: finalUrl,
-        width: 200,
-        height: 200,
-        colorDark : "#000000",
-        colorLight : "#ffffff",
-        correctLevel : QRCode.CorrectLevel.H
-    });
-
-    document.getElementById('qr-modal').style.display = 'flex';
-}
-
+            document.getElementById('qr-modal').style.display = 'flex';
+        }
 
         function closeQrModal() { document.getElementById('qr-modal').style.display = 'none'; }
 
@@ -420,6 +470,49 @@ function gerarQRCode(idColaborador, nick) {
                 setTimeout(() => { btn.textContent = "📋 Copiar Link"; }, 2000);
             });
         }
+
+// --- LÓGICA DE ALTERNÂNCIA DE FILTROS (MÚLTIPLOS EVENTOS) ---
+function setFiltro(tipo) {
+    const btnUnico = document.getElementById('btn-filtro-unico');
+    const btnPeriodo = document.getElementById('btn-filtro-periodo');
+    const camposPeriodo = document.getElementById('campos-periodo');
+    const selectEvento = document.querySelector('select[name="id_evento"]');
+
+    if (tipo === 'unico') {
+        // Activa o botão Único
+        btnUnico.className = "flex-1 py-1.5 text-[10px] font-black uppercase rounded-md shadow-sm bg-white text-blue-600";
+        btnPeriodo.className = "flex-1 py-1.5 text-[10px] font-black uppercase rounded-md text-gray-500";
+        
+        // Esconde campos de data e reactiva o select
+        camposPeriodo.classList.add('hidden');
+        selectEvento.disabled = false;
+        
+        // Limpa as datas para não as enviar no formulário
+        document.querySelector('input[name="data_inicio"]').value = '';
+        document.querySelector('input[name="data_fim"]').value = '';
+    } else {
+        // Activa o botão Período
+        btnPeriodo.className = "flex-1 py-1.5 text-[10px] font-black uppercase rounded-md shadow-sm bg-white text-blue-600";
+        btnUnico.className = "flex-1 py-1.5 text-[10px] font-black uppercase rounded-md text-gray-500";
+        
+        // Mostra os campos de data e desativa o select
+        camposPeriodo.classList.remove('hidden');
+        selectEvento.disabled = true;
+        
+        // Limpa o select
+        selectEvento.value = '';
+    }
+}
+
+// Quando a página recarrega, verifica se existe data na URL para manter a aba correta aberta
+document.addEventListener("DOMContentLoaded", function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    if(urlParams.has('data_inicio') && urlParams.get('data_inicio') !== '') {
+        setFiltro('periodo');
+    }
+});
+
+
     </script>
 </body>
 </html>
