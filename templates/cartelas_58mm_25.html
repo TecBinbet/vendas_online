@@ -6,32 +6,41 @@
     <style>
         /* Remove as margens do sistema para não encolher a impressão */
         @page { margin: 0; }
-        
         @media print {
             .no-print { display: none !important; }
-        }
-        
+            body { 
+                /* Empurra o conteúdo para baixo para não cortar o topo no Android */
+                padding-top: 14mm !important; 
+                margin: 0 !important;
+            }
+            body.pc-mode { 
+                /* No PC a margem costuma ser menor */
+                padding-top: 1mm !important; 
+            }
+        } 
         body {
-            font-family: 'Courier New', Courier, monospace;
-            width: 100%;
-            max-width: 56mm; 
-            margin: 0 auto; 
-            padding: 0; 
-            color: #000; 
-            background: #FFF; /* Mantido branco absoluto para velocidade */
-            box-sizing: border-box;
-        }
-
+                font-family: 'Courier New', Courier, monospace;
+                /* Largura segura para evitar cortes laterais */
+                width: 52mm; 
+                margin: 0 auto; 
+                padding: 0; 
+                color: #000; 
+                background: #FFF;
+                box-sizing: border-box;
+                overflow-x: hidden;
+            }
+        /* Estilo para garantir que a tabela ocupe a largura correta no PC */
+        body.pc-mode {
+                width: 58mm !important;
+            }
         .cartela {
             border: 1px solid #000; /* Borda afinada para 1px para não frear a máquina */
             margin: 0 auto 2mm auto; /* Margem inferior reduzida para 2mm */
             padding: 1.5mm;
             page-break-inside: avoid;
         }
-
         .text-center { text-align: center; }
         .separador { border-top: 1px dashed #000; margin: 2px 0; }
-        
         .numero-cartela { 
             font-size: 22px; 
             text-align: center; 
@@ -98,37 +107,43 @@
 </head>
 
 <body onload="iniciarImpressaoAutomatica();">
-
     <script>
+        // 1. Identifica o dispositivo logo no início
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
-
         function iniciarImpressaoAutomatica() {
+            window.focus();
+            window.scrollTo(0, 0);
+            // 2. Aplica modo PC antes de qualquer coisa (ajusta layout)
             if (!isMobile) {
                 document.body.classList.add('pc-mode');
             }
-
-            setTimeout(function() {
-                if (isMobile) {
-                    const htmlPacote = document.documentElement.outerHTML;
-                    const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
-
-                    window.location.href = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
-
-                    setTimeout(function() {
-                        window.history.back();
-                    }, 1000);
-
-                } else {
+            // 3. Aguarda o carregamento total para disparar
+            window.addEventListener('load', function() {
+                setTimeout(function() {
+                    // --- LÓGICA DE FECHAMENTO INTELIGENTE ---
+                    if (isMobile) {
+                        // No Celular: Sensor de volta de foco (fecha ao retornar do RawBT/Sistema)
+                        window.onfocus = function() {
+                            setTimeout(function() { window.close(); }, 800);
+                        };
+                    } else {
+                        // No PC: O evento afterprint clássico que fecha após a janela do Windows
+                        window.addEventListener('afterprint', function() {
+                            window.close();
+                        }, { once: true });
+                       // Backup para o PC caso o afterprint não dispare
+                        window.onfocus = function() {
+                            setTimeout(function() { window.close(); }, 1000);
+                        };
+                    }
+                    // 4. DISPARA A IMPRESSÃO NATIVA
+                    // Removi o uso de "intent:" para manter a simplicidade que você pediu
                     window.print();
-                }
-            }, 500);
+                }, isMobile ? 1200 : 500); // Delay maior para o Android renderizar as tabelas
+            });
         }
-
-        window.addEventListener('afterprint', function() {
-            if (!isMobile) {
-                window.close();
-            }
-        });
+        // Inicia o processo automático
+        iniciarImpressaoAutomatica();
     </script>
 
     {% for cartela in cartelas %}

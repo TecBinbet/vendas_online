@@ -428,6 +428,32 @@
         function syncAndConfirm(event) {
             const confirmar = confirm("Confirmar a gravação desta venda?");                   
             if (!confirmar) return false;
+            
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent); 
+            const btn = document.getElementById('btn-confirmar-venda');
+            const form = document.getElementById('confirm-form');
+            
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Gravando...';            
+            ativarSpinner('A processar venda e a gerar bilhetes...');
+
+            if (isMobile) {
+                // NO CELULAR: Abre em aba nova para não imprimir a tela de venda
+                form.setAttribute('target', '_blank');
+                form.submit();       
+                // Recarrega a tela de venda original após 1.5s
+                setTimeout(() => { window.location.reload(); }, 1500);
+            } else {
+                // NO PC: Mantém na mesma aba (Simplicidade total)
+                form.removeAttribute('target'); 
+                form.submit();
+            }
+            return false; 
+        }
+
+        function syncAndConfirm2(event) {
+            const confirmar = confirm("Confirmar a gravação desta venda?");                   
+            if (!confirmar) return false;
            
             const btn = document.getElementById('btn-confirmar-venda');
             btn.disabled = true;

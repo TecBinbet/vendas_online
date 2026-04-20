@@ -4,22 +4,30 @@
     <meta charset="UTF-8">
     <title>Impressão 15 Dezenas - Otimizada c/ QR Condicional</title>
     <style>
-        /* Remove as margens do sistema para não encolher a impressão */
-        @page { margin: 0; }
+        @page { 
+            margin: 0; 
+            size: auto; 
+        }
         
-        @media print {
+       @media print {
             .no-print { display: none !important; }
+            /* Celular: precisa de mais espaço no topo */
+            body { padding-top: 14mm !important; } 
+
+            /* PC: Geralmente a margem do Windows já ajuda, mas garantimos aqui */
+            body.pc-mode { padding-top: 1mm !important; }
+            margin: 0 !important;
         }
         
         body {
             font-family: 'Courier New', Courier, monospace;
-            width: 100%;
-            max-width: 56mm; 
+            width: 54mm; /* Reduzido de 56 para 54 para evitar corte lateral */
             margin: 0 auto; 
             padding: 0; 
             color: #000; 
-            background: #FFF; /* Mantido branco absoluto para velocidade */
+            background: #FFF;
             box-sizing: border-box;
+            overflow-x: hidden; /* Evita rolagem lateral que confunde o print */
         }
 
         .cartela {
@@ -94,75 +102,39 @@
 </head>
 
 <body onload="iniciarImpressaoAutomatica();">
-
     <script>
-
-const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-
-window.onload = function() {
-    if (!isMobile) {
-        // Se for PC, esconde os botões e imprime nativo
-        document.body.classList.add('pc-mode');
-        document.getElementById('painel-controles').style.display = 'none';
-        setTimeout(function() { window.print(); }, 500);
-    }
-};
-
-async function enviarParaImpressora() {
-    const areaImpressao = document.getElementById('area-impressao-cartelas'); 
-    // Se não achar a div específica, pega o body inteiro (menos recomendado, mas funciona como fallback)
-    const htmlPacote = areaImpressao ? areaImpressao.outerHTML : document.body.outerHTML;
-
-    // Transforma o seu HTML gigante em um "Arquivo" real na memória do celular
-    const blob = new Blob([htmlPacote], { type: 'text/html' });
-    const arquivo = new File([blob], "cartelas_bingo.html", { type: 'text/html' });
-
-    // Verifica se o navegador suporta enviar arquivos (o Chrome suporta)
-    if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
-        try {
-            // Isso vai abrir aquela gaveta nativa do Android ("Compartilhar com...")
-            await navigator.share({
-                title: 'Imprimir Cartelas',
-                files: [arquivo]
+        // 1. Identifica o dispositivo logo no início
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
+        function iniciarImpressaoAutomatica() {
+            window.focus();
+            window.scrollTo(0, 0);
+            // 2. Aplica modo PC antes de qualquer coisa
+            if (!isMobile) {
+                document.body.classList.add('pc-mode');
+            }
+            // 3. Aguarda o carregamento para disparar
+            window.addEventListener('load', function() {
+                setTimeout(function() {
+                    // --- LÓGICA DE FECHAMENTO (SÓ ATIVA NA HORA DO PRINT) ---
+                    if (isMobile) {
+                        // No Celular: Sensor de volta de foco
+                        window.onfocus = function() {
+                            setTimeout(function() { window.close(); }, 600);
+                        };
+                    } else {
+                        // No PC: O evento afterprint clássico que você usava
+                        window.addEventListener('afterprint', function() {
+                            window.close();
+                        }, { once: true }); // Executa apenas uma vez
+                    }
+                    // 4. DISPARA A IMPRESSÃO
+                    window.print();
+                }, isMobile ? 1200 : 500); // Delay maior para o Android desenhar
             });
-            
-            // Sucesso! O usuário escolheu o app e enviou.
-        } catch (erro) {
-            console.log("Compartilhamento cancelado:", erro);
         }
-    } else {
-        alert("O seu navegador não suporta o envio direto de arquivos. Por favor, use o Google Chrome atualizado.");
-    }
-}
-
-function voltarParaVendas() {
-    // Redirecionamento limpo, acionado por clique do usuário. Não vai travar.
-    if (document.referrer) {
-        window.location.replace(document.referrer);
-    } else {
-        window.location.replace("/"); 
-    }
-}
-
-window.addEventListener('afterprint', function() {
-    if (!isMobile) {
-        window.close();
-    }
-});
-
+        // Inicia o processo
+        iniciarImpressaoAutomatica();
     </script>
-
-<div id="painel-controles" style="text-align: center; padding: 20px; background: #f8f9fa; position: fixed; top: 0; width: 100%; z-index: 9999; border-bottom: 2px solid #ccc;">
-    
-    <button onclick="enviarParaImpressora()" style="padding: 15px 25px; font-size: 18px; background: #007bff; color: white; border: none; border-radius: 5px; margin-right: 10px; font-weight: bold;">
-        🖨️ IMPRIMIR
-    </button>
-    
-    <button onclick="voltarParaVendas()" style="padding: 15px 25px; font-size: 18px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold;">
-        ✅ CONCLUIR E VOLTAR
-    </button>
-</div>
-
 
 <div id="area-impressao-cartelas">
 
