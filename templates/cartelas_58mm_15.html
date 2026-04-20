@@ -97,26 +97,49 @@
 
     <script>
 
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
+
         function iniciarImpressaoAutomatica() {
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-            
-            // O DELAY MÁGICO: Dá 500ms para o HTML "respirar" e renderizar a cartela 
-            // antes do navegador tentar imprimir. Evita que ele imprima a tela anterior.
-            setTimeout(() => {
-                
-                // Configura o sensor para voltar à tela inicial APÓS a impressão
-                window.onafterprint = function() {
-                    // Em vez de voltar no histórico (que traz a tela congelada/travada),
-                    // forçamos o redirecionamento limpo para a rota de vendas.
-                    // ATENÇÃO: Ajuste "/venda" para a rota correta do seu sistema se for diferente!
-                    window.location.replace("/venda"); 
-                };
-                
-                // Dispara a tela nativa do Android ou do Windows
-                window.print();
-                
-            }, 500); 
+            // Se for PC, aplica o layout específico
+            if (!isMobile) {
+                document.body.classList.add('pc-mode');
+            }
+
+            // Aguarda 500ms para a tela renderizar a cartela visualmente
+            setTimeout(function() {
+                if (isMobile) {
+                    // Prepara o pacote do RawBT
+                    const htmlPacote = document.documentElement.outerHTML;
+                    const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
+
+                    // Dispara a Intent do RawBT (Silencioso)
+                    window.location.href = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
+
+                    // Aguarda o RawBT processar (1 segundo) e recarrega a tela de Vendas do zero
+                    setTimeout(function() {
+                        if (document.referrer) {
+                            // Substitui o history.back() por location.replace() para forçar a atualização
+                            window.location.replace(document.referrer);
+                        } else {
+                            window.location.replace("/"); // Rota de segurança
+                        }
+                    }, 1000);
+
+                } else {
+                    // No PC, chama o spooler do Windows/Chrome
+                    window.print();
+                }
+            }, 500);
         }
+
+        // Evento que só faz sentido para o PC (fecha a aba ou volta a tela)
+        window.addEventListener('afterprint', function() {
+            if (!isMobile) {
+                // Se você abria a cartela numa NOVA ABA (target="_blank"), mantenha window.close();
+                // Se você abria na mesma aba, use window.location.replace(document.referrer);
+                window.close(); 
+            }
+        });
 
     </script>
 
