@@ -99,58 +99,35 @@
 
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-// Se for PC, podemos imprimir direto ao carregar a página
 window.onload = function() {
     if (!isMobile) {
+        // Se for PC, esconde os botões e imprime nativo
         document.body.classList.add('pc-mode');
-        document.getElementById('painel-controles').style.display = 'none'; // Esconde os botões no PC
+        document.getElementById('painel-controles').style.display = 'none';
         setTimeout(function() { window.print(); }, 500);
     }
 };
 
-async function acionarImpressaoMobile() {
-    const areaImpressao = document.getElementById('area-impressao-cartelas'); 
-    const htmlPacote = areaImpressao ? areaImpressao.outerHTML : document.body.outerHTML;
-
-    // Tenta usar a API moderna do celular (Menu nativo do Android/iOS)
-    if (navigator.share) {
-        try {
-            const blob = new Blob([htmlPacote], { type: 'text/html' });
-            const file = new File([blob], "cartela_bingo.html", { type: 'text/html' });
-
-            await navigator.share({
-                title: 'Impressão de Cartelas',
-                files: [file]
-            });
-
-            // Se chegou aqui, o app de impressão abriu com sucesso.
-            // Aguarda 1.5s e volta pra tela de vendas.
-            setTimeout(atualizarTelaDeVendas, 1500);
-
-        } catch (erro) {
-            console.error("Compartilhamento bloqueado ou cancelado:", erro);
-            // Se o usuário clicar em "cancelar" no menu do Android, o sistema avisa e não trava!
-            alert("Ação cancelada. Clique em VOLTAR se não for imprimir novamente.");
-        }
-    } 
-    // Fallback: Se for um Android antigo que não suporta o navigator.share
-    else {
-        try {
-            const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
-            // Tenta forçar via Intent Genérica
-            window.location.href = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
-            setTimeout(atualizarTelaDeVendas, 2500);
-        } catch (e) {
-            alert("Não foi possível acionar a impressora.");
-        }
+function enviarParaImpressora() {
+    try {
+        const areaImpressao = document.getElementById('area-impressao-cartelas'); 
+        const htmlPacote = areaImpressao ? areaImpressao.outerHTML : document.body.outerHTML;
+        
+        const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
+        
+        // A intent confiável do RawBT
+        const intentUrl = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
+        
+        // Dispara o app. O navegador vai ficar nesta página esperando o operador.
+        window.location.href = intentUrl;
+        
+    } catch (erro) {
+        alert("Erro ao gerar pacote de impressão. Verifique se as cartelas estão na tela.");
     }
 }
 
-function atualizarTelaDeVendas() {
-    // Esconde o painel para não sair na impressão caso seja rápido demais
-    const painel = document.getElementById('painel-controles');
-    if (painel) painel.style.display = 'none';
-
+function voltarParaVendas() {
+    // Redirecionamento limpo, acionado por clique do usuário. Não vai travar.
     if (document.referrer) {
         window.location.replace(document.referrer);
     } else {
@@ -158,21 +135,22 @@ function atualizarTelaDeVendas() {
     }
 }
 
-// Quando fechar a caixa de impressão no PC, fecha a aba ou volta
 window.addEventListener('afterprint', function() {
     if (!isMobile) {
-        window.close(); // Se abriu em nova aba, fecha
+        window.close();
     }
 });
 
     </script>
 
-<div id="painel-controles" style="text-align: center; padding: 20px; background: #fff; position: fixed; top: 0; width: 100%; z-index: 9999; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
-    <button onclick="acionarImpressaoMobile()" style="padding: 15px 25px; font-size: 18px; background: #28a745; color: white; border: none; border-radius: 5px; margin-right: 10px;">
-        🖨️ IMPRIMIR CARTELAS
+<div id="painel-controles" style="text-align: center; padding: 20px; background: #f8f9fa; position: fixed; top: 0; width: 100%; z-index: 9999; border-bottom: 2px solid #ccc;">
+    
+    <button onclick="enviarParaImpressora()" style="padding: 15px 25px; font-size: 18px; background: #007bff; color: white; border: none; border-radius: 5px; margin-right: 10px; font-weight: bold;">
+        🖨️ IMPRIMIR
     </button>
-    <button onclick="atualizarTelaDeVendas()" style="padding: 15px 20px; font-size: 18px; background: #dc3545; color: white; border: none; border-radius: 5px;">
-        Voltar
+    
+    <button onclick="voltarParaVendas()" style="padding: 15px 25px; font-size: 18px; background: #28a745; color: white; border: none; border-radius: 5px; font-weight: bold;">
+        ✅ CONCLUIR E VOLTAR
     </button>
 </div>
 
