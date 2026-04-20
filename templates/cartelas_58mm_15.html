@@ -114,21 +114,14 @@
                     }, 1000);
                     """ 
 
-                    const htmlPacote = document.documentElement.outerHTML;
+                    // 1. Chama a tela nativa de impressão do celular (Funciona com Thermer, RawBT, Epson...)
+                    window.print();
                 
-                    // Envia os dados silenciosamente para a porta 4020 (porta oficial do RawBT)
-                    fetch('http://localhost:4020/', {
-                        method: 'POST',
-                        body: htmlPacote
-                    }).then(response => {
-                        // Deu certo! Volta para a tela de vendas instantaneamente
-                        window.location.href = "/venda";
-                    }).catch(error => {
-                        // Se o RawBT estiver fechado, cai no plano B infalível
-                        console.log("RawBT não respondeu no fundo. Abrindo impressão nativa...");
-                        window.print();
-                        setTimeout(() => { window.location.href = "/venda"; }, 2000);
-                    });
+                    // 2. Aguarda 2 segundos para dar tempo da tela de impressão sobrepor, 
+                    // e então usa a sua sacada de voltar para a tela anterior do histórico.
+                    setTimeout(() => {
+                        window.history.back();
+                    }, 2000);
                 } else {
                     window.print();
                 }
