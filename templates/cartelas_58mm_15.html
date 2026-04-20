@@ -96,30 +96,24 @@
 <body onload="iniciarImpressaoAutomatica();">
 
     <script>
-function iniciarImpressaoAutomatica() {
+
+            function iniciarImpressaoAutomatica() {
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             
             if (isMobile) {
-                // Pega o desenho inteiro das cartelas
-                const htmlPacote = document.documentElement.outerHTML;
+                // 1. Cria o SENSOR que só ativa DEPOIS que a tela de impressão fechar
+                window.onafterprint = function() {
+                    window.history.back(); 
+                };
                 
-                // Manda o pacote direto para o servidor invisível do RawBT no celular
-                fetch('http://127.0.0.1:4020/', {
-                    method: 'POST',
-                    body: htmlPacote
-                })
-                .then(response => {
-                    // MÁGICA: O RawBT recebeu e mandou pro Bluetooth. Voltamos pra tela de vendas.
-                    console.log("Sucesso via Bluetooth!");
-                    window.history.back();
-                })
-                .catch(error => {
-                    // Se falhar, é porque a opção "Servidor Web Interno" não está ativada no app.
-                    alert("⚠️ IMPRESSÃO BLOCKEDA: O aplicativo RawBT não está respondendo. Verifique se ele está aberto e com o 'Servidor Web Interno' ativado nas configurações.");
-                });
+                // 2. Chama a impressora oficial do celular (Não trava e ignora limites de texto)
+                window.print();
                 
             } else {
-                // Comportamento normal se alguém abrir no PC
+                // Comportamento normal no Computador
+                window.onafterprint = function() {
+                    window.history.back(); 
+                };
                 window.print();
             }
         }
