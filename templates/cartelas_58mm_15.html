@@ -105,12 +105,35 @@
 
             setTimeout(function() {
                 if (isMobile) {
+                    """ 
                     const htmlPacote = document.documentElement.outerHTML;
                     const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
                     window.location.href = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
                     setTimeout(function() {
                         window.history.back();
                     }, 1000);
+                    """
+// Pega o HTML inteiro das cartelas
+        const htmlPacote = document.documentElement.outerHTML;
+        
+        // Envia direto para a "boca" invisível do RawBT no celular
+        fetch('http://127.0.0.1:4020/', {
+            method: 'POST',
+            body: htmlPacote
+        })
+        .then(response => {
+            // SUCESSO! O RawBT recebeu. Agora sim podemos voltar a tela com segurança.
+            console.log("Enviado com sucesso para o RawBT!");
+            window.history.back();
+        })
+        .catch(error => {
+            // ERRO! Se o RawBT estiver fechado ou der pau, avisamos o operador.
+            console.error("Falha ao comunicar com o RawBT:", error);
+            alert("O RawBT não está respondendo. Certifique-se de que o aplicativo está aberto e o Serviço Web ativado.");
+            
+            // Fica na tela para o cara ver o que aconteceu, não volta automático.
+        });
+
                 } else {
                     window.print();
                 }
