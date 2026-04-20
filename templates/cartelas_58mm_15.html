@@ -105,23 +105,12 @@
 
             setTimeout(function() {
                 if (isMobile) {
-                    """ 
                     const htmlPacote = document.documentElement.outerHTML;
                     const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
                     window.location.href = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
                     setTimeout(function() {
                         window.history.back();
                     }, 1000);
-                    """ 
-
-                    // 1. Chama a tela nativa de impressão do celular (Funciona com Thermer, RawBT, Epson...)
-                    window.print();
-                
-                    // 2. Aguarda 2 segundos para dar tempo da tela de impressão sobrepor, 
-                    // e então usa a sua sacada de voltar para a tela anterior do histórico.
-                    setTimeout(() => {
-                        window.history.back();
-                    }, 2000);
                 } else {
                     window.print();
                 }
