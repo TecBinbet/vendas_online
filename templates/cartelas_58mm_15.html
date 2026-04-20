@@ -104,48 +104,58 @@ function iniciarImpressaoAutomatica() {
         document.body.classList.add('pc-mode');
     }
 
-    // Aguarda a renderização das cartelas
     setTimeout(function() {
         if (isMobile) {
-            imprimirMobileRawBT();
+            imprimirMobileGenerico();
         } else {
-            imprimirPC();
+            window.print();
         }
     }, 500);
 }
 
-function imprimirMobileRawBT() {
-    try {
-        // DICA: Substitua 'id-da-area-da-cartela' pelo ID real da div que engloba o que deve ser impresso.
-        // Isso reduz drasticamente o tamanho do Base64 e evita o crash da Intent no Android.
-        const areaImpressao = document.getElementById('area-impressao-cartelas'); 
-        const htmlPacote = areaImpressao ? areaImpressao.outerHTML : document.documentElement.outerHTML;
-        
-        const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
-        const intentUrl = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
+async function imprimirMobileGenerico() {
+    const areaImpressao = document.getElementById('area-impressao-cartelas'); 
+    const htmlPacote = areaImpressao ? areaImpressao.outerHTML : document.body.outerHTML;
 
-        // Dispara o RawBT
-        window.location.href = intentUrl;
+    // Verifica se o navegador do celular suporta o compartilhamento nativo (Chrome, Edge, Opera, Safari suportam)
+    if (navigator.share) {
+        try {
+            // Cria um arquivo virtual em memória com o HTML das cartelas
+            const blob = new Blob([htmlPacote], { type: 'text/html' });
+            const file = new File([blob], "impressao.html", { type: 'text/html' });
 
-        // Aumentado para 2.5s para garantir que celulares mais lentos consigam
-        // fazer a transição para o app RawBT antes de matarmos a página atual.
-        setTimeout(function() {
-            atualizarTelaDeVendas();
-        }, 2500);
+            // Aciona o menu do Android perguntando "Abrir com..."
+            await navigator.share({
+                title: 'Imprimir Cartelas',
+                files: [file]
+            });
 
-    } catch (erro) {
-        console.error("Falha ao montar o pacote RawBT:", erro);
-        alert("Erro ao enviar para a impressora Bluetooth.");
+            // Se o usuário escolher um app e concluir, atualizamos a tela
+            setTimeout(function() {
+                atualizarTelaDeVendas();
+            }, 1000);
+
+        } catch (erro) {
+            console.log("Compartilhamento cancelado pelo usuário ou falhou:", erro);
+            // Se ele cancelar o menu, você pode decidir se recarrega a tela ou apenas ignora.
+            // atualizarTelaDeVendas(); 
+        }
+    } else {
+        // Fallback genérico de Intent caso o navegador seja muito antigo
+        try {
+            const intentUrl = "intent:#Intent;action=android.intent.action.SEND;type=text/plain;S.android.intent.extra.TEXT=" + encodeURIComponent(htmlPacote) + ";end;";
+            window.location.href = intentUrl;
+            
+            setTimeout(function() {
+                atualizarTelaDeVendas();
+            }, 2500);
+        } catch (erro) {
+            alert("Erro ao tentar abrir aplicativo de impressão.");
+        }
     }
 }
 
-function imprimirPC() {
-    // Aciona o spooler
-    window.print();
-}
-
 function atualizarTelaDeVendas() {
-    // Seu fluxo original para matar o bug de gravação
     if (document.referrer) {
         window.location.replace(document.referrer);
     } else {
@@ -153,7 +163,6 @@ function atualizarTelaDeVendas() {
     }
 }
 
-// Fecha a aba no PC assim que a caixa de impressão for fechada ou concluída
 window.addEventListener('afterprint', function() {
     if (!isMobile) {
         window.close();
