@@ -113,16 +113,17 @@ function enviarParaImpressora() {
         const areaImpressao = document.getElementById('area-impressao-cartelas'); 
         const htmlPacote = areaImpressao ? areaImpressao.outerHTML : document.body.outerHTML;
         
-        const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
+        // Para o Thermer, usamos a codificação padrão de URL em vez de Base64
+        const textoCodificado = encodeURIComponent(htmlPacote);
         
-        // A intent confiável do RawBT
-        const intentUrl = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
+        // Intent padrão do Android (SEND) direcionada especificamente para o pacote do Thermer
+        const intentUrl = "intent:#Intent;action=android.intent.action.SEND;type=text/html;S.android.intent.extra.TEXT=" + textoCodificado + ";package=mate.bluetoothprint;end;";
         
-        // Dispara o app. O navegador vai ficar nesta página esperando o operador.
+        // Dispara o app Thermer. O navegador fica esperando o operador clicar em "Concluir e Voltar".
         window.location.href = intentUrl;
         
     } catch (erro) {
-        alert("Erro ao gerar pacote de impressão. Verifique se as cartelas estão na tela.");
+        alert("Erro ao enviar os dados para o aplicativo Thermer.");
     }
 }
 
