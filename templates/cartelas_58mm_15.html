@@ -99,63 +99,58 @@
 
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-function iniciarImpressaoAutomatica() {
+// Se for PC, podemos imprimir direto ao carregar a página
+window.onload = function() {
     if (!isMobile) {
         document.body.classList.add('pc-mode');
+        document.getElementById('painel-controles').style.display = 'none'; // Esconde os botões no PC
+        setTimeout(function() { window.print(); }, 500);
     }
+};
 
-    setTimeout(function() {
-        if (isMobile) {
-            imprimirMobileGenerico();
-        } else {
-            window.print();
-        }
-    }, 500);
-}
-
-async function imprimirMobileGenerico() {
+async function acionarImpressaoMobile() {
     const areaImpressao = document.getElementById('area-impressao-cartelas'); 
     const htmlPacote = areaImpressao ? areaImpressao.outerHTML : document.body.outerHTML;
 
-    // Verifica se o navegador do celular suporta o compartilhamento nativo (Chrome, Edge, Opera, Safari suportam)
+    // Tenta usar a API moderna do celular (Menu nativo do Android/iOS)
     if (navigator.share) {
         try {
-            // Cria um arquivo virtual em memória com o HTML das cartelas
             const blob = new Blob([htmlPacote], { type: 'text/html' });
-            const file = new File([blob], "impressao.html", { type: 'text/html' });
+            const file = new File([blob], "cartela_bingo.html", { type: 'text/html' });
 
-            // Aciona o menu do Android perguntando "Abrir com..."
             await navigator.share({
-                title: 'Imprimir Cartelas',
+                title: 'Impressão de Cartelas',
                 files: [file]
             });
 
-            // Se o usuário escolher um app e concluir, atualizamos a tela
-            setTimeout(function() {
-                atualizarTelaDeVendas();
-            }, 1000);
+            // Se chegou aqui, o app de impressão abriu com sucesso.
+            // Aguarda 1.5s e volta pra tela de vendas.
+            setTimeout(atualizarTelaDeVendas, 1500);
 
         } catch (erro) {
-            console.log("Compartilhamento cancelado pelo usuário ou falhou:", erro);
-            // Se ele cancelar o menu, você pode decidir se recarrega a tela ou apenas ignora.
-            // atualizarTelaDeVendas(); 
+            console.error("Compartilhamento bloqueado ou cancelado:", erro);
+            // Se o usuário clicar em "cancelar" no menu do Android, o sistema avisa e não trava!
+            alert("Ação cancelada. Clique em VOLTAR se não for imprimir novamente.");
         }
-    } else {
-        // Fallback genérico de Intent caso o navegador seja muito antigo
+    } 
+    // Fallback: Se for um Android antigo que não suporta o navigator.share
+    else {
         try {
-            const intentUrl = "intent:#Intent;action=android.intent.action.SEND;type=text/plain;S.android.intent.extra.TEXT=" + encodeURIComponent(htmlPacote) + ";end;";
-            window.location.href = intentUrl;
-            
-            setTimeout(function() {
-                atualizarTelaDeVendas();
-            }, 2500);
-        } catch (erro) {
-            alert("Erro ao tentar abrir aplicativo de impressão.");
+            const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
+            // Tenta forçar via Intent Genérica
+            window.location.href = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
+            setTimeout(atualizarTelaDeVendas, 2500);
+        } catch (e) {
+            alert("Não foi possível acionar a impressora.");
         }
     }
 }
 
 function atualizarTelaDeVendas() {
+    // Esconde o painel para não sair na impressão caso seja rápido demais
+    const painel = document.getElementById('painel-controles');
+    if (painel) painel.style.display = 'none';
+
     if (document.referrer) {
         window.location.replace(document.referrer);
     } else {
@@ -163,13 +158,24 @@ function atualizarTelaDeVendas() {
     }
 }
 
+// Quando fechar a caixa de impressão no PC, fecha a aba ou volta
 window.addEventListener('afterprint', function() {
     if (!isMobile) {
-        window.close();
+        window.close(); // Se abriu em nova aba, fecha
     }
 });
 
     </script>
+
+<div id="painel-controles" style="text-align: center; padding: 20px; background: #fff; position: fixed; top: 0; width: 100%; z-index: 9999; box-shadow: 0 2px 5px rgba(0,0,0,0.2);">
+    <button onclick="acionarImpressaoMobile()" style="padding: 15px 25px; font-size: 18px; background: #28a745; color: white; border: none; border-radius: 5px; margin-right: 10px;">
+        🖨️ IMPRIMIR CARTELAS
+    </button>
+    <button onclick="atualizarTelaDeVendas()" style="padding: 15px 20px; font-size: 18px; background: #dc3545; color: white; border: none; border-radius: 5px;">
+        Voltar
+    </button>
+</div>
+
 
 <div id="area-impressao-cartelas">
 
