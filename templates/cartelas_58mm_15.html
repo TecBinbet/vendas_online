@@ -112,14 +112,23 @@
                     setTimeout(function() {
                         window.history.back();
                     }, 1000);
-                    """  
-                    window.print();
-                
-                    // Aguarda 2 segundos após a tela abrir e já redireciona o fundo de volta para Vendas
-                    setTimeout(() => {
-                        window.location.href = "/venda"; // Ajuste para a sua rota de vendas
-                    }, 2000);
+                    """ 
 
+                    const htmlPacote = document.documentElement.outerHTML;
+                
+                    // Envia os dados silenciosamente para a porta 4020 (porta oficial do RawBT)
+                    fetch('http://localhost:4020/', {
+                        method: 'POST',
+                        body: htmlPacote
+                    }).then(response => {
+                        // Deu certo! Volta para a tela de vendas instantaneamente
+                        window.location.href = "/venda";
+                    }).catch(error => {
+                        // Se o RawBT estiver fechado, cai no plano B infalível
+                        console.log("RawBT não respondeu no fundo. Abrindo impressão nativa...");
+                        window.print();
+                        setTimeout(() => { window.location.href = "/venda"; }, 2000);
+                    });
                 } else {
                     window.print();
                 }
