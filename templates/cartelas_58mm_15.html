@@ -99,48 +99,70 @@
 
 const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
 
-        function iniciarImpressaoAutomatica() {
-            // Se for PC, aplica o layout específico
-            if (!isMobile) {
-                document.body.classList.add('pc-mode');
-            }
+function iniciarImpressaoAutomatica() {
+    if (!isMobile) {
+        document.body.classList.add('pc-mode');
+    }
 
-            // Aguarda 500ms para a tela renderizar a cartela
-            setTimeout(function() {
-                if (isMobile) {
-                    // Prepara o pacote do RawBT em Base64 (O seu método original)
-                    const htmlPacote = document.documentElement.outerHTML;
-                    const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
-
-                    // Dispara a Intent do RawBT
-                    window.location.href = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
-
-                    // Aguarda 1.5 segundos para dar tempo da Intent disparar, 
-                    // e força o RECARREGAMENTO da tela de vendas.
-                    // Isso mata o bug do "Gravando..." e atualiza o número das cartelas.
-                    setTimeout(function() {
-                        if (document.referrer) {
-                            window.location.replace(document.referrer);
-                        } else {
-                            window.location.replace("/"); 
-                        }
-                    }, 1500);
-
-                } else {
-                    // No PC, chama o spooler do Windows/Chrome
-                    window.print();
-                }
-            }, 500);
+    // Aguarda a renderização das cartelas
+    setTimeout(function() {
+        if (isMobile) {
+            imprimirMobileRawBT();
+        } else {
+            imprimirPC();
         }
+    }, 500);
+}
 
-        // Evento que fecha a tela no PC após imprimir
-        window.addEventListener('afterprint', function() {
-            if (!isMobile) {
-                window.close();
-            }
-        });
+function imprimirMobileRawBT() {
+    try {
+        // DICA: Substitua 'id-da-area-da-cartela' pelo ID real da div que engloba o que deve ser impresso.
+        // Isso reduz drasticamente o tamanho do Base64 e evita o crash da Intent no Android.
+        const areaImpressao = document.getElementById('area-impressao-cartelas'); 
+        const htmlPacote = areaImpressao ? areaImpressao.outerHTML : document.documentElement.outerHTML;
+        
+        const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
+        const intentUrl = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
+
+        // Dispara o RawBT
+        window.location.href = intentUrl;
+
+        // Aumentado para 2.5s para garantir que celulares mais lentos consigam
+        // fazer a transição para o app RawBT antes de matarmos a página atual.
+        setTimeout(function() {
+            atualizarTelaDeVendas();
+        }, 2500);
+
+    } catch (erro) {
+        console.error("Falha ao montar o pacote RawBT:", erro);
+        alert("Erro ao enviar para a impressora Bluetooth.");
+    }
+}
+
+function imprimirPC() {
+    // Aciona o spooler
+    window.print();
+}
+
+function atualizarTelaDeVendas() {
+    // Seu fluxo original para matar o bug de gravação
+    if (document.referrer) {
+        window.location.replace(document.referrer);
+    } else {
+        window.location.replace("/"); 
+    }
+}
+
+// Fecha a aba no PC assim que a caixa de impressão for fechada ou concluída
+window.addEventListener('afterprint', function() {
+    if (!isMobile) {
+        window.close();
+    }
+});
 
     </script>
+
+<div id="area-impressao-cartelas">
 
     {% for cartela in cartelas %}
     <div class="cartela">
@@ -186,6 +208,8 @@ const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/
            <div style="font-size: 11px; margin-top: 3px;">Escaneie com a câmera</div>
     </div>
     {% endif %}
-    
+
+</div> 
+   
 </body>
 </html>
