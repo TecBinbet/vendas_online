@@ -96,55 +96,34 @@
 <body onload="iniciarImpressaoAutomatica();">
 
     <script>
-        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
-
-        function iniciarImpressaoAutomatica() {
-            if (!isMobile) {
-                document.body.classList.add('pc-mode');
-            }
-
-            setTimeout(function() {
-                if (isMobile) {
-                    """ 
-                    const htmlPacote = document.documentElement.outerHTML;
-                    const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
-                    window.location.href = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
-                    setTimeout(function() {
-                        window.history.back();
-                    }, 1000);
-                    """
-// Pega o HTML inteiro das cartelas
-        const htmlPacote = document.documentElement.outerHTML;
-        
-        // Envia direto para a "boca" invisível do RawBT no celular
-        fetch('http://127.0.0.1:4020/', {
-            method: 'POST',
-            body: htmlPacote
-        })
-        .then(response => {
-            // SUCESSO! O RawBT recebeu. Agora sim podemos voltar a tela com segurança.
-            console.log("Enviado com sucesso para o RawBT!");
-            window.history.back();
-        })
-        .catch(error => {
-            // ERRO! Se o RawBT estiver fechado ou der pau, avisamos o operador.
-            console.error("Falha ao comunicar com o RawBT:", error);
-            alert("O RawBT não está respondendo. Certifique-se de que o aplicativo está aberto e o Serviço Web ativado.");
+function iniciarImpressaoAutomatica() {
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
             
-            // Fica na tela para o cara ver o que aconteceu, não volta automático.
-        });
-
-                } else {
-                    window.print();
-                }
-            }, 500);
+            if (isMobile) {
+                // Pega o desenho inteiro das cartelas
+                const htmlPacote = document.documentElement.outerHTML;
+                
+                // Manda o pacote direto para o servidor invisível do RawBT no celular
+                fetch('http://127.0.0.1:4020/', {
+                    method: 'POST',
+                    body: htmlPacote
+                })
+                .then(response => {
+                    // MÁGICA: O RawBT recebeu e mandou pro Bluetooth. Voltamos pra tela de vendas.
+                    console.log("Sucesso via Bluetooth!");
+                    window.history.back();
+                })
+                .catch(error => {
+                    // Se falhar, é porque a opção "Servidor Web Interno" não está ativada no app.
+                    alert("⚠️ IMPRESSÃO BLOCKEDA: O aplicativo RawBT não está respondendo. Verifique se ele está aberto e com o 'Servidor Web Interno' ativado nas configurações.");
+                });
+                
+            } else {
+                // Comportamento normal se alguém abrir no PC
+                window.print();
+            }
         }
 
-        window.addEventListener('afterprint', function() {
-            if (!isMobile) {
-                window.close();
-            }
-        });
     </script>
 
     {% for cartela in cartelas %}
