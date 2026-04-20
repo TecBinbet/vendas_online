@@ -109,15 +109,16 @@
                     const htmlPacote = document.documentElement.outerHTML;
                     const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
                     window.location.href = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
-                    """
-                    const htmlPacote = document.documentElement.outerHTML;
-                    const htmlCodificado = encodeURIComponent(htmlPacote);
-                    // Dispara o aplicativo Thermer através do intent de envio (SEND)
-                    window.location.href = "intent:#Intent;action=android.intent.action.SEND;type=text/html;package=mate.bluetoothprint;S.android.intent.extra.TEXT=" + htmlCodificado + ";end;";
-
                     setTimeout(function() {
                         window.history.back();
                     }, 1000);
+                    """  
+                    window.print();
+                
+                    // Aguarda 2 segundos após a tela abrir e já redireciona o fundo de volta para Vendas
+                    setTimeout(() => {
+                        window.location.href = "/venda"; // Ajuste para a sua rota de vendas
+                    }, 2000);
 
                 } else {
                     window.print();
