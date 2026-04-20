@@ -108,22 +108,30 @@ window.onload = function() {
     }
 };
 
-function enviarParaImpressora() {
-    try {
-        const areaImpressao = document.getElementById('area-impressao-cartelas'); 
-        const htmlPacote = areaImpressao ? areaImpressao.outerHTML : document.body.outerHTML;
-        
-        // Para o Thermer, usamos a codificação padrão de URL em vez de Base64
-        const textoCodificado = encodeURIComponent(htmlPacote);
-        
-        // Intent padrão do Android (SEND) direcionada especificamente para o pacote do Thermer
-        const intentUrl = "intent:#Intent;action=android.intent.action.SEND;type=text/html;S.android.intent.extra.TEXT=" + textoCodificado + ";package=mate.bluetoothprint;end;";
-        
-        // Dispara o app Thermer. O navegador fica esperando o operador clicar em "Concluir e Voltar".
-        window.location.href = intentUrl;
-        
-    } catch (erro) {
-        alert("Erro ao enviar os dados para o aplicativo Thermer.");
+async function enviarParaImpressora() {
+    const areaImpressao = document.getElementById('area-impressao-cartelas'); 
+    // Se não achar a div específica, pega o body inteiro (menos recomendado, mas funciona como fallback)
+    const htmlPacote = areaImpressao ? areaImpressao.outerHTML : document.body.outerHTML;
+
+    // Transforma o seu HTML gigante em um "Arquivo" real na memória do celular
+    const blob = new Blob([htmlPacote], { type: 'text/html' });
+    const arquivo = new File([blob], "cartelas_bingo.html", { type: 'text/html' });
+
+    // Verifica se o navegador suporta enviar arquivos (o Chrome suporta)
+    if (navigator.canShare && navigator.canShare({ files: [arquivo] })) {
+        try {
+            // Isso vai abrir aquela gaveta nativa do Android ("Compartilhar com...")
+            await navigator.share({
+                title: 'Imprimir Cartelas',
+                files: [arquivo]
+            });
+            
+            // Sucesso! O usuário escolheu o app e enviou.
+        } catch (erro) {
+            console.log("Compartilhamento cancelado:", erro);
+        }
+    } else {
+        alert("O seu navegador não suporta o envio direto de arquivos. Por favor, use o Google Chrome atualizado.");
     }
 }
 
