@@ -8,12 +8,13 @@ from zoneinfo import ZoneInfo
 from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
-from pymongo import MongoClient
+from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import ConnectionFailure, OperationFailure
 from bson.objectid import ObjectId
 from bson.decimal128 import Decimal128
 from datetime import datetime, timedelta
 from urllib.parse import quote_plus
+import math # Adicione isso no topo do seu arquivo app.py (se já não tiver)
 import os
 import re # Para a busca de clientes e limpeza de nome
 import bcrypt
@@ -245,25 +246,28 @@ def log_sistema(mensagem, nivel="INFO"):
         prefixo = "[SISTEMA]" if nivel == "INFO" else "[❌ ERRO CRÍTICO]"
         print(f"{prefixo} {mensagem}")
 
+
 # --- MOTOR MATEMÁTICO CENTRAL (PRÊMIOS DINÂMICOS) ---
 def calcular_premios_dinamicos(db, evento, param_doc):
     """
     MOTOR MATEMÁTICO (ATUALIZADO): 
-    Calcula, reajusta as premiações e GRAVA NO BANCO se houver aumento.
+    Calcula, reajusta, ARREDONDA PARA CIMA (sem centavos) e GRAVA NO BANCO.
     """
+    id_evento_int = evento.get('id_evento')
+    #print(f"\n[MOTOR PRÊMIOS] --- INICIANDO ANÁLISE DO EVENTO {id_evento_int} ---")
+
     # 1. Verifica se o evento está elegível para cálculo dinâmico
     if str(evento.get('tipo_premiacao', '')).lower() != 'porcentagem':
+        #print(f"[MOTOR PRÊMIOS] Abortado: Tipo de premiação não é 'porcentagem'.")
         return evento
 
     porcento_premios = safe_float(param_doc.get('porcento_premios', 0))
     if porcento_premios <= 0:
+        #print(f"[MOTOR PRÊMIOS] Abortado: Parâmetro 'porcento_premios' é zero ou inválido.")
         return evento
 
-    # 2. Resgata e calcula as vendas (Garante que qtd_vendas exista no dict)
+    # 2. Resgata e calcula as vendas
     qtd_vendas = evento.get('qtd_vendas', 0)
-    
-    # Se a qtd não foi passada no dicionário, calcula aqui para segurança
-    id_evento_int = evento.get('id_evento')
     nome_cv = f"vendas{id_evento_int}"
     if qtd_vendas == 0 and nome_cv in db.list_collection_names():
         vendas_data_list = list(db[nome_cv].aggregate([
@@ -276,63 +280,90 @@ def calcular_premios_dinamicos(db, evento, param_doc):
     valor_venda = safe_float(evento.get('valor_de_venda', 0))
     total_arrecadado = qtd_vendas * valor_venda
 
+    #print(f"[MOTOR PRÊMIOS] Qtd Vendas: {qtd_vendas} | Valor Unitário: R$ {valor_venda:.2f} | Arrecadado: R$ {total_arrecadado:.2f}")
+
     if total_arrecadado <= 0:
+        #print(f"[MOTOR PRÊMIOS] Abortado: Arrecadação zerada.")
         return evento
 
     # 3. Matemática de Comparação
     premio_potencial = total_arrecadado * (porcento_premios / 100.0)
-    # Pega o valor atual do banco para saber se já foi engordado antes
     premio_atual_banco = safe_float(evento.get('premio_total', 0))
 
-    # 4. Distribuição e GRAVAÇÃO (Apenas se o Potencial bater o Atual)
-    # Usamos uma margem de 5 reais para evitar gravações em loop por falhas de float
-    if (premio_potencial - premio_atual_banco) >= 5.0:   
-        tipo_cartela = int(evento.get('tipo_de_cartela', 15))
-        qtd_linhas = int(evento.get('quantidade_de_linhas', 1))
+    #print(f"[MOTOR PRÊMIOS] Prêmio Atual no Banco: R$ {premio_atual_banco:.2f} | Prêmio Potencial Exato: R$ {premio_potencial:.2f}")
+
+    # 4. Distribuição e GRAVAÇÃO (Margem de segurança mantida)
+    diferenca = premio_potencial - premio_atual_banco
+    
+    if diferenca >= 5.0:   
+        #print(f"[MOTOR PRÊMIOS] Diferença de R$ {diferenca:.2f} detectada! Iniciando reajuste com ARREDONDAMENTO...")
         
-        # Detecção Automática de Regras
+        # BUSCA À PROVA DE BALAS
+        tipo_cartela = int(evento.get('tipo_de_cartela', evento.get('tipo_cartela', 15)))
+        qtd_linhas = int(evento.get('quantidade_de_linhas', evento.get('quantidade_linhas', 1)))
         tem_quadra = safe_float(evento.get('premio_quadra', 0)) > 0
         faltaum_val = safe_float(evento.get('premio_faltaum', 0))
         
-        # Isola o valor do "Falta Um" da distribuição percentual
         premio_distribuir = premio_potencial - faltaum_val
-        
-        # Preparamos um dicionário apenas com os campos a atualizar no banco
         updates_db = {}
 
         if tipo_cartela == 15:
             if tem_quadra:
+                #print(f"[MOTOR PRÊMIOS] Regra: 15 Dezenas COM Quadra")
                 regra = param_doc.get('porcento_15_quadra', {})
-                evento['premio_quadra'] = premio_distribuir * (safe_float(regra.get('quadra', 0)) / 100.0)
-                evento['premio_linha'] = (premio_distribuir * (safe_float(regra.get('linha', 0)) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
-                evento['premio_bingo'] = premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)
-                evento['premio_segundobingo'] = premio_distribuir * (safe_float(regra.get('segundobingo', 0)) / 100.0)
+                evento['premio_quadra'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('quadra', 0)) / 100.0)))
+                val_linha_bruto = (premio_distribuir * (safe_float(regra.get('linha', regra.get('linhas', 0))) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
+                evento['premio_linha'] = float(math.ceil(val_linha_bruto))
+                evento['premio_bingo'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)))
+                evento['premio_segundobingo'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('segundobingo', 0)) / 100.0)))
+            
             elif qtd_linhas == 3:
+                #print(f"[MOTOR PRÊMIOS] Regra: 15 Dezenas com 3 Linhas")
                 regra = param_doc.get('porcento_15_3linhas', {})
-                evento['premio_linha'] = (premio_distribuir * (safe_float(regra.get('linhas', 0)) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
-                evento['premio_bingo'] = premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)
-                evento['premio_segundobingo'] = premio_distribuir * (safe_float(regra.get('segundobingo', 0)) / 100.0)
+                val_linha_bruto = (premio_distribuir * (safe_float(regra.get('linha', regra.get('linhas', 0))) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
+                evento['premio_linha'] = float(math.ceil(val_linha_bruto))
+                evento['premio_bingo'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)))
+                evento['premio_segundobingo'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('segundobingo', 0)) / 100.0)))
+            
             else:
+                #print(f"[MOTOR PRÊMIOS] Regra: 15 Dezenas Padrão")
                 regra = param_doc.get('porcento_15', {})
-                evento['premio_linha'] = (premio_distribuir * (safe_float(regra.get('linha', 0)) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
-                evento['premio_bingo'] = premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)
-                evento['premio_segundobingo'] = premio_distribuir * (safe_float(regra.get('segundobingo', 0)) / 100.0)
+                val_linha_bruto = (premio_distribuir * (safe_float(regra.get('linha', regra.get('linhas', 0))) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
+                evento['premio_linha'] = float(math.ceil(val_linha_bruto))
+                evento['premio_bingo'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)))
+                evento['premio_segundobingo'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('segundobingo', 0)) / 100.0)))
         
         elif tipo_cartela == 25:
-            if tem_quadra: # 4 Cantos
+            if tem_quadra: 
+                #print(f"[MOTOR PRÊMIOS] Regra: 25 Dezenas COM 4 Cantos")
                 regra = param_doc.get('porcento_25_4cantos', {})
-                evento['premio_quadra'] = premio_distribuir * (safe_float(regra.get('4cantos', 0)) / 100.0)
-                evento['premio_linha'] = (premio_distribuir * (safe_float(regra.get('linha', 0)) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
-                evento['premio_bingo'] = premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)
+                evento['premio_quadra'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('4cantos', 0)) / 100.0)))
+                val_linha_bruto = (premio_distribuir * (safe_float(regra.get('linha', regra.get('linhas', 0))) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
+                evento['premio_linha'] = float(math.ceil(val_linha_bruto))
+                evento['premio_bingo'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)))
             else:
+                #print(f"[MOTOR PRÊMIOS] Regra: 25 Dezenas Padrão")
                 regra = param_doc.get('porcento_25', {})
-                evento['premio_linha'] = (premio_distribuir * (safe_float(regra.get('linha', 0)) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
-                evento['premio_bingo'] = premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)
+                val_linha_bruto = (premio_distribuir * (safe_float(regra.get('linha', regra.get('linhas', 0))) / 100.0)) / qtd_linhas if qtd_linhas > 0 else 0
+                evento['premio_linha'] = float(math.ceil(val_linha_bruto))
+                evento['premio_bingo'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('bingo', 0)) / 100.0)))
 
-        # Atualiza o Total no objeto local e adiciona flag
-        evento['premio_total'] = premio_potencial
+        # RECALCULA O PRÊMIO TOTAL para incluir os centavos "dados" pelo arredondamento
+        novo_total_arredondado = (
+            safe_float(evento.get('premio_quadra', 0)) +
+            (safe_float(evento.get('premio_linha', 0)) * qtd_linhas) +
+            safe_float(evento.get('premio_bingo', 0)) +
+            safe_float(evento.get('premio_segundobingo', 0)) +
+            faltaum_val
+        )
+        
+        evento['premio_total'] = novo_total_arredondado
         evento['is_premio_dinamico_ativo'] = True
         
+        # LOG CORRIGIDO (Mostrando Segundo Bingo se existir)
+        #print(f"[MOTOR PRÊMIOS] Valores ARREDONDADOS -> Bingo: R$ {evento.get('premio_bingo', 0):.2f} | Linha (x{qtd_linhas}): R$ {evento.get('premio_linha', 0):.2f} | Seg. Bingo: R$ {evento.get('premio_segundobingo', 0):.2f} | Quadra: R$ {evento.get('premio_quadra', 0):.2f}")
+        #print(f"[MOTOR PRÊMIOS] Novo Prêmio Total Final: R$ {novo_total_arredondado:.2f}")
+
         # Prepara a atualização para o MongoDB garantindo formato Decimal128
         for k in ['premio_quadra', 'premio_linha', 'premio_bingo', 'premio_segundobingo', 'premio_total']:
             if k in evento:
@@ -343,11 +374,18 @@ def calcular_premios_dinamicos(db, evento, param_doc):
         # GRAVAÇÃO REAL NO BANCO DE DADOS
         try:
              db.eventos.update_one({'id_evento': id_evento_int}, {'$set': updates_db})
-             #print(f"[MOTOR] Evento {id_evento_int} atualizado no banco. Novo prêmio: R$ {premio_potencial:.2f}")
+             #print(f"[MOTOR PRÊMIOS] SUCESSO! Evento {id_evento_int} gravado no banco.")
+             #print(f"--------------------------------------------------\n")
         except Exception as e:
+             #print(f"[MOTOR ERRO] Falha ao gravar reajuste no banco para evento {id_evento_int}: {e}")
              log_sistema(f"[MOTOR ERRO] Falha ao gravar reajuste no banco para evento {id_evento_int}: {e}", nivel="ERRO")
 
+    #else:
+        #print(f"[MOTOR PRÊMIOS] Diferença (R$ {diferenca:.2f}) muito baixa. Nenhum reajuste necessário no momento.")
+        #print(f"--------------------------------------------------\n")
+
     return evento
+
 
 
 # --- LOCKS GLOBAIS PARA SINCRONIZAÇÃO DE SEQUÊNCIAS ---
@@ -1615,11 +1653,6 @@ def nova_venda():
         index_insercao = min(2, len(eventos_lista))
         eventos_lista.insert(index_insercao, evento_especial)
 
-    # DICA IMPORTANTE: Agora, na hora de passar para o render_template, 
-    # certifique-se de passar a variável 'eventos_lista' em vez do cursor original.
-    # Exemplo: render_template('venda.html', eventos=eventos_lista, ...)    
-
-
     eventos_enriquecidos = []
     selected_event = None
 
@@ -1674,9 +1707,6 @@ def nova_venda():
             error = "ID de evento inválido."
             selected_event = None
             
-    #if not selected_event and eventos_enriquecidos:
-    #    selected_event = eventos_enriquecidos[0]
-        
     if selected_event and id_cliente_busca and g.db_status:
         search_term_clean = id_cliente_busca 
         cliente = None
@@ -1766,9 +1796,12 @@ def nova_venda():
             except Exception as e:
                 #print(f"[DEBUG - ÚLTIMAS VENDAS] ❌ ERRO CRÍTICO: {e}")
                 traceback.print_exc()
-        else:
-            print(f"[DEBUG - ÚLTIMAS VENDAS] A coleção '{nome_colecao_venda}' ainda não existe (Nenhuma venda neste evento).")
+        #else:
+            #print(f"[DEBUG - ÚLTIMAS VENDAS] A coleção '{nome_colecao_venda}' ainda não existe (Nenhuma venda neste evento).")
 
+    Qparametros = db.parametros.find_one({}) or {} 
+    
+    limite_auto = Qparametros.get('limite_impressao_auto_vendas', 10)
 
     return render_template('venda.html', 
                            db_status=g.db_status,
@@ -1784,6 +1817,7 @@ def nova_venda():
                            quantidade=quantidade,
                            custo=custo,
                            ultimas_vendas=ultimas_vendas,
+                           limite_impressao_auto_vendas=limite_auto,
                            g=g)
 
 
@@ -3446,6 +3480,92 @@ def consulta_vendas():
 @app.route('/consulta_vendas/detalhes', methods=['GET'])
 @login_required
 def consulta_vendas_detalhes():
+    """Mostra a lista detalhada de vendas com blindagem contra tipos de ID (Int vs Str)."""
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login')) 
+
+    nivel_usuario = session.get('nivel', 1)
+    id_colaborador_logado = session.get('id_colaborador', 'N/A')
+    
+    id_evento_param = request.args.get('id_evento')
+    id_colaborador_param = request.args.get('id_colaborador') 
+
+    vendas_detalhadas = []
+    error = None
+
+    # --- 1. PREPARA AS TAXAS ---
+    params_globais = getattr(g, 'parametros_globais', {})
+    default_comissao = params_globais.get('comissao_padrao', 0)
+    comissao_autoatendimento = params_globais.get('comissao_autoatendimento', 0)
+    comissao_map = {} 
+
+    try:
+        # Busca o Evento para saber qual coleção abrir
+        selected_event = None
+        if id_evento_param:
+            if str(id_evento_param).isdigit():
+                selected_event = db.eventos.find_one({'id_evento': int(id_evento_param)})
+            else:
+                selected_event = db.eventos.find_one({'_id': try_object_id(id_evento_param)})
+        
+        if not selected_event:
+            return render_template('consulta_vendas_detalhes.html', error="Evento não encontrado.", vendas=[])
+
+        id_evento_int = selected_event.get('id_evento')
+        nome_colecao_venda = f"vendas{id_evento_int}"
+        
+        # --- 2. CONSTRUÇÃO DO FILTRO INTELIGENTE ---
+        query_filter = {}
+
+        if nivel_usuario < 3:
+            # Blindagem do ID do Colaborador (tenta os dois tipos)
+            id_colab_busca = int(id_colaborador_logado) if str(id_colaborador_logado).isdigit() else id_colaborador_logado
+            query_filter['id_colaborador'] = {'$in': [id_colab_busca, str(id_colab_busca)]}
+        
+        elif nivel_usuario == 3 and id_colaborador_param and id_colaborador_param != 'ALL':
+            id_colab_target = int(id_colaborador_param) if str(id_colaborador_param).isdigit() else id_colaborador_param
+            query_filter['id_colaborador'] = {'$in': [id_colab_target, str(id_colab_target)]}
+
+        # --- 3. BUSCA NA COLEÇÃO DINÂMICA ---
+        if nome_colecao_venda not in db.list_collection_names():
+            return render_template('consulta_vendas_detalhes.html', error="Nenhuma venda registrada para este evento.", vendas=[])
+
+        vendas_cursor = db[nome_colecao_venda].find(query_filter).sort('data_venda', pymongo.DESCENDING)
+        
+        # Busca todas as comissões de uma vez para ganhar performance
+        todos_colabs = {c['id_colaborador']: c.get('comissao', default_comissao) for c in db.colaboradores.find({}, {'id_colaborador': 1, 'comissao': 1})}
+
+        for venda in vendas_cursor:
+            venda['valor_total_float'] = safe_float(venda.get('valor_total'))
+            colab_id = venda.get('id_colaborador')
+            origem_venda = venda.get('origem', 'terminal_colaborador')
+
+            # Aplica a regra de comissão conforme a origem (Fase 2)
+            taxa_final = comissao_autoatendimento if origem_venda == 'terminal_cliente' else todos_colabs.get(colab_id, default_comissao)
+            venda['valor_comissao_float'] = (venda['valor_total_float'] * taxa_final) / 100.0
+            venda['taxa_comissao_aplicada'] = taxa_final
+            
+            vendas_detalhadas.append(venda)
+
+        if not vendas_detalhadas:
+            error = "Nenhuma venda detalhada encontrada para os filtros selecionados."
+
+    except Exception as e:
+        print(f"Erro em consulta_vendas_detalhes: {e}")
+        traceback.print_exc()
+        error = f"Erro interno ao listar detalhes."
+
+    return render_template('consulta_vendas_detalhes.html',
+                           g=g, error=error, vendas=vendas_detalhadas,
+                           info_evento=selected_event.get('descricao'), 
+                           info_evento_id=id_evento_int, 
+                           info_colaborador="TODOS" if id_colaborador_param == 'ALL' else session.get('nick'),
+                           info_tipo_cartela=selected_event.get('tipo_de_cartela', 25))
+
+
+@app.route('/consulta_vendas/detalhes2', methods=['GET'])
+@login_required
+def consulta_vendas_detalhes2():
     """Mostra a lista detalhada de vendas com cálculo de comissão mista (Auto vs Colab)."""
     db = get_vendas_db()
     if db is None: return redirect(url_for('login')) 
@@ -4626,6 +4746,7 @@ def imprimir_cartelas_58mm_15():
         evento = db.eventos.find_one({'id_evento': id_evento})
         if not evento: return "Erro: Evento não encontrado."
 
+        imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True)
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
         http_apk = g.parametros_globais.get('http_apk', '')
 
@@ -4649,7 +4770,9 @@ def imprimir_cartelas_58mm_15():
                                descricao_evento=evento.get('descricao', ''),
                                data_hora=f"{data_str} as {evento.get('hora_evento', '')}",
                                nome_cliente=nome_cliente,
-                               http_apk=http_apk)
+                               http_apk=http_apk,
+                               imprimir_qrcode_na_venda=imprime_qr)
+
     except Exception as e:
         return f"Erro interno: {e}"
 
@@ -4684,6 +4807,7 @@ def imprimir_cartelas_58mm_25():
         evento = db.eventos.find_one({'id_evento': id_evento})
         if not evento: return "Erro: Evento não encontrado."
 
+        imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True) 
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
         http_apk = g.parametros_globais.get('http_apk', '')
 
@@ -4707,12 +4831,112 @@ def imprimir_cartelas_58mm_25():
                                descricao_evento=evento.get('descricao', ''),
                                data_hora=f"{data_str} as {evento.get('hora_evento', '')}",
                                nome_cliente=nome_cliente,
-                               http_apk=http_apk)
+                               http_apk=http_apk,
+                               imprimir_qrcode_na_venda=imprime_qr)
+
     except Exception as e:
         return f"Erro interno: {e}"
 
+
+def configurar_indices_da_sala(db):
+    """
+    Função de auto-configuração.
+    Verifica e cria os índices de performance automaticamente quando o Docker inicia.
+    """
+    try:
+        # Índices do Livro-Razão (Fase 1)
+        db.transacoes_clientes.create_index([("id_cliente", pymongo.ASCENDING), ("data_hora", pymongo.DESCENDING)])
+        db.transacoes_clientes.create_index([("tipo", pymongo.ASCENDING), ("data_hora", pymongo.DESCENDING)])
+        db.transacoes_clientes.create_index([("id_evento", pymongo.ASCENDING)])
+        
+        # Pode incluir aqui os índices das comissões que fizemos ontem, 
+        # caso as coleções já existam, mas as tabelas dinâmicas (vendas1, vendas2)
+        # já estão a ser tratadas nas rotas de criação do evento.
+        
+        print("[SISTEMA] ✅ Índices da base de dados verificados/otimizados para esta sala.")
+    except Exception as e:
+        print(f"[ALERTA] ❌ Erro ao configurar índices na inicialização: {e}")
+
+
+def registrar_transacao_cliente(db, id_cliente, valor, tipo, descricao, id_evento=None, id_venda=None, id_colaborador=None):
+    """
+    MOTOR FINANCEIRO BLINDADO (ATÔMICO)
+    - Garante que o saldo não corrompa em compras simultâneas.
+    - Exige um tipo de transação rigorosamente válido no Livro-Razão (Passo 1.2).
+    - Guarda rastro do operador, natureza e o "Antes e Depois" da conta.
+    """
+    # 1. Dicionário Rigoroso do Livro-Razão
+    tipos_entrada = ['compra_credito_pix', 'credito_manual_admin', 'premio_bingo', 'premio_sorte_extra', 'estorno_saque', 'estorno_geral']
+    tipos_saida = ['compra_cartela', 'compra_sorte_extra', 'saque_solicitado', 'debito_manual_admin']
+    
+    if tipo not in tipos_entrada and tipo not in tipos_saida:
+        print(f"[ALERTA CRÍTICO] Tentativa de fraude ou erro de código: Tipo '{tipo}' rejeitado.")
+        return False, "Tipo de transação inválido."
+
+    try:
+        # 2. Trava de Segurança Matemática (Garante o sinal do valor e a Natureza)
+        valor_float = float(valor)
+        if valor_float == 0:
+            return True, "Transação de valor zero ignorada."
+
+        if tipo in tipos_saida and valor_float > 0:
+            valor_float = -abs(valor_float)  # Saídas DEVEM obrigatoriamente subtrair (-)
+            natureza = "SAIDA"
+        elif tipo in tipos_entrada and valor_float < 0:
+            valor_float = abs(valor_float)   # Entradas DEVEM obrigatoriamente somar (+)
+            natureza = "ENTRADA"
+        else:
+            natureza = "ENTRADA" if valor_float > 0 else "SAIDA"
+
+        # Conversão perfeita para sistema monetário
+        valor_decimal = Decimal128(str(valor_float))
+
+        # 3. Operação ATÔMICA de atualização de saldo
+        cliente_atualizado = db.clientes.find_one_and_update(
+            {'id_cliente': id_cliente},
+            {
+                '$inc': {'saldo_atual': valor_decimal},
+                '$set': {'ultima_movimentacao': hora_brasil()} # Mantido da sua versão original
+            },
+            return_document=ReturnDocument.AFTER
+        )
+
+        if not cliente_atualizado:
+            raise Exception(f"Cliente ID {id_cliente} não encontrado para transação.")
+
+        # 4. Matemática Reversa Precisa (Calcula o que havia antes para a auditoria)
+        saldo_posterior_float = safe_float(cliente_atualizado.get('saldo_atual', 0.00))
+        saldo_anterior_float = saldo_posterior_float - valor_float
+
+        # 5. Gravação do Histórico no Livro-Razão Completo
+        transacao_doc = {
+            'id_transacao': f"TRX{int(time.time()*1000)}",
+            'id_cliente': id_cliente,
+            'data_hora': hora_brasil(),
+            'natureza': natureza,           # ENTRADA ou SAIDA
+            'tipo': tipo,                   # A categoria rigorosa
+            'valor': valor_decimal,
+            'saldo_anterior': Decimal128(str(saldo_anterior_float)),
+            'saldo_posterior': Decimal128(str(saldo_posterior_float)),
+            'descricao': descricao,
+            'id_evento': id_evento,
+            'id_venda': id_venda,
+            'id_colaborador': id_colaborador, # Para comissões futuras
+            'registrado_por': session.get('nick', 'Sistema') # Mantido da sua versão original
+        }
+        
+        db.transacoes_clientes.insert_one(transacao_doc)
+        
+        return True, "Sucesso"
+        
+    except Exception as e:
+        print(f"❌ [FALHA CRÍTICA FINANCEIRA] Erro atômico na transação {tipo} do cliente {id_cliente}: {e}")
+        traceback.print_exc()
+        return False, str(e)
+
+
 # controle de movimentação dos clientes
-def registrar_transacao_cliente(db, id_cliente, valor, tipo, descricao, id_evento=None, id_venda=None):
+def registrar_transacao_cliente_old(db, id_cliente, valor, tipo, descricao, id_evento=None, id_venda=None):
     """
     Centraliza toda movimentação financeira do cliente. (VERSÃO BLINDADA - ATÓMICA)
     valor: float ou Decimal128 (positivo para crédito, negativo para débito)
@@ -6648,15 +6872,21 @@ def corrigir_tipo_data_e_treino():
         return redirect(url_for('cadastro_cliente', error=f"Erro crítico: {e}"))
 
 
-
-
-
 if __name__ == '__main__':
-    # Para desenvolvimento local apenas
+    # Usamos o app_context para que o Flask permita o uso de funções que dependem do DB
+    with app.app_context():
+        try:
+            db_inicial = get_vendas_db()
+            if db_inicial is not None:
+                configurar_indices_da_sala(db_inicial)
+        except Exception as e:
+            print(f"⚠️ Aviso: Não foi possível configurar índices no arranque: {e}")
+
+    # Inicia o servidor
     if os.environ.get('FLASK_ENV') != 'production':
         app.run(debug=True, host='0.0.0.0', port=5001)
     else:
-        print("⚠️  AVISO: Em produção, use Gunicorn. Não execute app.py diretamente!")
+        print("⚠️ A rodar em modo produção...")
 
 #========================================
 # COMO EXCLUIR OS REGISTRO em_treinamento

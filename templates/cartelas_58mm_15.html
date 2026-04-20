@@ -2,7 +2,7 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>Impressão 15 Dezenas</title>
+    <title>Impressão 15 Dezenas - Otimizada c/ QR Condicional</title>
     <style>
         /* Remove as margens do sistema para não encolher a impressão */
         @page { margin: 0; }
@@ -14,63 +14,62 @@
         body {
             font-family: 'Courier New', Courier, monospace;
             width: 100%;
-            max-width: 56mm; /* Garante que respeite o limite físico de 58mm */
+            max-width: 56mm; 
             margin: 0 auto; 
             padding: 0; 
             color: #000; 
-            background: #FFF; 
+            background: #FFF; /* Mantido branco absoluto para velocidade */
             box-sizing: border-box;
         }
 
         .cartela {
-            border: 2px solid #000; /* Borda reforçada */
-            margin: 0 auto 5mm auto;
-            padding: 2mm;
+            border: 1px solid #000; /* Borda afinada para 1px */
+            margin: 0 auto 2mm auto; /* Margem inferior reduzida para 2mm */
+            padding: 1.5mm;
             page-break-inside: avoid;
         }
 
         .text-center { text-align: center; }
-        .separador { border-top: 1px dashed #000; margin: 4px 0; }
+        .separador { border-top: 1px dashed #000; margin: 2px 0; }
         
         .numero-cartela { 
-            font-size: 22px; /* Fonte aumentada */
+            font-size: 22px; 
             text-align: center; 
-            margin: 4px 0; 
+            margin: 2px 0 0 0; /* Cola o texto na tabela */
             font-weight: 900; 
             text-transform: uppercase;
         }
         
         table.bingo-table {
-            width: 100%; /* A tabela agora estica até o limite da cartela */
+            width: 100%;
             margin: 0 auto;
             border-collapse: collapse;
         }
         
         table.bingo-table th {
-            height: 7mm;
-            border: 2px solid #000;
-            border-bottom: 3px solid #000;
+            height: 4mm; 
+            border: 1px solid #000; 
+            border-bottom: 2px solid #000;
             text-align: center;
             vertical-align: middle;
-            font-size: 18px; /* Cabeçalho mais legível */
+            font-size: 16px;
             font-weight: bold;
             padding: 0;
-            background-color: #f4f4f4;
+            background-color: transparent; 
         }
         
         table.bingo-table td {
-            height: 8mm; /* Células com espaço melhorado */
-            border: 2px solid #000;
+            height: 6.5mm; 
+            border: 1px solid #000; 
             text-align: center;
             vertical-align: middle;
-            font-size: 20px; /* Dezenas bem visíveis */
+            font-size: 19px;
             font-weight: bold;
             padding: 0;
         }
         
-        .texto-header { font-size: 16px; text-transform: uppercase; font-weight: bold; }
-        .texto-info { font-size: 13px; line-height: 1.2; font-weight: bold; }
-        .free-text { font-size: 12px; font-weight: bold; }
+        .texto-header { font-size: 15px; text-transform: uppercase; font-weight: bold; }
+        .texto-info { font-size: 12px; line-height: 1.1; font-weight: bold; }
         
         /* --- MODO EXCLUSIVO PARA COMPUTADOR (WINDOWS) --- */
         body.pc-mode { 
@@ -84,40 +83,46 @@
             font-size: 19px !important; 
         }
         body.pc-mode table.bingo-table th { 
-            font-size: 16px !important; 
-            height: 6mm !important; 
+            font-size: 15px !important; 
+            height: 4mm !important; 
         }
         body.pc-mode table.bingo-table td { 
             font-size: 17px !important; 
-            height: 7mm !important; 
+            height: 5.5mm !important; 
         }
-
     </style>
 </head>
 
-<body onload="verificarDispositivo(); setTimeout(function() { window.print(); }, 500);">
+<body onload="iniciarImpressaoAutomatica();">
 
-    <!-- MÁGICA CONDICIONAL: Separa o comportamento do Celular e do PC -->
     <script>
-        // Radar: Descobre se é celular ou computador
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
 
-        function verificarDispositivo() {
+        function iniciarImpressaoAutomatica() {
             if (!isMobile) {
-                // Se for PC, avisa o CSS para encolher a tabela para não cortar
                 document.body.classList.add('pc-mode');
             }
+
+            setTimeout(function() {
+                if (isMobile) {
+                    const htmlPacote = document.documentElement.outerHTML;
+                    const b64 = btoa(unescape(encodeURIComponent(htmlPacote)));
+
+                    window.location.href = "intent:" + b64 + "#Intent;scheme=rawbt;type=text/html;package=ru.a402d.rawbtprinter;end;";
+
+                    setTimeout(function() {
+                        window.history.back();
+                    }, 1000);
+
+                } else {
+                    window.print();
+                }
+            }, 500);
         }
 
         window.addEventListener('afterprint', function() {
-            if (isMobile) {
-                // NO CELULAR: Dá o fôlego de 4 segundos para o RawBT ler a imagem e depois volta pro caixa
-                setTimeout(function() { 
-                    window.history.back(); 
-                }, 4000); 
-            } else {
-                // NO COMPUTADOR: Não fica contando tempo. Imprimiu, a aba fecha imediatamente!
-                window.close(); 
+            if (!isMobile) {
+                window.close();
             }
         });
     </script>
@@ -125,21 +130,18 @@
     {% for cartela in cartelas %}
     <div class="cartela">
         
-        <!-- MÁGICA AQUI: Só aparece na primeira cartela -->
         {% if loop.first %}
         <div class="text-center texto-header">{{ nome_sala }}</div>
         <div class="text-center texto-info">{{ descricao_evento }}</div>
-        <div class="text-center font-bold" style="font-size: 14px; margin: 3px 0;">{{ data_hora }}</div>
-        <div class="text-center texto-info" style="font-size: 12px; margin-top: 2px;">CLI.: {{ nome_cliente | upper }}</div>
-        <!-- LÓGICA DO PERÍODO -->
+        <div class="text-center" style="font-size: 13px; margin: 2px 0; font-weight: bold;">{{ data_hora }}</div>
+        <div class="text-center texto-info" style="font-size: 12px; margin-top: 1px;">CLI.: {{ nome_cliente | upper }}</div>
         {% if cartelas|length > 1 %}
-        <div class="text-center texto-header" style="margin-top: 4px; font-size: 13px;">PER.:[{{ cartelas[0].numero }} - {{ cartelas[-1].numero }}]</div>
+        <div class="text-center texto-header" style="margin-top: 3px; font-size: 12px;">PER.:[{{ cartelas[0].numero }} - {{ cartelas[-1].numero }}]</div>
         {% endif %}
         <div class="separador"></div>
         {% endif %}
-        <!-- FIM DA MÁGICA -->
         
-        <div class="numero-cartela">CARTELA {{ "%04d" | format(cartela.numero) }}</div>
+        <div class="numero-cartela">N° {{ "%04d" | format(cartela.numero) }}</div>
         
         <table class="bingo-table">
             <thead>
@@ -159,17 +161,16 @@
         </table>
     </div>
     {% endfor %}
-    <!-- MÁGICA DO QR CODE AQUI NO FINAL -->
-    {% if http_apk %}
+
+    {% if http_apk and imprimir_qrcode_na_venda %}
     <div class="cartela" style="border: none; text-align: center; margin-top: 0; padding-top: 0;">
            <div class="separador"></div>
            <div style="font-size: 14px; font-weight: 900; margin-top: 4px; margin-bottom: 4px;">JOGUE PELO CELULAR!</div>
-                <!-- API que gera o QR Code na hora -->
                 <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data={{ http_apk }}" 
                      style="width: 32mm; height: 32mm; margin: 0 auto; display: block;" />
            <div style="font-size: 11px; margin-top: 3px;">Escaneie com a câmera</div>
     </div>
     {% endif %}
-    <div style="height: 10mm;"></div>
+    
 </body>
 </html>

@@ -426,8 +426,9 @@
         }
         
         function syncAndConfirm(event) {
-            if (!window.confirm("Confirmar a gravação desta venda?")) return false;
-            
+            const confirmar = confirm("Confirmar a gravação desta venda?");                   
+            if (!confirmar) return false;
+           
             const btn = document.getElementById('btn-confirmar-venda');
             btn.disabled = true;
             btn.innerHTML = '⏳ Gravando...';
@@ -521,8 +522,30 @@
             
             // SE a venda for concluída E a impressora estiver ativa E existirem dados
             if (successBlock && printConfig === 'true' && dadosImpressao) {
-                console.log("Iniciando impressão automática 58mm...");
-                imprimirCartelas58mm(dadosImpressao);
+                
+                // 🚦 SEMÁFORO DE IMPRESSÃO
+                // Puxa o limite do banco de dados (se falhar, usa 18 como segurança)
+                const limiteImpressao = parseInt("{{ limite_impressao_auto_vendas | default(18) }}");
+                
+                // Calcula quantas cartelas estão sendo impressas nesta venda
+                const qtdComprada = (parseInt(dadosImpressao.numero_final) - parseInt(dadosImpressao.numero_inicial)) + 1;
+                
+                if (qtdComprada > limiteImpressao) {
+                    // Aciona a trava de segurança pedindo confirmação manual
+                    const confirmar = confirm(`⚠️ ALERTA DE IMPRESSÃO EM LOTE!\n\nVocê está prestes a imprimir ${qtdComprada} cartelas.\n\nDeseja realmente gastar papel imprimindo todas elas agora?`);
+                    
+                    if (confirmar) {
+                        console.log("Impressão grande autorizada pelo operador.");
+                        imprimirCartelas58mm(dadosImpressao);
+                    } else {
+                        console.log("Impressão bloqueada pelo semáforo de limite.");
+                        // Opcional: Você pode colocar um alertzinho aqui avisando que cancelou a impressão física.
+                    }
+                } else {
+                    // Abaixo do limite: Imprime direto silenciosamente (Zero Clique)
+                    console.log("Iniciando impressão automática 58mm...");
+                    imprimirCartelas58mm(dadosImpressao);
+                }
             }
         }
 
