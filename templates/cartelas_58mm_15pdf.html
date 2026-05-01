@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <title>Impressão 15 Dezenas - Híbrido</title>
+<style>
+    /* 1. Configuração base para PDF e Impressão Geral */
+    @page { 
+        margin: 0;
+        size: 58mm auto;
+    }
+    
+    body {
+        font-family: 'Courier New', Courier, monospace;
+        width: 54mm; 
+        margin: 0 auto; 
+        padding: 0; 
+        background: #FFF;
+        -webkit-text-size-adjust: 100% !important;
+        text-size-adjust: 100% !important;
+    }
+
+    /* --- 2. SEU AJUSTE VENCEDOR: MODO PC (USB) --- */
+    body.pc-mode {
+        width: 58mm !important;
+        max-width: 58mm !important;
+        padding: 0 3mm 0 1mm !important; 
+        box-sizing: border-box !important;
+        margin: 0 !important;
+    }
+
+    body.pc-mode .cartela { 
+        width: 48mm !important; 
+        margin-bottom: 1.2mm !important; 
+        padding: 0.1mm !important;
+        margin-left: 2.7mm !important; /* Seu ajuste de centralização manual */
+    }
+
+    body.pc-mode table.bingo-table td {
+        height: 19pt !important; 
+        font-size: 13pt !important; 
+        padding: 0 !important;
+        line-height: 19pt !important;
+    }
+
+    body.pc-mode .texto-header { font-size: 10pt !important; }
+    body.pc-mode .texto-info { font-size: 8pt !important; }
+    body.pc-mode .numero-cartela { font-size: 14pt !important; margin: 1pt 0 !important; }
+
+    /* --- 3. Estilos Gerais e Base (Mantidos para o PDF) --- */
+    .cartela {
+        border: 1px solid #000;
+        margin: 0 auto 2mm auto;
+        padding: 1mm;
+        page-break-inside: avoid; 
+        box-sizing: border-box;
+    }
+
+    .text-center { text-align: center; }
+    .separador { border-top: 1px dashed #000; margin: 2px 0; }
+    
+    .numero-cartela { 
+        font-size: 20px; 
+        text-align: center; 
+        margin: 1mm 0;
+        font-weight: 900; 
+        text-transform: uppercase;
+    }
+    
+    table.bingo-table {
+        width: 100%;
+        margin: 0 auto;
+        border-collapse: collapse;
+        table-layout: fixed;
+    }
+    
+    table.bingo-table th {
+        border: 1px solid #000; 
+        border-bottom: 2px solid #000;
+        text-align: center;
+        font-size: 14px;
+        font-weight: bold;
+        padding: 1mm 0;
+    }
+    
+    table.bingo-table td {
+        height: 7mm; 
+        border: 1px solid #000; 
+        text-align: center;
+        vertical-align: middle;
+        font-size: 18px;
+        font-weight: bold;
+    }
+    
+    .texto-header { font-size: 14px; text-transform: uppercase; font-weight: bold; }
+    .texto-info { font-size: 11px; line-height: 1.1; font-weight: bold; }
+    .qr-container { text-align: center; margin-top: 2mm; }
+    .qr-img { width: 30mm; height: 30mm; }
+</style>
+
+</head>
+<body>
+
+{% if not is_mobile %}
+<script>
+    window.onload = function() {
+        // 1. Aplica o estilo de fonte menor imediatamente
+        document.body.classList.add('pc-mode');
+        
+        window.focus();
+        
+        // 2. Sensor de fechamento: quando a janela de impressão fecha, 
+        // o navegador volta o foco para cá e a gente fecha a aba.
+        window.onfocus = function() {
+            setTimeout(function() {
+                window.close();
+            }, 400);
+        };
+
+        // 3. Caso o afterprint funcione no seu navegador, ele fecha primeiro
+        window.addEventListener('afterprint', function() {
+            window.close();
+        }, { once: true });
+
+        // 4. Dispara o comando de impressão
+        setTimeout(function() {
+            window.print();
+        }, 500);
+    };
+</script>
+{% endif %}
+
+<div id="area-impressao-cartelas">
+    {% for cartela in cartelas %}
+    <div class="cartela">
+        {% if loop.first %}
+        <div class="text-center texto-header">{{ nome_sala }}</div>
+        <div class="text-center texto-info">{{ descricao_evento }}</div>
+        <div class="text-center" style="font-size: 12px; margin: 1mm 0; font-weight: bold;">{{ data_hora }}</div>
+        <div class="text-center texto-info">CLI.: {{ nome_cliente | upper }}</div>
+        {% if cartelas|length > 1 %}
+        <div class="text-center texto-header" style="font-size: 11px;">PER.:[{{ cartelas[0].numero }} - {{ cartelas[-1].numero }}]</div>
+        {% endif %}
+        <div class="separador"></div>
+        {% endif %}
+        
+        <div class="numero-cartela">N° {{ "%04d" | format(cartela.numero) }}</div>
+        
+        <table class="bingo-table">
+            <thead>
+                <tr>
+                    <th>B</th><th>I</th><th>N</th><th>G</th><th>O</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for linha_nums in cartela.matriz %}
+                <tr>
+                    {% for num in linha_nums %}
+                        <td>{{ num if num != 0 else '' }}</td>
+                    {% endfor %}
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endfor %}
+
+    {% if http_apk and imprimir_qrcode_na_venda %}
+    <div class="qr-container">
+           <div class="separador"></div>
+           <div style="font-size: 12px; font-weight: 900; margin: 2mm 0;">JOGUE PELO CELULAR!</div>
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data={{ http_apk }}" class="qr-img" />
+           <div style="font-size: 10px; margin-top: 1mm;">Escaneie para baixar o App</div>
+    </div>
+    {% endif %}
+</div> 
+</body>
+</html>

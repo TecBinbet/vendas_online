@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Master: Gestão de Regionais</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .modal-overlay {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background-color: rgba(0, 0, 0, 0.75);
+            display: none; justify-content: center; align-items: center; z-index: 1000;
+        }
+        .modal-content {
+            background-color: #FFF; padding: 2rem; border-radius: 8px;
+            width: 90%; max-width: 400px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+        }
+    </style>
+</head>
+<body class="bg-gray-100 p-2 md:p-8 font-sans">
+
+    <div class="max-w-6xl mx-auto">
+        <div class="mb-3 flex justify-between items-center">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-blue-600 hover:text-blue-800 font-bold flex items-center gap-2 transition">
+                ← Voltar ao Menu
+            </a>
+        </div>
+
+        {% if error %}
+            <div class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4 font-bold shadow-sm">{{ error }}</div>
+        {% endif %}
+        {% if success %}
+            <div class="bg-green-100 border border-green-400 text-green-700 px-4 py-3 rounded mb-4 font-bold shadow-sm">{{ success }}</div>
+        {% endif %}
+
+        <!-- FORMULÁRIO DE CADASTRO / EDIÇÃO -->
+        <div class="p-2 bg-white rounded-xl shadow-lg border border-gray-200 mb-1">
+            <h2 id="form-title" class="text-2xl font-semibold mb-2 text-slate-800 flex items-center gap-2">
+                <span>🌎</span> Nova Regional
+            </h2>
+            
+            <form method="POST" id="form-regional" action="{{ url_for('gerenciar_regionais') }}" class="space-y-2">
+                <input type="hidden" name="acao" value="salvar">
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">ID da Regional</label>
+                        <!-- type text, readonly, e cor cinza bloqueada -->
+                        <input type="text" id="id_regional" name="id_regional" placeholder="Automático" readonly 
+                               class="border border-gray-300 p-2.5 rounded w-full bg-gray-200 cursor-not-allowed font-mono font-bold outline-none text-gray-600 text-center">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Descrição / Nome *</label>
+                        <input type="text" id="descricao" name="descricao" required placeholder="Ex: SUL E SUDESTE"
+                               class="border border-gray-300 p-2.5 rounded w-full uppercase focus:ring-2 focus:ring-blue-500 outline-none">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-gray-500 uppercase mb-1">Localidades Atendidas *</label>
+                    <textarea id="localidades" name="localidades" rows="2" required placeholder="Ex: Curitiba, Florianópolis, São Paulo (Separe por vírgulas)"
+                              class="border border-gray-300 p-2.5 rounded w-full focus:ring-2 focus:ring-blue-500 outline-none"></textarea>
+                </div>
+
+                <!-- GESTORES (Dinâmico) -->
+                <div class="bg-slate-50 p-2 rounded-lg border border-slate-200">
+                    <div class="flex justify-between items-center mb-2">
+                        <label class="text-sm font-bold text-gray-700 uppercase">Equipe de Gestão</label>
+                        <button type="button" onclick="adicionarGestor()" class="bg-green-600 hover:bg-green-700 text-white text-xs font-bold py-1 px-3 rounded">
+                            + Adicionar Gestor
+                        </button>
+                    </div>
+                    
+                    <div id="container-gestores" class="space-y-2">
+                        <!-- Os campos de gestores aparecerão aqui -->
+                    </div>
+                </div>
+
+                <div class="flex justify-end gap-2 -pt-2">
+                    <button type="button" onclick="limparFormulario()" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded transition">
+                        Limpar / Novo
+                    </button>
+                    <button type="submit" class="bg-blue-700 hover:bg-blue-800 text-white font-bold py-2 px-8 rounded transition shadow-md">
+                        💾 Salvar Regional
+                    </button>
+                </div>
+            </form>
+        </div>
+
+        <!-- TABELA DE LISTAGEM -->
+        <div class="bg-white rounded-xl shadow border border-gray-200 overflow-hidden">
+            <div class="p-1 bg-slate-100 border-b border-gray-200">
+                <h3 class="font-bold text-slate-700">Regionais Cadastradas</h3>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse">
+                    <thead class="bg-slate-50 text-slate-600 border-b border-gray-200">
+                        <tr>
+                            <th class="p-1 text-sm font-black uppercase">ID</th>
+                            <th class="p-1 text-sm font-black uppercase">Descrição</th>
+                            <th class="p-1 text-sm font-black uppercase">Gestores</th>
+                            <th class="p-1 text-sm font-black uppercase">Localidades</th>
+                            <th class="p-1 text-sm font-black uppercase text-center">Ações</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-gray-100">
+                        {% for r in regionais %}
+                        <tr class="hover:bg-blue-50 transition-colors">
+                            <td class="p-2.5 font-mono font-bold text-blue-700">{{ r.id_regional }}</td>
+                            <td class="p-2.5 font-bold text-gray-800">{{ r.descricao }}</td>
+                            <td class="p-2.5 text-xs text-gray-600 font-medium">
+                                {% if r.gestores %}
+                                    <ul class="list-disc ml-4">
+                                    {% for gestor in r.gestores %}
+                                        <li>{{ gestor.nome }} <span class="text-gray-400">({{ gestor.telefone }})</span></li>
+                                    {% endfor %}
+                                    </ul>
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="p-2.5 text-xs text-gray-500">
+                                {% if r.localidades %}
+                                    {{ r.localidades|join(', ') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td class="p-2.5 text-center space-x-2 whitespace-nowrap">
+                                <!-- Passando os dados via JSON para preencher o form -->
+                                <button onclick='editarRegional({{ r.id_regional }}, {{ r.descricao|tojson }}, {{ r.localidades|tojson }}, {{ r.gestores|tojson }})' 
+                                        class="text-blue-600 hover:text-blue-800 font-bold text-sm">
+                                    ✏️ Alterar
+                                </button>
+                                
+                                <button onclick="abrirModalExclusao({{ r.id_regional }}, '{{ r.descricao }}')" 
+                                        class="text-red-500 hover:text-red-700 font-bold text-sm">
+                                    🗑️ Excluir
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="5" class="p-8 text-center text-gray-400 font-bold">Nenhuma regional cadastrada.</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL DE EXCLUSÃO -->
+    <div id="modal-excluir" class="modal-overlay" onclick="fecharModal()">
+        <div class="modal-content" onclick="event.stopPropagation()">
+            <h3 class="text-xl font-bold mb-2 text-red-600">Confirmar Exclusão</h3>
+            
+            <p class="mb-4 text-gray-700">Tem certeza que deseja excluir esta regional?</p>
+            <p class="mb-4 text-lg"><strong>Regional:</strong> <span id="modal-desc-regional" class="text-red-600"></span></p>
+            
+            <!-- NOVO: CAIXA DE AVISO DA TRAVA -->
+            <div class="bg-amber-50 border-l-4 border-amber-500 p-3 rounded mb-4 shadow-sm">
+                <p class="text-xs text-amber-800 font-bold flex items-start gap-2">
+                    <span class="text-lg">⚠️</span>
+                    <span><strong>Atenção à Trava de Segurança:</strong> O sistema não permitirá a exclusão se houver vendedores ou atendentes cadastrados nesta Regional. Transfira-os antes de prosseguir.</span>
+                </p>
+            </div>
+            
+            <form method="POST" action="{{ url_for('gerenciar_regionais') }}">
+                <input type="hidden" name="acao" value="excluir">
+                <input type="hidden" name="id_regional" id="modal-id-regional">
+                
+                <div class="flex justify-end gap-2 mt-4">
+                    <button type="button" onclick="fecharModal()" class="bg-gray-300 hover:bg-gray-400 px-4 py-2 rounded font-bold transition">Cancelar</button>
+                    <button type="submit" class="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded font-bold transition shadow-md">Tentar Excluir</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <script>
+        const containerGestores = document.getElementById('container-gestores');
+
+        // Adiciona uma linha de inputs para gestor COM required
+        function adicionarGestor(nome = '', telefone = '') {
+            const div = document.createElement('div');
+            div.className = 'flex gap-2 items-center bg-white p-2 rounded border border-gray-200';
+            div.innerHTML = `
+                <input type="text" name="gestor_nome[]" value="${nome}" placeholder="Nome do Gestor *" required 
+                       class="border border-gray-300 p-2 rounded w-1/2 outline-none focus:ring-2 focus:ring-blue-500">
+                <input type="tel" name="gestor_tel[]" value="${telefone}" placeholder="Telefone *" required 
+                       class="border border-gray-300 p-2 rounded w-1/2 outline-none focus:ring-2 focus:ring-blue-500">
+                <button type="button" onclick="removerGestor(this)" class="text-red-500 hover:text-red-700 font-bold px-2 text-lg transition" title="Remover Gestor">✖</button>
+            `;
+            containerGestores.appendChild(div);
+        }
+
+        // Lógica inteligente para impedir apagar o último gestor
+        function removerGestor(botao) {
+            if (containerGestores.children.length > 1) {
+                botao.parentElement.remove();
+            } else {
+                alert("⚠️ A regional exige pelo menos 1 Gestor cadastrado com Telefone.");
+                containerGestores.querySelector('input').focus();
+            }
+        }
+
+        // Limpa o formulário para criar um novo e restaura o visual "Automático"
+        function limparFormulario() {
+            const inputIdRegional = document.getElementById('id_regional');
+            
+            // Esvazia o valor real para o backend saber que é um cadastro NOVO
+            inputIdRegional.value = ''; 
+            
+            // Garante que o campo continue bloqueado e cinza
+            inputIdRegional.readOnly = true;
+            inputIdRegional.classList.add('bg-gray-200', 'cursor-not-allowed', 'text-gray-600');
+            
+            // O truque: garante que o placeholder apareça novamente
+            inputIdRegional.placeholder = 'Automático';
+            
+            // Limpa o resto do formulário
+            document.getElementById('descricao').value = '';
+            document.getElementById('localidades').value = '';
+            document.getElementById('form-title').innerHTML = '<span>🌎</span> Nova Regional';
+            
+            // Reseta a lista de gestores
+            containerGestores.innerHTML = '';
+            adicionarGestor(); 
+        }
+
+        // Carrega os dados na tela para Edição
+        function editarRegional(id, descricao, localidades, gestores) {
+            document.getElementById('id_regional').value = id;
+            document.getElementById('id_regional').readOnly = true; 
+            document.getElementById('id_regional').classList.add('bg-gray-200', 'cursor-not-allowed');
+            
+            document.getElementById('descricao').value = descricao;
+            document.getElementById('localidades').value = localidades ? localidades.join(', ') : '';
+            document.getElementById('form-title').innerHTML = `<span>✏️</span> Editando Regional: ${id}`;
+            
+            containerGestores.innerHTML = '';
+            if (gestores && gestores.length > 0) {
+                gestores.forEach(g => adicionarGestor(g.nome, g.telefone));
+            } else {
+                adicionarGestor();
+            }
+            
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        }
+
+        // Lógica da Modal de Exclusão (MANTIDA)
+        function abrirModalExclusao(id, descricao) {
+            document.getElementById('modal-id-regional').value = id;
+            document.getElementById('modal-desc-regional').innerText = `${id} - ${descricao}`;
+            document.getElementById('modal-excluir').style.display = 'flex';
+        }
+
+        function fecharModal() {
+            document.getElementById('modal-excluir').style.display = 'none';
+        }
+
+        // Inicia com 1 gestor em branco
+        window.onload = () => {
+            adicionarGestor();
+        };
+    </script>
+
+</body>
+</html>

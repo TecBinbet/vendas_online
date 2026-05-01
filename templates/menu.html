@@ -95,6 +95,13 @@
                  🛠️ Cadastro de Colaboradores
             </a>
         {% endif %}
+
+        <!-- NOVO: BOTÃO MASTER PARA GESTÃO DE REGIONAIS -->
+        {% if nivel >= 4 %}
+            <a href="{{ url_for('gerenciar_regionais') }}" onclick="ativarSpinner('Acessando Painel Master...')" class="menu-item" style="background-color: #1e293b; color: #f8fafc; border-left: 5px solid #3b82f6;">
+                🌎 Master: Gestão de Regionais
+            </a>
+        {% endif %}
         
         <!-- Botão Sair sem spinner conforme solicitado -->
         <a href="{{ url_for('login_page') }}" class="-mt-10 menu-item menu-item-exit">🚪 Sair</a>

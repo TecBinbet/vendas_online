@@ -49,10 +49,24 @@
                             </td>
                             <td class="px-4 py-3 whitespace-nowrap text-xs font-bold text-gray-500">{{ log.categoria }}</td>
                             <td class="px-4 py-3 text-xs text-gray-700 leading-tight">
-                                {{ log.detalhes }}
-                                {% if log.alvo_id %}<span class="block text-[10px] text-indigo-500 font-bold">Alvo ID: {{ log.alvo_id }}</span>{% endif %}
+                                {# Se o log for de alteração de taxa, damos um destaque visual #}
+                                {% if log.categoria == 'PARAMETROS' and 'de' in log.detalhes and 'para' in log.detalhes %}
+                                    <div class="bg-gray-50 p-2 rounded border border-gray-100">
+                                        <span class="font-mono text-blue-700">{{ log.detalhes.split(':')[0] }}:</span>
+                                        <div class="mt-1 flex items-center gap-2">
+                                            <span class="text-red-500 line-through">{{ log.detalhes.split(' de ')[1].split(' para ')[0] }}</span>
+                                            <span class="text-gray-400">➔</span>
+                                            <span class="text-green-600 font-bold">{{ log.detalhes.split(' para ')[1] }}</span>
+                                        </div>
+                                    </div>
+                                {% else %}
+                                    {{ log.detalhes }}
+                                {% endif %}
+    
+                                {% if log.alvo_id %}
+                                    <span class="block text-[10px] text-indigo-500 font-bold mt-1">Alvo ID: {{ log.alvo_id }}</span>
+                                {% endif %}
                             </td>
-                            <td class="px-4 py-3 whitespace-nowrap text-[10px] font-mono text-gray-400">{{ log.ip_origem }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>

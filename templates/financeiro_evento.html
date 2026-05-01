@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Financeiro: {{ evento.descricao }}</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js para o Gráfico de Pizza -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         @media print {
             .no-print { display: none; }
@@ -19,7 +21,12 @@
         
         <div class="flex justify-between items-center mb-1 no-print">
             <div>
-                <h1 class="text-xl text-gray-400">Financeiro do Evento</h1>
+                <h1 class="text-xl text-gray-400">Financeiro do Evento 
+                    <!-- Identificação da Regional -->
+                    <span class="text-sm font-bold bg-gray-200 text-gray-600 px-2 py-0.5 rounded ml-2">
+                        {% if session.get('nivel') >= 4 %} VISÃO GLOBAL {% else %} REGIONAL: {{ session.get('id_regional') }} {% endif %}
+                    </span>
+                </h1>
                 <p class="text-xl font-bold text-yellow-500 -mt-1">{{ evento.descricao }} (ID: {{ evento.id_evento }}) - {{ evento.data_evento }} às {{ evento.hora_evento }}</p>
             </div>
             <div class="flex gap-2">
@@ -29,65 +36,59 @@
             </div>
         </div>
 
+        <!-- DASHBOARD MASTER (PIZZA) - Visível apenas para Nível 4 -->
+        {% if session.get('nivel') >= 4 %}
+        <div class="bg-white p-4 rounded-lg shadow mb-4 no-print border-t-4 border-indigo-500">
+            <h3 class="text-gray-500 text-sm font-bold uppercase mb-4">Participação por Regional (Faturamento)</h3>
+            <div class="flex flex-col md:flex-row items-center gap-8">
+                <div style="max-width: 250px; width: 100%;">
+                    <canvas id="graficoPizzaRegionais"></canvas>
+                </div>
+                <div class="flex-1 grid grid-cols-2 gap-2 text-sm" id="legendaFaturamento">
+                    <!-- Legendas dinâmicas aqui -->
+                </div>
+            </div>
+        </div>
+        {% endif %}
+
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-2">
-            
+            <!-- Os cards permanecem os mesmos, mas os valores agora são filtrados pelo backend -->
             <div class="bg-white py-2 px-4 rounded-lg shadow border-l-4 border-blue-500">
                 <h3 class="text-gray-500 text-sm font-bold uppercase mb-2">Faturamento Bruto</h3>
-                
                 <div class="flex justify-between items-center border-b pb-2 mb-2">
                     <div class="text-left">
                         <span class="text-xs text-gray-500 block">📋Cartelas (Bingo)</span>
-                        <span class="text-lg font-bold text-blue-600">
-                            R$ {{ painel.total_vendas_bingo | format_moeda }}
-                        </span>
+                        <span class="text-lg font-bold text-blue-600">R$ {{ painel.total_vendas_bingo | format_moeda }}</span>
                     </div>
-                    
                     <div class="text-gray-300 text-2xl font-light">|</div>
-
                     <div class="text-right">
                         <span class="text-xs text-gray-500 block">🍀Sorte Extra</span>
-                        <span class="text-lg font-bold text-purple-600">
-                            R$ {{ painel.total_vendas_cupons | format_moeda }}
-                        </span>
+                        <span class="text-lg font-bold text-purple-600">R$ {{ painel.total_vendas_cupons | format_moeda }}</span>
                     </div>
                 </div>
-
                 <div class="flex justify-between items-center pt-1">
                     <span class="text-sm font-bold text-gray-700">TOTAL GERAL:</span>
-                    <span class="text-xl font-extrabold text-green-600">
-                        R$ {{ painel.receita_bruta_total | format_moeda }}
-                    </span>
+                    <span class="text-xl font-extrabold text-green-600">R$ {{ painel.receita_bruta_total | format_moeda }}</span>
                 </div>
             </div>
 
             <div class="bg-white py-2 px-4 rounded-lg shadow border-l-4 border-red-500">
                 <h3 class="text-gray-500 text-sm font-bold uppercase mb-2">Total Premiação</h3>
-                
                 <div class="flex justify-between items-center border-b pb-2 mb-2">
                     <div class="text-left">
                         <span class="text-xs text-gray-500 block">Prêmios Bingo</span>
-                        <span class="text-lg font-bold text-red-600">
-                            R$ {{ painel.premio_bingo | format_moeda }}
-                        </span>
+                        <span class="text-lg font-bold text-red-600">R$ {{ painel.premio_bingo | format_moeda }}</span>
                     </div>
-                    
                     <div class="text-gray-300 text-2xl font-light">|</div>
-
                     <div class="text-right">
                         <span class="text-xs text-gray-500 block">Prêmios Sorte Extra</span>
-                        <span class="text-lg font-bold text-red-800">
-                            R$ {{ painel.premio_extra | format_moeda }}
-                        </span>
+                        <span class="text-lg font-bold text-red-800">R$ {{ painel.premio_extra | format_moeda }}</span>
                     </div>
                 </div>
-
                 <div class="flex justify-between items-center pt-1 mb-1">
                     <span class="text-sm font-bold text-gray-700">TOTAL GERAL:</span>
-                    <span class="text-xl font-extrabold text-red-700">
-                        R$ {{ painel.premio_total_geral | format_moeda }}
-                    </span>
+                    <span class="text-xl font-extrabold text-red-700">R$ {{ painel.premio_total_geral | format_moeda }}</span>
                 </div>
-                
                 <div class="flex justify-between text-xs mt-1 pt-1 border-t border-gray-100">
                     <span class="text-green-600 font-bold">Pago: {{ painel.premios_pagos | format_moeda }}</span>
                     <span class="text-gray-500 font-bold">Pend: {{ painel.premios_pendentes | format_moeda }}</span>
@@ -120,6 +121,7 @@
             </div>
         </div>
 
+        <!-- TABELA DE DETALHAMENTO -->
         <div class="bg-white rounded-lg shadow overflow-hidden">
             <div class="bg-gray-800 text-white py-1 px-3 font-bold">
                 Detalhamento por Colaborador
@@ -147,12 +149,10 @@
                             </td>
                             <td class="py-1 px-4 text-center">{{ item.qtd }}</td>
                             <td class="py-1 px-4 text-right font-bold bg-blue-50">R$ {{ "{:,.2f}".format(item.vendas) }}</td>
-                            
                             <td class="py-1 px-4 text-right text-purple-600 font-semibold border-b">
                                 R$ {{ item.vendas_cupons | format_moeda }}
                                 <div class="text-xs text-gray-400">Qtd: {{ item.qtd_cupons }}</div>
                             </td>
-
                             <td class="py-1 px-4 text-right text-yellow-600">R$ {{ "{:,.2f}".format(item.comissao) }}</td>
                             <td class="py-1 px-4 text-right text-green-700">R$ {{ "{:,.2f}".format(item.pago_central) }}</td>
                             <td class="py-1 px-4 text-right font-bold {% if item.pendente > 0 %}text-red-600{% else %}text-gray-300{% endif %}">
@@ -161,9 +161,7 @@
                             <td class="py-1 px-4 text-right text-gray-400">
                                 {% if item.a_receber_colab > 0 %}
                                     <span class="text-blue-500 font-bold">R$ {{ "{:,.2f}".format(item.a_receber_colab) }}</span>
-                                {% else %}
-                                    -
-                                {% endif %}
+                                {% else %} - {% endif %}
                             </td>
                         </tr>
                         {% endfor %}
@@ -173,12 +171,7 @@
                             <td class="py-1 px-4">TOTAIS</td>
                             <td class="py-1 px-4 text-center">{{ totais.qtd }}</td>
                             <td class="py-1 px-4 text-right text-blue-800">R$ {{ "{:,.2f}".format(totais.vendas) }}</td>
-                            
-                            <td class="py-1 px-4 text-right text-purple-800">
-                                R$ {{ "{:,.2f}".format(totais.vendas_cupons) }}
-                                <div class="text-xs font-normal">Qtd: {{ totais.qtd_cupons }}</div>
-                            </td>
-
+                            <td class="py-1 px-4 text-right text-purple-800">R$ {{ "{:,.2f}".format(totais.vendas_cupons) }}</td>
                             <td class="py-1 px-4 text-right text-yellow-800">R$ {{ "{:,.2f}".format(totais.comissao) }}</td>
                             <td class="py-1 px-4 text-right text-green-800">R$ {{ "{:,.2f}".format(totais.pago_central) }}</td>
                             <td class="py-1 px-4 text-right text-red-800">R$ {{ "{:,.2f}".format(totais.pendente_central) }}</td>
@@ -188,7 +181,48 @@
                 </table>
             </div>
         </div>
-
     </div>
+
+    <!-- SCRIPT DO GRÁFICO (APENAS MASTER) -->
+    {% if session.get('nivel') >= 4 %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            fetch('/api/faturamento_pizza')
+                .then(res => res.json())
+                .then(data => {
+                    if (data.values && data.values.length > 0) {
+                        const ctx = document.getElementById('graficoPizzaRegionais').getContext('2d');
+                        new Chart(ctx, {
+                            type: 'pie',
+                            data: {
+                                labels: data.labels,
+                                datasets: [{
+                                    data: data.values,
+                                    backgroundColor: ['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'],
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                plugins: { legend: { display: false } }
+                            }
+                        });
+
+                        // Preencher legenda manual
+                        const legenda = document.getElementById('legendaFaturamento');
+                        data.labels.forEach((label, i) => {
+                            const val = data.values[i].toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                            legenda.innerHTML += `
+                                <div class="flex items-center gap-2">
+                                    <div class="w-3 h-3 rounded-full" style="background: ${['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'][i]}"></div>
+                                    <span class="font-bold text-gray-700">${label}:</span>
+                                    <span class="text-gray-500">${val}</span>
+                                </div>`;
+                        });
+                    }
+                });
+        });
+    </script>
+    {% endif %}
 </body>
 </html>

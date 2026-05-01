@@ -13,7 +13,7 @@
                     colors: {
                         'primary': '#059669',
                         'secondary': '#10B981',
-                        'accent': '#F59E0B', // Amber
+                        'accent': '#F59E0B', 
                         'danger': '#EF4444',
                         'info': '#3B82F6',
                     }
@@ -49,7 +49,7 @@
         .password-toggle {
             position: absolute; 
             right: 5px; 
-            top: 35px; /* Ajustado para alinhar com o input */
+            top: 35px; 
             padding: 5px 10px; 
             background: #e9ecef; 
             border: 1px solid #ced4da;
@@ -60,7 +60,7 @@
             z-index: 10;
         }
         .password-group input {
-            padding-right: 70px; /* Espaço para o botão */
+            padding-right: 70px; 
         }
 
         .view-content {
@@ -70,7 +70,7 @@
             display: block !important; 
         }
 
-        /* --- INÍCIO CSS DA MODAL DE EXCLUSÃO (NOVO) --- */
+        /* --- INÍCIO CSS DA MODAL DE EXCLUSÃO --- */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -78,7 +78,7 @@
             right: 0;
             bottom: 0;
             background-color: rgba(0, 0, 0, 0.75);
-            display: none; /* Começa escondido */
+            display: none; 
             justify-content: center;
             align-items: center;
             z-index: 1000;
@@ -102,27 +102,26 @@
         .btn-danger:hover { background-color: #DC2626; }
         .btn-cancel { background-color: #D1D5DB; color: #374151; }
         .btn-cancel:hover { background-color: #B2B8C2; }
-        /* --- FIM CSS DA MODAL DE EXCLUSÃO --- */
 
-/* --- ESTILO DO LOADING (NOVO) --- */
+        /* --- ESTILO DO LOADING --- */
         #loading-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
-            background-color: rgba(255, 255, 255, 0.85); /* Fundo branco semi-transparente */
-            z-index: 9999; /* Fica acima de tudo */
+            background-color: rgba(255, 255, 255, 0.85); 
+            z-index: 9999; 
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            backdrop-filter: blur(4px); /* Efeito de desfoque */
+            backdrop-filter: blur(4px); 
         }
         .hidden { display: none !important; }
         
         .spinner {
             width: 60px;
             height: 60px;
-            border: 6px solid #E5E7EB; /* Cinza claro */
-            border-top-color: #059669; /* Verde Primary (sua cor tema) */
+            border: 6px solid #E5E7EB; 
+            border-top-color: #059669; 
             border-radius: 50%;
             animation: spin 1s linear infinite;
         }
@@ -141,7 +140,6 @@
 </head>
 <body>
 
-
     <div class="container">
 
       <div id="loading-overlay" class="hidden">
@@ -153,6 +151,7 @@
                Travou? Clique aqui para fechar
            </button>
        </div>
+       
         <div class="flex justify-center -mt-3 ">
             <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
         </div>
@@ -181,8 +180,31 @@
             </a>
         </div>
 
-        <div class="mb-2 -mt-1 p-2 bg-info text-white border border-blue-600 rounded-lg">
-            Total de Colaboradores Cadastrados: <strong id="total-colaboradores">{{ total_colaboradores }}</strong>.
+        <!-- FILTRO MASTER REGIONAL (Visível apenas para Nível >= 4) -->
+        {% if session.get('nivel', 0) >= 4 %}
+        <div class="mt-4 mb-4 bg-gray-100 p-4 rounded-lg flex items-center justify-between shadow-sm border border-gray-200">
+            <span class="font-bold text-gray-700 flex items-center gap-2">
+                <span>🌎</span> Filtro Master Regional:
+            </span>
+            <form method="GET" action="{{ url_for('cadastro_colaborador') }}" class="flex gap-2 m-0">
+                <input type="hidden" name="view" value="{{ active_view }}">
+                <select name="regional" class="border border-gray-300 p-2 rounded bg-white text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-500">
+                    <option value="todas" {% if filtro_regional == 'todas' %}selected{% endif %}>Todas as Regionais</option>
+                    {% for reg in regionais_lista %}
+                        <option value="{{ reg.id_regional }}" {% if filtro_regional|string == reg.id_regional|string %}selected{% endif %}>
+                            {{ reg.id_regional }} - {{ reg.descricao }}
+                        </option>
+                    {% endfor %}
+                </select>
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-4 rounded text-sm transition">
+                    Aplicar
+                </button>
+            </form>
+        </div>
+        {% endif %}
+
+        <div class="mb-2 {% if session.get('nivel', 0) < 4 %}mt-4{% endif %} p-2 bg-info text-white border border-blue-600 rounded-lg">
+            Total de Colaboradores Listados: <strong id="total-colaboradores">{{ total_colaboradores }}</strong>.
         </div>
         
         {% set is_novo_alterar = active_view in ['novo', 'alterar'] %}
@@ -207,6 +229,19 @@
                         <input type="text" 
                                value="{% if active_view == 'alterar' %}{{ colab.get('id_colaborador', 'N/A') }}{% else %}Gerado Automaticamente{% endif %}" 
                                disabled class="form-control bg-gray-100">
+                    </div>
+
+                    <!-- Novo Campo: Seleção de Regional (Obrigatório) -->
+                    <div class="flex flex-col mb-4">
+                        <label class="font-bold text-gray-700">📍 Regional Responsável:</label>
+                        <select name="id_regional" required class="border-2 border-blue-500 p-2 rounded-lg bg-blue-50 font-bold text-blue-900">
+                            <option value="">-- SELECIONE UMA REGIONAL --</option>
+                            {% for reg in regionais_lista %}
+                                <option value="{{ reg.id_regional }}" {% if colab.get('id_regional') == reg.id_regional %}selected{% endif %}>
+                                    {{ reg.id_regional }} - {{ reg.descricao }}
+                                </option>
+                            {% endfor %}
+                        </select>
                     </div>
 
                     <div class="form-group">
@@ -301,9 +336,9 @@
 
                     <div class="form-group">
                         <label for="nivel" class="required-label">Nível de Acesso:</label>
-                        <input type="number" id="nivel" name="nivel" required min="1" max="3" class="form-control"
+                        <input type="number" id="nivel" name="nivel" required min="1" max="4" class="form-control"
                                value="{{ colab.get('nivel', 1) }}">
-                        <small class="text-sm font-bold text-red-500">1 (Vendas), 2 (Gerentes) e 3 (Admin).</small>
+                        <small class="text-sm font-bold text-red-500">1 (Vendas), 2 (Gerentes), 3 (Admin), 4 (Master).</small>
                     </div>
                     
                 </div>
@@ -340,6 +375,7 @@
                     {% for colaborador in colaboradores_lista %}
                         <div class="border-b pb-3 mb-3 last:border-b-0 last:mb-0">
                             <p><strong>ID:</strong> {{ colaborador.id_colaborador }} (Nível: {{ colaborador.nivel }})</p>
+                            <p><strong>Regional:</strong> <span class="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-0.5 rounded">{{ colaborador.get('id_regional', 1) }}</span></p>
                             <p><strong>Nome:</strong> {{ colaborador.nome_colaborador }}</p>
                             <p><strong>Nick:</strong> <span class="font-semibold text-primary">{{ colaborador.nick }}</span></p>
                             <p><strong>CPF:</strong> {{ colaborador.cpf | default('N/A') }}</p>
@@ -349,19 +385,18 @@
 
                                 <a href="{{ url_for('cadastro_colaborador', view='alterar', id_colaborador=colaborador.id_colaborador) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
 
-<form method="POST" action="{{ url_for('alternar_status_colaborador', id_colaborador=colaborador.id_colaborador) }}?view=consulta" class="inline-block">
-        {% set st = colaborador.get('status', 'ativo') %}
-        {% if st == 'ativo' %}
-            <button type="submit" class="action-link text-amber-600 hover:text-amber-800" onclick="return confirm('Deseja BLOQUEAR este colaborador?')">
-
-                ⛔ Bloquear
-            </button>
-        {% else %}
-            <button type="submit" class="action-link text-green-600 hover:text-green-800">
-                ✅ Ativar
-            </button>
-        {% endif %}
-    </form>
+                                <form method="POST" action="{{ url_for('alternar_status_colaborador', id_colaborador=colaborador.id_colaborador) }}?view=consulta" class="inline-block">
+                                        {% set st = colaborador.get('status', 'ativo') %}
+                                        {% if st == 'ativo' %}
+                                            <button type="submit" class="action-link text-amber-600 hover:text-amber-800" onclick="return confirm('Deseja BLOQUEAR este colaborador?')">
+                                                ⛔ Bloquear
+                                            </button>
+                                        {% else %}
+                                            <button type="submit" class="action-link text-green-600 hover:text-green-800">
+                                                ✅ Ativar
+                                            </button>
+                                        {% endif %}
+                                </form>
                                 
                                 <form method="POST" action="{{ url_for('excluir_colaborador', id_colaborador=colaborador.id_colaborador) }}" 
                                       id="form-excluir-consulta-{{ colaborador.id_colaborador }}"
@@ -393,6 +428,7 @@
                         <tr class="list-header">
                             <th class="py-2 px-4 border-b text-left">ID</th>
                             <th class="py-2 px-4 border-b text-left">Nome (Nick)</th>
+                            <th class="py-2 px-4 border-b text-left">Regional</th>
                             <th class="py-2 px-4 border-b text-left">Nível</th>
                             <th class="py-2 px-4 border-b text-left">Telefone</th>
                             <th class="py-2 px-4 border-b text-left">Ações</th>
@@ -408,6 +444,9 @@
                                       {% if colaborador.get('status') == 'bloqueado' %}
                                            <span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-bold ml-2">BLOQUEADO</span>
                                       {% endif %}
+                                </td>
+                                <td class="py-3 px-4 border-b text-sm">
+                                    <span class="bg-blue-100 text-blue-800 text-xs font-semibold px-2 py-1 rounded">Reg: {{ colaborador.get('id_regional', 1) }}</span>
                                 </td>
                                 <td class="py-3 px-4 border-b text-sm font-semibold">{{ colaborador.nivel }}</td>
                                 <td class="py-3 px-4 border-b text-sm">{{ colaborador.telefone }}</td>
@@ -436,7 +475,7 @@
                             </tr>
                             {% endfor %}
                         {% else %}
-                            <tr><td colspan="5" class="py-8 text-center text-gray-500 font-bold">Nenhum colaborador cadastrado.</td></tr>
+                            <tr><td colspan="6" class="py-8 text-center text-gray-500 font-bold">Nenhum colaborador cadastrado.</td></tr>
                         {% endif %}
                     </tbody>
                 </table>
@@ -482,7 +521,7 @@
 
     <script>
 
- // --- FUNÇÃO PARA ATIVAR O LOADING ---
+        // --- FUNÇÃO PARA ATIVAR O LOADING ---
         function ativarLoading() {
             const overlay = document.getElementById('loading-overlay');
             if (overlay) {
@@ -491,14 +530,13 @@
                     overlay.classList.add('hidden');
                 }, 15000);
             }
-            // Retorna true para permitir que o formulário continue o envio
             return true;
         }
 
         function desativarLoading() {
            const overlay = document.getElementById('loading-overlay');
            if (overlay) {
-              overlay.classList.add('hidden'); // Adiciona a classe que esconde
+              overlay.classList.add('hidden'); 
            }
         }
 
@@ -567,7 +605,7 @@
                 if (formIdParaExcluir) {
                     const form = document.getElementById(formIdParaExcluir);
                     if (form) {
-                        ativarLoading(); // <--- Adicione aqui também
+                        ativarLoading();
                         form.submit(); 
                     }
                 }
@@ -595,16 +633,14 @@
             if (baseUrl.endsWith('/')) { baseUrl = baseUrl.slice(0, -1); }
 
             const idSalaInput = document.getElementById('current-id-sala');
-            // Se por acaso não achar, usa '000' como segurança, mas o ideal é vir do backend
             const idSala = idSalaInput ? idSalaInput.value : '000';
 
-            // Ex: http://site.com?id_sala=001&ref=10
             const finalUrl = `${baseUrl}?id_sala=${idSala}&ref=${idColaborador}`;
 
             qrColabNick.textContent = nick;
             qrLinkText.textContent = finalUrl;
             
-            btnCopyLink.textContent = "📋 Copiar Link"; // Reseta texto do botão
+            btnCopyLink.textContent = "📋 Copiar Link"; 
 
             new QRCode(qrContainer, {
                 text: finalUrl,
@@ -619,28 +655,24 @@
             qrModal.style.display = 'none';
         }   
 
-        // --- NOVA LÓGICA DE CÓPIA (COM FALLBACK PARA HTTP) ---
+        // --- NOVA LÓGICA DE CÓPIA ---
         function copiarLinkQRCode() {
             const linkText = qrLinkText.textContent;
             if (!linkText) return;
 
-            // Tenta usar API moderna (Funciona em HTTPS e Localhost)
             if (navigator.clipboard && window.isSecureContext) {
                 navigator.clipboard.writeText(linkText)
                     .then(() => feedbackBotaoCopiado())
-                    .catch(() => copiaFallback(linkText)); // Se falhar, tenta o método antigo
+                    .catch(() => copiaFallback(linkText)); 
             } else {
-                // Se não for HTTPS, usa direto o método antigo
                 copiaFallback(linkText);
             }
         }
 
         function copiaFallback(texto) {
-            // Cria um campo de texto temporário invisível
             const textArea = document.createElement("textarea");
             textArea.value = texto;
             
-            // Garante que não vai mexer na tela
             textArea.style.top = "0";
             textArea.style.left = "0";
             textArea.style.position = "fixed";
@@ -668,7 +700,6 @@
             const originalText = "📋 Copiar Link"; 
             btnCopyLink.textContent = "Copiado! ✅";
             
-            // Volta o texto original após 2 segundos
             setTimeout(() => {
                 btnCopyLink.textContent = originalText;
             }, 2000);

@@ -49,27 +49,42 @@
         {% endif %}
 
         <form method="POST" action="{{ url_for('gravar_parametros') }}" onsubmit="return validateForm(event)">
-            
-            <!-- BLOCO 1: GERAIS -->
-            <h3 class="section-title -mt-0.5 text-blue-700">Parâmetros Gerais da Sala</h3>
-            <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <div class="form-group">
-                    <label for="comissao_padrao">Comissão Padrão Colaboradores (%):</label>
-                    <input type="number" id="comissao_padrao" name="comissao_padrao" value="{{ p.comissao_padrao }}" required min="0" class="form-control bg-blue-50 font-bold text-blue-900">
-                </div>
-                <div class="form-group">
-                    <label for="limite_de_credito">Limite de Crédito Colaboradores (R$):</label>
-                    <input type="number" id="limite_de_credito" name="limite_de_credito" value="{{ p.limite_de_credito }}" required min="0" class="form-control bg-blue-50 font-bold text-blue-900">
-                </div>
-                <div class="form-group">
-                    <label for="acumulado">Acumulado Base (R$):</label>
-                    <input type="number" id="acumulado" name="acumulado" value="{{ '%.2f'|format(p.acumulado) }}" step="0.01" min="0" required class="form-control bg-green-50 text-green-700 font-bold">
-                </div>
-                <div class="form-group">
-                    <label for="tope">Bola Tope Padrão:</label>
-                    <input type="number" id="tope" name="tope" value="{{ p.tope }}" required min="1" class="form-control bg-green-50 text-green-700 font-bold">
-                </div>
-            </div>
+
+<!-- BLOCO 1: GERAIS -->            
+<h3 class="section-title -mt-0.5 text-blue-700">Parâmetros Gerais e Regras de Comissão</h3>
+
+<div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+    <div class="form-group">
+        <label for="limite_de_credito">Limite de Crédito Colaboradores (R$):</label>
+        <input type="number" id="limite_de_credito" name="limite_de_credito" value="{{ p.limite_de_credito }}" required min="0" class="form-control bg-blue-50 font-bold text-blue-900">
+    </div>
+    <div class="form-group">
+        <label for="acumulado">Acumulado Base (R$):</label>
+        <input type="number" id="acumulado" name="acumulado" value="{{ '%.2f'|format(p.acumulado) }}" step="0.01" min="0" required class="form-control bg-green-50 text-green-700 font-bold">
+    </div>
+    <div class="form-group">
+        <label for="tope">Bola Tope Padrão:</label>
+        <input type="number" id="tope" name="tope" value="{{ p.tope }}" required min="1" class="form-control bg-green-50 text-green-700 font-bold">
+    </div>
+
+    <div class="form-group p-3 bg-yellow-50 rounded-lg border border-yellow-100">
+        <label class="text-yellow-800 font-bold">Comissão Venda Direta (%):</label>
+        <input type="number" step="0.01" name="perc_venda_direta" value="{{ p.perc_venda_direta or 15.0 }}" required class="form-control border-yellow-300 font-black text-blue-900">
+        <small class="text-xs text-yellow-600 italic">Venda realizada no balcão</small>
+    </div>
+
+    <div class="form-group p-3 bg-yellow-50 rounded-lg border border-yellow-100">
+        <label class="text-yellow-800 font-bold">Venda Indireta A (%):</label>
+        <input type="number" step="0.01" name="perc_venda_indireta_a" value="{{ p.perc_venda_indireta_a or 5.0 }}" required class="form-control border-yellow-300 font-black text-blue-900">
+        <small class="text-xs text-yellow-600 italic">Dono do cliente (Passiva)</small>
+    </div>
+
+    <div class="form-group p-3 bg-yellow-50 rounded-lg border border-yellow-100">
+        <label class="text-yellow-800 font-bold">Venda Indireta B (%):</label>
+        <input type="number" step="0.01" name="perc_venda_indireta_b" value="{{ p.perc_venda_indireta_b or 10.0 }}" required class="form-control border-yellow-300 font-black text-blue-900">
+        <small class="text-xs text-yellow-600 italic">Dono quando outro vende</small>
+    </div>
+</div>
 
             <!-- BLOCO 2: CONFIGURAÇÕES DO ROBÔ (NOVO) -->
             <h3 class="section-title text-indigo-700">🤖 Robô de Atualização Automática (Prêmios)</h3>
