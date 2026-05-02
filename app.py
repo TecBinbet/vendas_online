@@ -8,7 +8,7 @@ from zoneinfo import ZoneInfo
 from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response, send_file
 from flask_login import login_required, current_user
 from fpdf import FPDF
-import pdfkit
+# import pdfkit
 from fpdf.enums import XPos, YPos
 from pymongo import MongoClient, ReturnDocument
 from pymongo.errors import ConnectionFailure, OperationFailure
