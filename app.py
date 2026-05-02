@@ -2353,6 +2353,21 @@ def processar_venda():
         traceback.print_exc()
         error_redirect_kwargs['error'] = f"Erro interno no DB: Falha ao gravar a transação."
         error_redirect_kwargs['quantidade'] = quantidade
+
+        # 1. Montamos a URL do protocolo do App Bluetooth Print
+        # Apontando para a nova rota JSON que criamos (api_venda_bluetooth_json)
+        host = request.host_url.rstrip('/')
+        url_api_json = (
+            f"{host}/api/venda_bluetooth_json?"
+            f"numero_inicial={numero_inicial_atual}&numero_final={numero_final_atual}"
+            f"&id_evento={id_evento_int_para_controle}&nome_cliente={cliente_doc.get('nick')}"
+        )
+
+        # 2. Criamos o link "mágico" e salvamos na sessão
+        session['url_bluetooth_print'] = f"my.bluetoothprint.scheme://{url_api_json}"
+
+        # --- [FIM DA ADIÇÃO] -
+
         return redirect(url_for('nova_venda', **error_redirect_kwargs))
 
     # ==============================================================================
@@ -5463,6 +5478,89 @@ def imprimir_cartelas_58mm_15():
 
     except Exception as e:
         return f"Erro interno: {e}"
+
+# vendas 
+@app.route('/api/venda_bluetooth_json')
+@login_required
+def api_venda_bluetooth_json():
+    """ Rota que gera o JSON para o App Bluetooth Print """
+    db = get_vendas_db()
+    if db is None: return jsonify({"error": "DB Offline"}), 500
+
+    try:
+        # 1. Pegamos os parâmetros (exatamente como na sua rota original)
+        numero_inicial = int(request.args.get('numero_inicial', 0))
+        numero_final = int(request.args.get('numero_final', 0))
+        id_evento_raw = request.args.get('id_evento', 0)
+        nome_cliente = request.args.get('nome_cliente', 'Cliente')
+
+        # 2. Busca o Evento e Parâmetros Globais
+        evento = db.eventos.find_one({'id_evento': id_evento_raw}) # Ajuste se for ObjectId
+        if not evento: return jsonify({"error": "Evento não encontrado"}), 404
+
+        nome_sala = g.parametros_globais.get('nome_sala', 'ARKKANTOS BINGO')
+        imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True)
+
+        # 3. Montagem do JSON para o App
+        dados_final = []
+
+        # Cabeçalho da Sala
+        dados_final.append({
+            "type": 0, "content": f"{nome_sala}\n", 
+            "bold": 1, "align": 1, "format": 2 # Grande e Centralizado
+        })
+
+        # Detalhes do Evento
+        dados_final.append({
+            "type": 0, 
+            "content": f"Evento: {evento.get('descricao', '')}\nData: {evento.get('data_evento')} {evento.get('hora_evento')}\nCliente: {nome_cliente}\n",
+            "bold": 0, "align": 0, "format": 0
+        })
+
+        dados_final.append({"type": 0, "content": "--------------------------------\n", "align": 1})
+
+        # 4. Loop de busca e formatação das Cartelas (15 dezenas)
+        for num_cartela in range(numero_inicial, numero_final + 1):
+            dados_matriz = buscar_dados_cartela_2d(num_cartela, 15)
+            
+            if dados_matriz:
+                # Título da Cartela
+                dados_final.append({
+                    "type": 0, "content": f"CARTELA: {num_cartela:04d}", 
+                    "bold": 1, "align": 1, "format": 3 # Largura dupla
+                })
+
+                # Formata a matriz 3x5 para texto
+                texto_matriz = ""
+                for linha in dados_matriz:
+                    # Formata cada número com 2 dígitos e espaço
+                    linha_str = "  ".join([f"{int(n):02d}" for n in linha])
+                    texto_matriz += f"{linha_str}\n"
+                
+                dados_final.append({
+                    "type": 0, "content": texto_matriz, 
+                    "bold": 0, "align": 1, "format": 0
+                })
+                dados_final.append({"type": 0, "content": "- - - - - - - - - - - - - - - -\n", "align": 1})
+
+        # 5. QR Code de Validação (Se ativado)
+        if imprime_qr:
+            dados_final.append({
+                "type": 3, 
+                "value": f"https://arkkantos.com.br/validar/{id_evento_raw}", # Link do seu sistema
+                "size": 35, "align": 1
+            })
+
+        # Rodapé e corte
+        dados_final.append({
+            "type": 0, "content": "\nBOA SORTE!\n\n\n\n", "align": 1
+        })
+
+        return jsonify(dados_final)
+
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
 
 
 @app.route('/imprimir_cartelas_58mm_25')

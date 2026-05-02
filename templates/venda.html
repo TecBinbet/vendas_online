@@ -711,6 +711,20 @@
             updateTotalCost();
             updateCartelasDisplay();
 
+            // ====================================================
+            // NOVO: DISPARO AUTOMÁTICO PARA APP BLUETOOTH PRINT        
+            // ====================================================
+            {% if session.get('url_bluetooth_print') %}
+                console.log("Detectado comando de impressão via App Bluetooth Print...");
+        
+                // Dispara o aplicativo externo usando o protocolo do esquema
+                window.location.href = "{{ session.get('url_bluetooth_print') }}";
+
+                // Limpa a instrução de impressão da sessão para evitar repetição no F5
+                // Nota: O redirecionamento abaixo limpa o estado na próxima carga
+                console.log("Impressão enviada ao Spooler do App.");
+            {% endif %}
+
             // --- NOVA LÓGICA: Auto-ocultar o bloco de sucesso após 5 segundos ---
             const successBlock = document.getElementById('success-block');
             if (successBlock) {
