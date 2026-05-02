@@ -30,8 +30,8 @@ import unicodedata # Para limpeza de nome de arquivo
 
 MODO_DEBUG = True
 #    log_sistema(f"🚨 ERRO IRRECUPERÁVEL AO CRIAR O CLIENTE DE CONTROLE: {e}", nivel="ERRO")
-path_wkhtmltopdf = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
-config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
+# path_wkhtmltopdf = r'C:\Program Files\wkhtmltopdf\bin\wkhtmltopdf.exe'
+# config = pdfkit.configuration(wkhtmltopdf=path_wkhtmltopdf)
 
 
 # --- VARIÁVEL GLOBAL PARA O CAMINHO DA PASTA ---
@@ -5319,104 +5319,6 @@ def gerar_cartelas_pdf_15():
         print(f"ERRO CRÍTICO ao gerar PDF 15: {e}")
         traceback.print_exc()
         return f"Erro interno: {e}"
-
-
-@app.route('/imprimir_cartelas_58mm_15New')
-@login_required
-def imprimir_cartelas_58mm_15New():
-    """ Rota exclusiva para impressão térmica 58mm de Cartelas 3x5 (15 dezenas) """
-    db = get_vendas_db()
-    if db is None: return "Erro de Conexão: DB Offline.", 500
-
-    try:
-        numero_inicial = int(request.args.get('numero_inicial', 0))
-        numero_final = int(request.args.get('numero_final', 0))
-
-        id_evento_raw = request.args.get('id_evento', 0)
-        try:
-            # Tenta converter para número (se vier da impressão automática)
-            id_evento = int(id_evento_raw)
-            query_evento = {'id_evento': id_evento}
-        except (ValueError, TypeError):
-            # Se for texto (veio da reimpressão via HTML), usa o ObjectId do Mongo
-            from bson.objectid import ObjectId
-            id_evento = str(id_evento_raw)
-            query_evento = {'_id': ObjectId(id_evento)} if len(id_evento) == 24 else {'id_evento': id_evento}
-
-        nome_cliente = request.args.get('nome_cliente', 'Cliente')
-
-        if numero_inicial > numero_final or numero_inicial == 0:
-            return "Erro: Numeração inválida."
-
-        evento = db.eventos.find_one({'id_evento': id_evento})
-        if not evento: return "Erro: Evento não encontrado."
-
-        imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True)
-        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
-        http_apk = g.parametros_globais.get('http_apk', '')
-
-        # Garante que vai buscar no TXT correto de 15 dezenas
-        tipo_cartela = 15 
-
-        data_str = evento.get('data_evento', '')
-        if '-' in str(data_str):
-            try: data_str = datetime.strptime(str(data_str), '%Y-%m-%d').strftime('%d/%m/%Y')
-            except: pass
-
-        lista_cartelas = []
-        for num_cartela in range(numero_inicial, numero_final + 1):
-            dados_matriz = buscar_dados_cartela_2d(num_cartela, tipo_cartela)
-            if dados_matriz:
-                lista_cartelas.append({'numero': num_cartela, 'matriz': dados_matriz})
-
-        # 1. Identifica o dispositivo pela requisição
-        user_agent = request.headers.get('User-Agent', '').lower()
-        is_mobile = any(x in user_agent for x in ['android', 'webos', 'iphone', 'ipad', 'blackberry'])
-
-        # 2. Renderiza o HTML (usaremos ele tanto para o PDF quanto para o PC)
-        html_renderizado = render_template('cartelas_58mm_15.html',
-                                           cartelas=lista_cartelas,
-                                           nome_sala=nome_sala,
-                                           descricao_evento=evento.get('descricao', ''),
-                                           data_hora=f"{data_str} as {evento.get('hora_evento', '')}",
-                                           nome_cliente=nome_cliente,
-                                           http_apk=http_apk,
-                                           imprimir_qrcode_na_venda=imprime_qr,
-                                           is_mobile=is_mobile) # Passamos a variável para o HTML
-
-        if is_mobile:
-            # MODO CELULAR: Gera PDF para o RawBT
-
-            options = {
-                'page-width': '58mm',
-                'page-height': '0', # Altura automática (cresce conforme o conteúdo)
-                'encoding': "UTF-8",
-                'load-error-handling': 'ignore',
-                'load-media-error-handling': 'ignore',
-                'disable-smart-shrinking': None,
-                'quiet': '' 
-            }
-
-            pdf_bin = pdfkit.from_string(html_renderizado, False, configuration=config, options=options)
-
-            if not pdf_bin:
-                return "Erro: O gerador de PDF retornou um arquivo vazio.", 500
-
-            # 3. Envia o binário de forma protegida
-            return send_file(
-                io.BytesIO(pdf_bin),
-                mimetype='application/pdf',
-                as_attachment=True,
-                download_name=f"cartelas_{numero_inicial}.pdf"
-            )
-        else:
-            # MODO PC: Retorna o HTML para impressão via USB (window.print)
-            return html_renderizado
-
-    except Exception as e:
-        traceback.print_exc()
-        return f"Erro interno: {e}"
-
 
 
 @app.route('/imprimir_cartelas_58mm_15')
