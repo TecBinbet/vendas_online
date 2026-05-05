@@ -1177,10 +1177,6 @@ def login():
         
         if usuario:
             tipo_usuario = 'colaborador'
-        #else:
-            # Busca em Clientes
-            #usuario = db.clientes.find_one({'nick': nome_usuario})
-            #if usuario: tipo_usuario = 'cliente'
 
     except Exception as e:
         print(f"🚨 [DEBUG] Erro busca usuário: {e}")
@@ -1210,17 +1206,19 @@ def login():
         if autenticado:
             session['logged_in'] = True
             
-            # Configura Sessão
+            # =================================================================
+            # CONFIGURA SESSÃO DO COLABORADOR
+            # =================================================================
             if tipo_usuario == 'colaborador':
                 session['id_colaborador'] = usuario.get('id_colaborador') or str(usuario['_id'])
                 session['nivel'] = usuario.get('nivel', 1) 
                 session['nick'] = usuario.get('nick') or usuario.get('nome_colaborador')
                 session['tipo_usuario_logado'] = 'colaborador'
-            #else:
-                #session['id_cliente'] = usuario.get('id_cliente')
-                #session['nick'] = usuario.get('nick')
-                #session['nivel'] = 0
-                #session['tipo_usuario_logado'] = 'cliente'
+                
+                # 👉 AQUI ESTÁ A CORREÇÃO CRÍTICA! 👈
+                # Extrai o id_regional do banco e salva na sessão. Se não existir, assume 1.
+                session['id_regional'] = int(usuario.get('id_regional', 1))
+            # =================================================================
 
             # --- VERIFICAÇÃO DE SENHA PADRÃO ---
             # Verifica se a senha que funcionou é "Senha" ou "senha"
@@ -1229,15 +1227,13 @@ def login():
                 return render_template('trocar_senha_obrigatoria.html', id_sala=id_sala_to_redirect)
              
             # Redirecionamento Sucesso
-            registrar_log("LOGIN", "ACESSO", f"Colaborador {session.get('nick')} iniciou sessão.")
+            registrar_log("LOGIN", "ACESSO", f"Colaborador {session.get('nick')} (Reg: {session.get('id_regional')}) iniciou sessão.")
 
             if tipo_usuario == 'colaborador':
                 return redirect(url_for('menu_operacoes'))
-            #else:
-                #return redirect(url_for('minha_carteira'))
+                
         else:
             print(f"[DEBUG] Falha: Senha incorreta (Testado)")
-            #print(f"[DEBUG] Falha: Senha incorreta (Testado '{senha_limpa}' e '{senha_limpa.capitalize()}')")
 
     return redirect(url_for('login_page', error="Usuário ou senha inválidos.", id_sala=id_sala_to_redirect))
 
@@ -1718,16 +1714,28 @@ def gravar_colaborador():
         nivel = nivel_solicitado
         comissao = int(request.form.get('comissao', g.parametros_globais.get('comissao_padrao', 20)))
         
-        # 2. BLINDAGEM REGIONAL
-        try:
-            id_regional = int(request.form.get('id_regional'))
-        except (TypeError, ValueError):
-            raise ValueError("Você deve selecionar uma Regional válida.")
-            
+        # =========================================================
+        # 2. BLINDAGEM REGIONAL E LOGS (Unificado e Corrigido)
+        # =========================================================
+        id_regional_str = request.form.get('id_regional', '').strip()
+        
+        # Blindagem contra vazios ou 'None'
+        if not id_regional_str or id_regional_str == 'None':
+            id_regional = int(session.get('id_regional', 1))
+        else:
+            try:
+                id_regional = int(id_regional_str)
+            except ValueError:
+                id_regional = int(session.get('id_regional', 1))
+
+        regional_logada_segura = int(session.get('id_regional', 1))
+        nivel_logado_seguro = int(session.get('nivel', 0))
+           
         # Nível 3 NÃO PODE criar/editar usuários de outra regional. 
         # Nível 4 é livre.
-        if nivel_logado < 4 and id_regional != regional_logada:
-            raise ValueError(f"Acesso Negado. Você só pode gerenciar colaboradores da sua própria regional (ID: {regional_logada}).")
+        if nivel_logado_seguro < 4 and id_regional != regional_logada_segura:
+            raise ValueError(f"Acesso Negado. Você só pode gerenciar colaboradores da sua própria regional (ID: {regional_logada_segura}).")
+        # =========================================================
         
         # --- LIMITE DE CRÉDITO ---
         padrao_global = g.parametros_globais.get('limite_de_credito', 100.00)

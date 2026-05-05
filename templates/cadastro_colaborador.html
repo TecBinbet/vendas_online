@@ -231,18 +231,33 @@
                                disabled class="form-control bg-gray-100">
                     </div>
 
-                    <!-- Novo Campo: Seleção de Regional (Obrigatório) -->
-                    <div class="flex flex-col mb-4">
-                        <label class="font-bold text-gray-700">📍 Regional Responsável:</label>
-                        <select name="id_regional" required class="border-2 border-blue-500 p-2 rounded-lg bg-blue-50 font-bold text-blue-900">
-                            <option value="">-- SELECIONE UMA REGIONAL --</option>
-                            {% for reg in regionais_lista %}
-                                <option value="{{ reg.id_regional }}" {% if colab.get('id_regional') == reg.id_regional %}selected{% endif %}>
-                                    {{ reg.id_regional }} - {{ reg.descricao }}
-                                </option>
-                            {% endfor %}
-                        </select>
-                    </div>
+<!-- Seleção de Regional (Inteligente por Nível) -->
+<div class="flex flex-col mb-4">
+    <label class="font-bold text-gray-700">📍 Regional Responsável:</label>
+    
+    {% if session.get('nivel', 0) >= 4 %}
+        <!-- VISÃO MASTER: Pode escolher qualquer regional -->
+        <select name="id_regional" required class="border-2 border-blue-500 p-2 rounded-lg bg-blue-50 font-bold text-blue-900">
+            <option value="">-- SELECIONE UMA REGIONAL --</option>
+            {% for reg in regionais_lista %}
+                <option value="{{ reg.id_regional }}" {% if colab.get('id_regional', session.get('id_regional')) == reg.id_regional %}selected{% endif %}>
+                    {{ reg.id_regional }} - {{ reg.descricao }}
+                </option>
+            {% endfor %}
+        </select>
+    {% else %}
+        <!-- VISÃO GERENTE/REGIONAL: Fixo na própria regional -->
+        <select disabled class="border-2 border-gray-300 p-2 rounded-lg bg-gray-200 font-bold text-gray-500 cursor-not-allowed">
+            {% for reg in regionais_lista %}
+                {% if reg.id_regional == session.get('id_regional') %}
+                    <option selected>{{ reg.id_regional }} - {{ reg.descricao }}</option>
+                {% endif %}
+            {% endfor %}
+        </select>
+        <!-- Campo oculto que realmente envia o dado no POST -->
+        <input type="hidden" name="id_regional" value="{{ session.get('id_regional', 1) }}">
+    {% endif %}
+</div>
 
                     <div class="form-group">
                         <label for="nome_colaborador" class="required-label">Nome Completo:</label>
