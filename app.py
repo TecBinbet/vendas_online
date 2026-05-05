@@ -526,52 +526,69 @@ except Exception as e:
 
 # 2. Configuração Dinâmica para Salas de Vendas
 DB_VENDAS_CLIENT_CACHE = {} 
+URL_SORTEIO_CACHE = {}
+
 db_vendas_client_cache_lock = threading.Lock()
 DB_NAME_VENDAS = 'bingo_vendas_db' 
 
 # --- FUNÇÃO DE CONEXÃO DINÂMICA (CRÍTICA) ---
+# --- FUNÇÃO DE CONEXÃO DINÂMICA (CRÍTICA) ---
 def get_vendas_db():
     """
     Retorna o objeto do banco de dados de vendas com base no id_sala
-    armazenado em g.id_sala. Gerencia o cache de clientes (clusters).
+    armazenado em g.id_sala. Gerencia o cache de clientes (clusters)
+    e disponibiliza a URL do banco de sorteio em g.url_mongo_sorteio.
     """
     id_sala = getattr(g, 'id_sala', None)
-    #print(f"[LOG] get_vendas_db: Tentando obter BD para g.id_sala = {id_sala}")
+    
     if not id_sala:
         return None 
     
+    # 1. TENTA USAR O CACHE
     if id_sala in DB_VENDAS_CLIENT_CACHE:
-        #print(f"[LOG] get_vendas_db: CACHE HIT para sala: {id_sala}")
+        # Se a conexão está no cache, mas a URL do sorteio se perdeu, busca de novo!
+        if id_sala not in URL_SORTEIO_CACHE and db_control is not None:
+            sala_info = db_control.salas.find_one({"id_sala": id_sala}, {"url_mongo_sorteio": 1})
+            if sala_info and sala_info.get('url_mongo_sorteio'):
+                URL_SORTEIO_CACHE[id_sala] = sala_info.get('url_mongo_sorteio')
+                
+        g.url_mongo_sorteio = URL_SORTEIO_CACHE.get(id_sala)
         client_vendas = DB_VENDAS_CLIENT_CACHE[id_sala]
         return client_vendas[DB_NAME_VENDAS]
     
     if db_control is None:
-        #print("[LOG] get_vendas_db: ERRO - Banco de controle (master) não está conectado para buscar o URI.")
         return None
         
     with db_vendas_client_cache_lock:
+        # 2. VERIFICAÇÃO PÓS-LOCK (Mesma proteção de cache acima)
         if id_sala in DB_VENDAS_CLIENT_CACHE:
-            #print(f"[LOG] get_vendas_db: CACHE HIT (pós-lock) para sala: {id_sala}")
+            if id_sala not in URL_SORTEIO_CACHE:
+                sala_info = db_control.salas.find_one({"id_sala": id_sala}, {"url_mongo_sorteio": 1})
+                if sala_info and sala_info.get('url_mongo_sorteio'):
+                    URL_SORTEIO_CACHE[id_sala] = sala_info.get('url_mongo_sorteio')
+                    
+            g.url_mongo_sorteio = URL_SORTEIO_CACHE.get(id_sala)
             client_vendas = DB_VENDAS_CLIENT_CACHE[id_sala]
             return client_vendas[DB_NAME_VENDAS]
             
-        #print(f"[LOG] get_vendas_db: CACHE MISS. Buscando URI no 'db_control' para sala: {id_sala}")
-        
-        # --- CORREÇÃO (Baseada no seu feedback dos dados) ---
+        # 3. CRIAÇÃO DA CONEXÃO DO ZERO (Cache Miss)
         sala_info = db_control.salas.find_one(
             {"id_sala": id_sala},
-            {"url_parte1": 1, "url_parte2": 1}  # Projeção
+            {"url_parte1": 1, "url_parte2": 1, "url_mongo_sorteio": 1}
         )
         
         if not sala_info or 'url_parte1' not in sala_info or 'url_parte2' not in sala_info:
-            #print(f"[LOG] get_vendas_db: ERRO - 'url_parte1' ou 'url_parte2' da sala '{id_sala}' não encontrados no BD de controle.")
             return None
+            
+        # Armazena a URL do Sorteio
+        url_sorteio = sala_info.get('url_mongo_sorteio')
+        if url_sorteio:
+            URL_SORTEIO_CACHE[id_sala] = url_sorteio
+            g.url_mongo_sorteio = url_sorteio
             
         uri_vendas = f"{sala_info['url_parte1']}{ENCODED_PASSWORD}{sala_info['url_parte2']}"
         
         log_sistema(f"[LOG] get_vendas_db: URI construída. Tentando nova conexão com cluster...")
-        log_sistema(f"[LOG] URL: {uri_vendas}")
-        # --- FIM DA CORREÇÃO ---
         
         try:
             client_vendas = MongoClient(
@@ -589,7 +606,6 @@ def get_vendas_db():
             return client_vendas[DB_NAME_VENDAS]
             
         except Exception as e:
-            #print(f"🚨 [LOG] get_vendas_db: ERRO ao conectar ao cluster da sala '{id_sala}'. Verifique a URI e a password. Erro: {e}")
             return None
 
 
@@ -6635,10 +6651,9 @@ def parametros():
 @login_required
 def gravar_parametros():
     """
-    Grava os parâmetros na base de dados formatando devidamente para Decimal128 e Object.
-    Removeu comissao_padrao e adicionou o trio de taxas auditáveis.
+    Grava os parâmetros na base de dados de Vendas e sincroniza o Modo Treinamento 
+    com a base de Dados do Sorteio.
     """
-    # 1. VALIDAÇÃO DE SEGURANÇA NA ESCRITA
     nick_operador = session.get('nick', '').upper()
     nome_operador = session.get('operador', '').upper()
     
@@ -6650,49 +6665,43 @@ def gravar_parametros():
     try:
         def get_float_val(field_name):
             try:
-                # Trata substituição de vírgula por ponto para conversão segura
                 return float(request.form.get(field_name, '0').replace(',', '.'))
             except:
                 return 0.0
 
-        # --- BUSCA PARÂMETROS ATUAIS PARA AUDITORIA ---
         params_atuais = db.parametros.find_one({}) or {}
-        
         porcento_premios_val = int(request.form.get('porcento_premios', 0))
 
-        # --- VALIDAÇÕES DE 100% (PRÊMIOS) ---
+        # --- VALIDAÇÕES DE 100% ---
         if porcento_premios_val > 0:
-            # Padrão 15
             soma_15 = get_float_val('porcento_15_linha') + get_float_val('porcento_15_bingo') + get_float_val('porcento_15_segundobingo')
             if abs(soma_15 - 100.0) > 0.01:
-                 return redirect(url_for('parametros', error=f"Erro: O total de prémios para 15 Números deve ser 100%. (Atual: {soma_15}%)"))
+                 return redirect(url_for('parametros', error=f"Erro: 15 Números deve ser 100%. (Atual: {soma_15}%)"))
 
-            # Padrão 25
             soma_25 = get_float_val('porcento_25_linha') + get_float_val('porcento_25_bingo')
             if abs(soma_25 - 100.0) > 0.01:
-                 return redirect(url_for('parametros', error=f"Erro: O total de prémios para 25 Números deve ser 100%. (Atual: {soma_25}%)"))
+                 return redirect(url_for('parametros', error=f"Erro: 25 Números deve ser 100%. (Atual: {soma_25}%)"))
 
-        # --- 2. CONSTRUÇÃO DO DICIONÁRIO DE ATUALIZAÇÃO ---
-        # Note que removemos 'comissao_padrao' daqui
+        # --- DEFINIÇÃO DO ESTADO DE TREINAMENTO ---
+        # Captura o valor do checkbox do HTML
+        treinamento_ativo = True if request.form.get('em_treinamento') else False #[cite: 3]
+
+        # --- 2. CONSTRUÇÃO DO DICIONÁRIO PARA O BANCO DE VENDAS ---
         dados_atualizados = {
             'limite_de_credito': int(request.form.get('limite_de_credito', 0)),
             'acumulado': safe_dec(request.form.get('acumulado', '0')),
             'tope': int(request.form.get('tope', 0)),
             'porcento_premios': porcento_premios_val,
-            'em_treinamento': True if request.form.get('em_treinamento') else False,
+            'em_treinamento': treinamento_ativo, # Campo original
             'tempo_atualizacao_premios': int(request.form.get('tempo_atualizacao_premios', 1)),
             'minimo_atualizacao_premios': safe_dec(request.form.get('minimo_atualizacao_premios', '50.00')),
             'receber_pix': True if request.form.get('receber_pix') else False,
             'chat_id_telegram': request.form.get('chat_id_telegram', '').strip(),
             'token_telegram': request.form.get('token_telegram', '').strip(),
             'texto_requisicao_saque': request.form.get('texto_requisicao_saque', '').strip(),
-
-            # --- NOVAS TAXAS DE COMISSÃO (SUBSTITUEM A PADRÃO) ---
             'perc_venda_direta': safe_dec(request.form.get('perc_venda_direta', '15.0')),
             'perc_venda_indireta_a': safe_dec(request.form.get('perc_venda_indireta_a', '5.0')),
             'perc_venda_indireta_b': safe_dec(request.form.get('perc_venda_indireta_b', '10.0')),
-
-            # Objetos de prêmios (Padrão 15, 25, etc.)
             'porcento_15': {
                 'linha': safe_dec(request.form.get('porcento_15_linha', '0')),
                 'bingo': safe_dec(request.form.get('porcento_15_bingo', '0')),
@@ -6720,30 +6729,48 @@ def gravar_parametros():
             }
         }
 
-        # --- 3. MOTOR DE AUDITORIA DE TAXAS ---
+        # 3. AUDITORIA (Taxas)
         novas_taxas = ['perc_venda_direta', 'perc_venda_indireta_a', 'perc_venda_indireta_b']
         for tx in novas_taxas:
             v_novo = get_float_val(tx)
-            # Converte o Decimal128 antigo para float para comparar com segurança
             v_antigo = float(str(params_atuais.get(tx, 0))) 
-
             if v_novo != v_antigo:
-                registrar_log(
-                    acao="EDITAR",
-                    categoria="PARAMETROS",
-                    detalhes=f"Alterou {tx}: de {v_antigo}% para {v_novo}%",
-                    alvo_id="TAXAS_COMISSAO"
+                registrar_log(acao="EDITAR", categoria="PARAMETROS", detalhes=f"Taxa {tx}: {v_antigo}% -> {v_novo}%", alvo_id="TAXAS_COMISSAO")
+
+        # 4. GRAVAÇÃO NO BANCO DE VENDAS
+        db.parametros.update_one({}, {'$set': dados_atualizados}, upsert=True) ## [cite: 3]
+
+        # ==============================================================================
+        # 🔄 SINCRONIZAÇÃO COM BANCO "DADOS_DO_SORTEIO"
+        # ==============================================================================
+        uri_sorteio = getattr(g, 'url_mongo_sorteio', None)
+        
+        if uri_sorteio:
+            try:
+                # Conecta usando a URI dinâmica resgatada pelo get_vendas_db()
+                client_sorteio = MongoClient(uri_sorteio, tlsCAFile=certifi.where()) 
+                db_sorteio = client_sorteio['dados_do_sorteio']
+                
+                # Grava no campo "modo_treinamento"
+                db_sorteio.parametros.update_one(
+                    {}, 
+                    {'$set': {'modo_treinamento': treinamento_ativo}}, 
+                    upsert=True
                 )
-        # 4. UPSERT NO MONGODB
-        db.parametros.update_one({}, {'$set': dados_atualizados}, upsert=True)
+                #print(f"✅ Sincronização Sorteio: modo_treinamento = {treinamento_ativo}")
+                client_sorteio.close()
+            except Exception as e_sorteio:
+                print(f"⚠️ Erro ao sincronizar com banco de sorteio: {e_sorteio}")
+        else:
+            print("⚠️ URL do banco de Sorteio não encontrada no cadastro da sala.")       
+        # ==============================================================================
         
-        registrar_log("EDITAR", "PARAMETROS", f"Parâmetros financeiros e taxas da sala {g.id_sala} alterados por {nick_operador}.")
-        
-        return redirect(url_for('parametros', success="Configurações e novas taxas gravadas com sucesso!"))
+        registrar_log("EDITAR", "PARAMETROS", f"Parâmetros financeiros alterados por {nick_operador}.")
+        return redirect(url_for('parametros', success="Configurações gravadas e sincronizadas com sucesso!"))
 
     except Exception as e:
-        print(f"Erro Crítico ao gravar parâmetros: {e}")
-        return redirect(url_for('parametros', error=f"Erro interno ao salvar as configurações: {e}"))
+        print(f"Erro Crítico: {e}")
+        return redirect(url_for('parametros', error=f"Erro interno: {e}"))
 
 
 def motor_background_premios():
@@ -6963,70 +6990,78 @@ def financeiro_clientes():
 
 
 #===========================
-# LIMPEZA DOS DADOS
+# GESTÃO E LIMPEZA DOS DADOS (FASE 4 - SNAPSHOTS INCLUSOS)
 @app.route('/admin/limpeza_dados', methods=['GET', 'POST'])
 @login_required
 def limpeza_dados():
-    if session.get('nivel', 0) < 3:
+    if session.get('nivel', 0) < 4:
         return redirect(url_for('menu_operacoes', error="Acesso Negado."))
 
     db = get_vendas_db()
-    BLINDADAS = ['colaboradores', 'usuarios', 'config', 'parametros', 'salas', 'config_bloqueio', 'contadores']
-
-    # Mapeamento: Se limpar a TABELA 'A', reseta o CONTADOR 'B' na coleção 'contadores'
-    MAPA_CONTADORES = {
-        'clientes': 'id_clientes_global',
-        'transacoes_clientes': None, # Não tem contador incremental fixo, usa timestamp
-        'requisao_saque': None,
-        'resultados': None
-    }
+    BLINDADAS = ['colaboradores', 'usuarios', 'config', 'parametros', 'salas', 'config_bloqueio', 'contadores','sorte_extra_config']
 
     if request.method == 'POST':
         tabelas_selecionadas = request.form.getlist('tabelas')
-        confirmacao = request.form.get('confirmacao_manual')
+        confirmacao = request.form.get('confirmacao_manual', '').upper().strip()
 
-        if confirmacao != "EXECUTAR":
-            return render_template('limpeza_dados.html', error="Confirmação incorreta.", blindadas=BLINDADAS)
+        if confirmacao not in ["ESVAZIAR", "EXCLUIR"]:
+            disponiveis = sorted([c for c in db.list_collection_names() if c not in BLINDADAS])
+            return render_template('limpeza_dados.html', error="Confirmação incorreta.", blindadas=BLINDADAS, disponiveis=disponiveis)
 
         try:
-            removidas = 0
+            operacoes_realizadas = 0
             resets_contadores = 0
             
             for tabela in tabelas_selecionadas:
                 if tabela not in BLINDADAS:
-                    # 1. Esvazia a tabela
-                    db[tabela].delete_many({})
-                    removidas += 1
-
-                    # 2. Checa se existe contador vinculado para esta tabela
-                    # Procuramos por tabelas de vendas dinâmicas (ex: vendas1, vendas2...) ou fixas
-                    campo_contador = MAPA_CONTADORES.get(tabela)
+                    # --- EXECUÇÃO DA OPERAÇÃO ---
+                    if confirmacao == "ESVAZIAR":
+                        db[tabela].delete_many({})
+                    elif confirmacao == "EXCLUIR":
+                        db[tabela].drop()
                     
-                    # Lógica especial para tabelas de vendas dinâmicas (vendasX)
-                    if tabela.startswith('vendas') and not tabela.startswith('vendas_sorte_extra'):
-                        # Para tabelas 'vendas123', o contador geralmente fica na 'controle_venda'
-                        db.controle_venda.delete_many({'id_evento': {'$exists': True}})
+                    operacoes_realizadas += 1
+
+                    # --- INTELIGÊNCIA PARA VENDAS E SNAPSHOTS ---
+                    # 1. Se for tabela de vendas ou snapshot de vendas
+                    is_venda = tabela.startswith('vendas') and not tabela.startswith('vendas_sorte_extra')
+                    is_snapshot = tabela.startswith('snapshot_vendas_')
+
+                    if is_venda or is_snapshot:
+                        # Extrai o ID do evento do nome da tabela (vendas158 ou snapshot_vendas_158)
+                        parts = tabela.split('_')
+                        id_evento_extraido = None
+                        
+                        if is_venda:
+                            # Tenta pegar o número após a palavra 'vendas'
+                            match = re.search(r'vendas(\d+)', tabela)
+                            if match: id_evento_extraido = int(match.group(1))
+                        else:
+                            # Pega a última parte do nome (snapshot_vendas_158 -> 158)
+                            try: id_evento_extraido = int(parts[-1])
+                            except: pass
+
+                        # Se conseguimos identificar o evento, limpamos o controle de numeração atômica
+                        if id_evento_extraido:
+                            db.controle_venda.delete_many({'id_evento': id_evento_extraido}) # [cite: 1]
+                            resets_contadores += 1
+
+                    # 2. Reset de contadores globais (clientes, etc)
+                    if tabela == 'clientes' and confirmacao == "ESVAZIAR":
+                        db.contadores.update_one({'_id': 'global'}, {'$set': {'id_clientes_global': 0}}, upsert=True)
                         resets_contadores += 1
 
-                    # Reset de contadores globais na coleção 'contadores'
-                    if campo_contador:
-                        db.contadores.update_one(
-                            {'_id': campo_contador},
-                            {'$set': {'sequence_value': 0, 'id_vendas_global': 0}},
-                            upsert=False
-                        )
-                        resets_contadores += 1
+            verbo = "limpas" if confirmacao == "ESVAZIAR" else "excluídas"
+            msg = f"Sucesso! {operacoes_realizadas} tabelas {verbo} e {resets_contadores} vínculos de controle removidos."
             
-            msg = f"Limpeza concluída! {removidas} tabelas limpas e {resets_contadores} contadores reiniciados."
-            return render_template('limpeza_dados.html', success=msg, blindadas=BLINDADAS)
+            disponiveis = sorted([c for c in db.list_collection_names() if c not in BLINDADAS])
+            return render_template('limpeza_dados.html', success=msg, blindadas=BLINDADAS, disponiveis=disponiveis)
             
         except Exception as e:
-            return render_template('limpeza_dados.html', error=f"Erro: {e}", blindadas=BLINDADAS)
+            traceback.print_exc()
+            return render_template('limpeza_dados.html', error=f"Erro crítico: {e}", blindadas=BLINDADAS)
 
-    # Listagem (Mantém igual)
-    todas_colecoes = db.list_collection_names()
-    disponiveis = [c for c in todas_colecoes if c not in BLINDADAS]
-    disponiveis.sort()
+    disponiveis = sorted([c for c in db.list_collection_names() if c not in BLINDADAS])
     return render_template('limpeza_dados.html', disponiveis=disponiveis, blindadas=BLINDADAS)
 
 
@@ -7294,8 +7329,8 @@ def limpar_tabela_dinamica(nome_tabela):
     if db is None: 
         return jsonify({'status': 'error', 'msg': 'Banco de dados offline.'}), 500
 
-    # 1. SEGURANÇA: Apenas Nível 3 (Admin)
-    if session.get('nivel', 0) < 3:
+    # 1. SEGURANÇA: Apenas Nível 4 (Admin)
+    if session.get('nivel', 0) < 4:
         return jsonify({'status': 'error', 'msg': 'ACESSO NEGADO: Apenas administradores.'}), 403
 
     # 2. SEGURANÇA: Lista de tabelas INTOCÁVEIS (Para não quebrar o sistema)
@@ -7341,8 +7376,8 @@ def expurgar_treinamento():
     Remove do banco todos os clientes marcados com 'em_treinamento': True
     e apaga todas as suas transações financeiras.
     """
-    # 1. Segurança: Apenas nível 3 (Administrador Master)
-    if session.get('nivel', 0) < 3:
+    # 1. Segurança: Apenas nível 4 (Administrador Master)
+    if session.get('nivel', 0) < 4:
         return redirect(url_for('menu_operacoes', error="Acesso negado."))
 
     db = get_vendas_db()
@@ -7369,8 +7404,8 @@ def expurgar_treinamento():
 
         # 5. Log de Auditoria no Console
         msg = f"EXPURGO CONCLUÍDO: {res_clientes.deleted_count} clientes e {res_transacoes.deleted_count} transações foram removidos permanentemente."
-        #print(f"\n[ALERTA DE SEGURANÇA] {session.get('nick')} EXECUTOU EXPURGO DE TREINAMENTO.")
-        #print(f"Registros removidos: {res_clientes.deleted_count}\n")
+        print(f"\n[ALERTA DE SEGURANÇA] {session.get('nick')} EXECUTOU EXPURGO DE TREINAMENTO.")
+        print(f"Registros removidos: {res_clientes.deleted_count}\n")
         
         return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
 
@@ -7386,7 +7421,7 @@ def expurgar_treinamento():
 @app.route('/admin/ativar_modo_treino_retroativo')
 @login_required
 def ativar_modo_treino_retroativo():
-    if session.get('nivel', 0) < 3:
+    if session.get('nivel', 0) < 4:
         return redirect(url_for('menu_operacoes', error="Acesso negado."))
 
     db = get_vendas_db()
@@ -7434,7 +7469,6 @@ def ativar_modo_treino_retroativo():
     except Exception as e:
         print(f"Erro na conversão: {e}")
         return redirect(url_for('cadastro_cliente', error=f"Erro: {e}"))
-
 
 
 # >>>  http://localhost:5001/migrar_regionais
@@ -7491,7 +7525,7 @@ def migrar_regionais():
 @app.route('/admin/corrigir_tipo_data_e_treino')
 @login_required
 def corrigir_tipo_data_e_treino():
-    if session.get('nivel', 0) < 3:
+    if session.get('nivel', 0) < 4:
         return redirect(url_for('menu_operacoes', error="Acesso negado."))
 
     db = get_vendas_db()
@@ -7577,7 +7611,7 @@ def criar_indices_regionais(db):
             db[col_name].create_index([("id_regional", 1), ("data_venda", -1)])
     return "Índices criados com sucesso!"
 
-
+#########################################################
 if __name__ == '__main__':
     # Usamos o app_context para que o Flask permita o uso de funções que dependem do DB
     with app.app_context():

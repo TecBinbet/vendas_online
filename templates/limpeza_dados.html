@@ -2,51 +2,109 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <title>⚙️ Reset de Tabelas - TECBIN</title>
+    <title>⚙️ Gestão de Tabelas - TECBIN</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        .input-danger:focus { border-color: #dc2626; ring-color: #dc2626; }
+    </style>
 </head>
 <body class="bg-gray-900 p-2 text-white">
     <div class="max-w-4xl mx-auto bg-white text-gray-800 rounded-xl shadow-2xl overflow-hidden">
-        <div class="bg-red-600 p-2 flex justify-between items-center">
+        <div class="bg-gradient-to-r from-red-700 to-red-500 p-4 flex justify-between items-center">
             <div>
-                <h2 class="text-2xl text-white flex items-center gap-2">⚠️ Zona de Perigo: Limpeza de Dados</h2>
-                <p class="text-gray-100">Selecione as tabelas que deseja esvaziar (os índices serão mantidos).</p>
+                <h2 class="text-2xl text-white font-bold flex items-center gap-2">⚠️ Zona de Perigo: Reset de Dados</h2>
+                <p class="text-gray-100 text-sm">ESVAZIAR (limpa registros) ou EXCLUIR (apaga a coleção completa).</p>
             </div>
             <a href="{{ url_for('parametros') }}" class="px-4 py-2 bg-white/20 hover:bg-white/40 text-white rounded-lg font-bold transition border border-white/30">
-                ← Sair / Voltar
+                ← Voltar
             </a>
         </div>
 
-        <form method="POST" class="p-3">
-            <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-2">
+        <form method="POST" class="p-4" id="resetForm">
+            <!-- Grid de Seleção -->
+            <div class="grid grid-cols-2 md:grid-cols-3 gap-2 mb-4">
                 {% for tabela in disponiveis %}
-                <label class="flex items-center gap-2 p-3 border rounded hover:bg-gray-50 cursor-pointer transition">
-                    <input type="checkbox" name="tabelas" value="{{ tabela }}" class="w-5 h-5 text-red-600">
-                    <span class="font-mono text-sm">{{ tabela }}</span>
+                <label class="flex items-center gap-3 p-3 border-2 border-gray-100 rounded-xl hover:border-red-200 hover:bg-red-50 cursor-pointer transition-all">
+                    <input type="checkbox" name="tabelas" value="{{ tabela }}" class="w-5 h-5 text-red-600 rounded">
+                    <span class="font-mono text-sm font-bold text-gray-700">{{ tabela }}</span>
                 </label>
                 {% endfor %}
             </div>
 
-            <div class="bg-blue-50 p-2 rounded-lg mb-1">
-                <h4 class="font-bold text-blue-800">🛡️ Tabelas Blindadas (Segurança do Sistema)</h4>
-                <div class="flex flex-wrap gap-2 text-lg font-mono text-blue-600">
-                    {% for b in blindadas %} <span class="bg-blue-100 px-2 py-1 rounded">{{ b }}</span> {% endfor %}
+            <!-- Tabelas Blindadas -->
+            <div class="bg-blue-50 p-3 rounded-xl mb-6 border border-blue-100">
+                <h4 class="font-bold text-blue-800 text-xs uppercase mb-2 flex items-center gap-1">
+                    🛡️ Tabelas Blindadas (Imutáveis)
+                </h4>
+                <div class="flex flex-wrap gap-2 font-mono text-blue-600 text-xs">
+                    {% for b in blindadas %} 
+                    <span class="bg-blue-100 px-2 py-1 rounded border border-blue-200">{{ b }}</span> 
+                    {% endfor %}
                 </div>
             </div>
 
-            <div class="border-t pt-2">
-                <p class="text-sm text-gray-500 mb-1 uppercase font-bold">Confirmação Crítica</p>
-                <div class="flex flex-col md:flex-row gap-4 items-center">
-                    <input type="text" name="confirmacao_manual" placeholder="Digite EXECUTAR para confirmar" 
-                           class="form-control border-2 border-red-500 p-3 rounded-lg flex-1 w-full text-center font-black">
+            <!-- Confirmação Condicional -->
+            <div class="bg-gray-50 p-4 rounded-2xl border-2 border-dashed border-gray-200">
+                <p class="text-center text-sm font-bold text-gray-500 mb-3 uppercase tracking-widest">Validação de Segurança</p>
+                
+                <div class="flex flex-col gap-4">
+                    <div class="relative">
+                        <input type="text" name="confirmacao_manual" id="confirmacao_manual" required
+                               placeholder="Digite ESVAZIAR ou EXCLUIR" 
+                               class="w-full border-2 border-gray-300 p-4 rounded-xl text-center font-black text-xl uppercase focus:border-red-600 focus:ring-0 transition-all placeholder:font-normal placeholder:text-gray-300">
+                    </div>
                     
-                    <button type="submit" onclick="return confirm('ATENÇÃO! Esta ação não pode ser desfeita. Deseja continuar?')"
-                            class="bg-red-600 hover:bg-red-800 text-white font-bold py-3 px-8 rounded-lg shadow-lg w-full md:w-auto">
-                        LIMPAR TABELAS SELECIONADAS
+                    <button type="submit" id="btnSubmit" disabled
+                            class="bg-gray-400 cursor-not-allowed text-white font-black py-4 px-8 rounded-xl shadow-lg w-full text-xl transition-all uppercase flex items-center justify-center gap-3">
+                        <span id="btnText">Aguardando Confirmação...</span>
+                        <!-- Spinner Animado -->
+                        <svg id="spinner" class="hidden animate-spin h-6 w-6 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
                     </button>
+                </div>
+                
+                <div class="mt-4 grid grid-cols-2 gap-4 text-[10px] uppercase font-bold text-gray-400">
+                    <div class="flex items-center gap-1"><span class="w-2 h-2 bg-yellow-500 rounded-full"></span> ESVAZIAR: Mantém a estrutura e índices</div>
+                    <div class="flex items-center gap-1"><span class="w-2 h-2 bg-red-600 rounded-full"></span> EXCLUIR: Remove a tabela por completo</div>
                 </div>
             </div>
         </form>
     </div>
+
+    <script>
+        const input = document.getElementById('confirmacao_manual');
+        const btn = document.getElementById('btnSubmit');
+        const btnText = document.getElementById('btnText');
+        const spinner = document.getElementById('spinner');
+        const form = document.getElementById('resetForm');
+
+        // Validação das palavras-chave para habilitar o botão
+        input.addEventListener('input', (e) => {
+            const val = e.target.value.toUpperCase();
+            if (val === 'ESVAZIAR') {
+                btn.disabled = false;
+                btn.className = "bg-yellow-500 hover:bg-yellow-600 text-white font-black py-4 px-8 rounded-xl shadow-lg w-full text-xl transition-all cursor-pointer flex items-center justify-center gap-3";
+                btnText.innerText = "CONFIRMAR LIMPEZA (DROP CONTENT)";
+            } else if (val === 'EXCLUIR') {
+                btn.disabled = false;
+                btn.className = "bg-red-600 hover:bg-red-800 text-white font-black py-4 px-8 rounded-xl shadow-lg w-full text-xl transition-all cursor-pointer flex items-center justify-center gap-3";
+                btnText.innerText = "CONFIRMAR EXCLUSÃO (DROP TABLE)";
+            } else {
+                btn.disabled = true;
+                btn.className = "bg-gray-400 cursor-not-allowed text-white font-black py-4 px-8 rounded-xl shadow-lg w-full text-xl transition-all flex items-center justify-center gap-3";
+                btnText.innerText = "Aguardando Confirmação...";
+            }
+        });
+
+        // Exibe o spinner e bloqueia o botão no envio do formulário
+        form.addEventListener('submit', () => {
+            btn.disabled = true; 
+            btnText.innerText = "PROCESSANDO...";
+            spinner.classList.remove('hidden'); 
+            btn.classList.add('opacity-70');
+        });
+    </script>
 </body>
 </html>
