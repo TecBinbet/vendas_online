@@ -95,17 +95,37 @@
                 </div>
             </div>
 
+<!-- CARD 3: TOTAL COMISSÕES -->
             <div class="bg-white py-2 px-4 rounded-lg shadow border-l-4 border-yellow-500">
                 <p class="text-sm text-gray-500 font-bold uppercase">Total Comissões</p>
-                <p class="text-2xl font-black text-yellow-600">R$ {{ "{:,.2f}".format(painel.total_comissao) }}</p>
-                <p class="text-xs text-gray-400">Descontado dos colaboradores</p>
+                <div class="flex items-baseline gap-2">
+                    <p class="text-2xl font-black text-yellow-600">R$ {{ "{:,.2f}".format(painel.total_comissao) }}</p>
+                    
+                    <!-- Cálculo % da Comissão -->
+                    {% if painel.receita_bruta_total > 0 %}
+                        <span class="text-sm font-bold text-yellow-700 bg-yellow-100 px-1.5 py-0.5 rounded">
+                            {{ "%.1f"|format((painel.total_comissao / painel.receita_bruta_total) * 100) }}%
+                        </span>
+                    {% endif %}
+                </div>
+                <p class="text-xs text-gray-400">Repassar aos colaboradores</p>
             </div>
 
+            <!-- CARD 4: SALDO DO EVENTO -->
             <div class="bg-white py-2 px-4 rounded-lg shadow border-l-4 {% if painel.saldo_projetado >= 0 %}border-green-500{% else %}border-red-600{% endif %}">
                 <p class="text-sm text-gray-500 font-bold uppercase">Saldo do Evento (Lucro)</p>
-                <p class="text-2xl font-black {% if painel.saldo_projetado >= 0 %}text-green-700{% else %}text-red-700{% endif %}">
-                    R$ {{ "{:,.2f}".format(painel.saldo_projetado) }}
-                </p>
+                <div class="flex items-baseline gap-2">
+                    <p class="text-2xl font-black {% if painel.saldo_projetado >= 0 %}text-green-700{% else %}text-red-700{% endif %}">
+                        R$ {{ "{:,.2f}".format(painel.saldo_projetado) }}
+                    </p>
+                    
+                    <!-- Cálculo % do Lucro/Prejuízo -->
+                    {% if painel.receita_bruta_total > 0 %}
+                        <span class="text-sm font-bold {% if painel.saldo_projetado >= 0 %}text-green-700 bg-green-100{% else %}text-red-700 bg-red-100{% endif %} px-1.5 py-0.5 rounded">
+                            {{ "%.1f"|format((painel.saldo_projetado / painel.receita_bruta_total) * 100) }}%
+                        </span>
+                    {% endif %}
+                </div>
                 <p class="text-xs text-gray-500">Vendas - Comissões - Prêmios</p>
             </div>
         </div>
@@ -187,7 +207,7 @@
     {% if session.get('nivel') >= 4 %}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            fetch('/api/faturamento_pizza')
+            fetch('/api/faturamento_pizza?id_evento={{ evento.id_evento }}')
                 .then(res => res.json())
                 .then(data => {
                     if (data.values && data.values.length > 0) {
@@ -208,15 +228,28 @@
                             }
                         });
 
-                        // Preencher legenda manual
+                        // 1. Calcula o Faturamento Total somando todos os valores
+                        const totalFaturamento = data.values.reduce((acumulador, valor) => acumulador + valor, 0);
+
+                        // 2. Preencher legenda manual com Porcentagem
                         const legenda = document.getElementById('legendaFaturamento');
                         data.labels.forEach((label, i) => {
-                            const val = data.values[i].toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                            const valorArrecadado = data.values[i];
+                            const valMoeda = valorArrecadado.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+                            
+                            // 3. Regra de 3 básica para achar a % (evitando divisão por zero)
+                            let percentagem = "0.0";
+                            if (totalFaturamento > 0) {
+                                percentagem = ((valorArrecadado / totalFaturamento) * 100).toFixed(1);
+                            }
+
                             legenda.innerHTML += `
-                                <div class="flex items-center gap-2">
-                                    <div class="w-3 h-3 rounded-full" style="background: ${['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'][i]}"></div>
+                                <div class="flex items-center gap-2 mb-1">
+                                    <div class="w-3 h-3 rounded-full flex-shrink-0" style="background: ${['#4F46E5', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899'][i]}"></div>
                                     <span class="font-bold text-gray-700">${label}:</span>
-                                    <span class="text-gray-500">${val}</span>
+                                    <span class="text-gray-500">${valMoeda} 
+                                        <span class="text-xs font-bold text-blue-600 bg-blue-100 px-1 py-0.5 rounded ml-1">${percentagem}%</span>
+                                    </span>
                                 </div>`;
                         });
                     }

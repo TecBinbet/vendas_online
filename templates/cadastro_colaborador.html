@@ -165,7 +165,7 @@
             <div class="alert-success">{{ success | safe }}</div>
         {% endif %}
 
-        <div class="flex space-x-4 mb-0 border-b pb-4">
+        <div class="flex space-x-4 mb-0 border-b pb-2">
             <a href="{{ url_for('cadastro_colaborador', view='novo') }}" 
                class="nav-link {% if active_view in ['novo', 'alterar'] %}bg-primary text-white{% else %}bg-gray-200 text-gray-800{% endif %} hover:bg-secondary">
                 ➕ Novo
@@ -182,7 +182,7 @@
 
         <!-- FILTRO MASTER REGIONAL (Visível apenas para Nível >= 4) -->
         {% if session.get('nivel', 0) >= 4 %}
-        <div class="mt-4 mb-4 bg-gray-100 p-4 rounded-lg flex items-center justify-between shadow-sm border border-gray-200">
+        <div class="mt-2 mb-2 bg-gray-100 p-1 rounded-lg flex items-center justify-between shadow-sm border border-gray-200">
             <span class="font-bold text-gray-700 flex items-center gap-2">
                 <span>🌎</span> Filtro Master Regional:
             </span>
@@ -196,7 +196,7 @@
                         </option>
                     {% endfor %}
                 </select>
-                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-4 rounded text-sm transition">
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-6 rounded text-sm transition">
                     Aplicar
                 </button>
             </form>
@@ -435,18 +435,18 @@
         </div>
 
         <div id="view-listar" class="view-content {% if active_view == 'listar' %}active-view-show{% endif %}">
-            <h3 class="text-lg  mb-2 text-gray-700">Lista de Colaboradores (Ordenada por Nick)</h3>
+            <h3 class="text-lg -mt-2 text-gray-700">Lista de Colaboradores (Ordenada por Nick)</h3>
             
             <div class="overflow-x-auto shadow-md rounded-lg">
                 <table class="min-w-full bg-white border border-gray-200">
                     <thead>
                         <tr class="list-header">
-                            <th class="py-2 px-4 border-b text-left">ID</th>
-                            <th class="py-2 px-4 border-b text-left">Nome (Nick)</th>
-                            <th class="py-2 px-4 border-b text-left">Regional</th>
-                            <th class="py-2 px-4 border-b text-left">Nível</th>
-                            <th class="py-2 px-4 border-b text-left">Telefone</th>
-                            <th class="py-2 px-4 border-b text-left">Ações</th>
+                            <th class="py-1 px-4 border-b text-left">ID</th>
+                            <th class="py-1 px-4 border-b text-left">Nick (Nome)</th>
+                            <th class="py-1 px-4 border-b text-left">Regional</th>
+                            <th class="py-1 px-4 border-b text-left">Nível</th>
+                            <th class="py-1 px-4 border-b text-left">Telefone</th>
+                            <th class="py-1 px-4 border-b text-left">Ações</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -455,7 +455,7 @@
                             <tr class="list-row hover:bg-gray-100 transition duration-150">
                                 <td class="py-3 px-4 border-b text-sm">{{ colaborador.id_colaborador }}</td>
                                 <td class="py-3 px-4 border-b text-sm">
-                                      {{ colaborador.nome_colaborador }} ({{ colaborador.nick }})
+                                      {{ colaborador.nick }} ({{ colaborador.nome_colaborador }})
                                       {% if colaborador.get('status') == 'bloqueado' %}
                                            <span class="text-xs bg-red-100 text-red-800 px-2 py-1 rounded font-bold ml-2">BLOQUEADO</span>
                                       {% endif %}
