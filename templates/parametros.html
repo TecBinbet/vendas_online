@@ -13,7 +13,7 @@
         .form-control { width: 100%; padding: 8px 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box; }
         .form-control:focus { outline: none; border-color: #3B82F6; box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2); }
         
-        .section-title { font-size: 1.2rem; font-weight: 800; color: #1F2937; border-bottom: 2px solid #E5E7EB; padding-bottom: 8px; margin-bottom: 15px; margin-top: 25px; }
+        .section-title { font-size: 1.2rem; font-weight: 400; color: #1F2937; border-bottom: 2px solid #E5E7EB; padding-bottom: 8px; margin-bottom: 15px; margin-top: 25px; }
         
         .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #FCA5A5; font-weight: bold;}
         .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; font-weight: bold;}
@@ -33,7 +33,7 @@
     <div class="container">
         <div class="flex justify-between items-center border-b pb-2">
             <div>
-                <h2 class="text-2xl font-bold text-gray-800 flex items-center gap-2">
+                <h2 class="text-2xl text-gray-800 flex items-center gap-2">
                     <span>⚙️</span> Parâmetros Técnicos do Sistema
                 </h2>
                 <p class="text-sm text-gray-500 font-mono uppercase tracking-widest">Acesso Restrito: Nível de Engenharia (TECBIN)</p>
@@ -67,22 +67,34 @@
         <input type="number" id="tope" name="tope" value="{{ p.tope }}" required min="1" class="form-control bg-green-50 text-green-700 font-bold">
     </div>
 
+    <div class="form-group">
+        <label for="minimo_terminal">Qtde. Mínima Cartela p/ Terminal Cliente:</label>
+        <input type="number" id="minimo_terminal" name="minimo_terminal" value="{{ p.minimo_terminal }}" required min="6" class="form-control bg-red-50 text-red-700 font-bold">
+    </div>
+
+    <div class="form-group">
+        <label for="maximo_terminal">Qtde. Máxima Cartela p/ Terminal Cliente:</label>
+        <input type="number" id="maximo_terminal" name="maximo_terminal" value="{{ p.maximo_terminal }}" required min="6" class="form-control bg-red-50 text-red-700 font-bold">
+    </div>
+
+    <div class="hidden md:block"></div>
+
     <div class="form-group p-3 bg-yellow-50 rounded-lg border border-yellow-100">
-        <label class="text-yellow-800 font-bold">Comissão Venda Direta (%):</label>
+        <label class="text-yellow-800 font-bold">Comissão Venda Direta [Seu Cliente] (%):</label>
         <input type="number" step="0.01" name="perc_venda_direta" value="{{ p.perc_venda_direta or 15.0 }}" required class="form-control border-yellow-300 font-black text-blue-900">
-        <small class="text-xs text-yellow-600 italic">Venda realizada no balcão</small>
+        <small class="text-xs text-yellow-600 font-bold italic">Venda realizada no balcão (Dono do cliente)</small>
     </div>
 
     <div class="form-group p-3 bg-yellow-50 rounded-lg border border-yellow-100">
-        <label class="text-yellow-800 font-bold">Venda Indireta A (%):</label>
-        <input type="number" step="0.01" name="perc_venda_indireta_a" value="{{ p.perc_venda_indireta_a or 5.0 }}" required class="form-control border-yellow-300 font-black text-blue-900">
-        <small class="text-xs text-yellow-600 italic">Dono do cliente (Passiva)</small>
-    </div>
-
-    <div class="form-group p-3 bg-yellow-50 rounded-lg border border-yellow-100">
-        <label class="text-yellow-800 font-bold">Venda Indireta B (%):</label>
+        <label class="text-yellow-800 font-bold">Comissão Venda Direta [Cliente Não Indicado] (%):</label>
         <input type="number" step="0.01" name="perc_venda_indireta_b" value="{{ p.perc_venda_indireta_b or 10.0 }}" required class="form-control border-yellow-300 font-black text-blue-900">
-        <small class="text-xs text-yellow-600 italic">Dono quando outro vende</small>
+        <small class="text-xs text-yellow-600 font-bold italic">Venda realizada no balcão (Cliente de outro)</small>
+    </div>
+
+    <div class="form-group p-3 bg-yellow-50 rounded-lg border border-yellow-100">
+        <label class="text-yellow-800 font-bold">Comissão Venda Passiva (%):</label>
+        <input type="number" step="0.01" name="perc_venda_indireta_a" value="{{ p.perc_venda_indireta_a or 5.0 }}" required class="form-control border-yellow-300 font-black text-blue-900">
+        <small class="text-xs text-yellow-600 font-bold italic">Autoatendimento ou Atendido por Outro Colaborador</small>
     </div>
 </div>
 

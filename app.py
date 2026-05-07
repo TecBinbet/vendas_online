@@ -3659,12 +3659,18 @@ def cadastro_evento():
     # 6. Preparação Final do Contexto
     # Limpamos o acumulado vindo dos parâmetros para evitar o erro <= 0
     raw_acumulado = param_doc_global.get('acumulado', 0)
-    
+    raw_tope =  param_doc_global.get('tope', 0) 
+    raw_minimo  =  param_doc_global.get('minimo_terminal', 6)
+    raw_maximo  =  param_doc_global.get('maximo_terminal', 1200)
+
     context = {
         'total_eventos': total_eventos,
         'eventos_lista': eventos_lista,
         'active_view': active_view,
         'default_acumulado': to_num(raw_acumulado), # Limpo para o Jinja
+        'default_tope': raw_tope, 
+        'default_minimo': raw_minimo,
+        'default_maximo': raw_maximo,  
         'cartela_limits': 72000,
         'query': search_term, 
         'evento_edicao': evento_edicao, 
@@ -3674,7 +3680,6 @@ def cadastro_evento():
     }
     
     return render_template('cadastro_evento.html', **context)
-
 
 
 @app.route('/excluir_eventos_periodo', methods=['POST'])
@@ -3889,6 +3894,9 @@ def gravar_evento():
         premiacao_fixa = clean_float_input('premiacao_fixa', default_value='-1.00')
 
         numero_inicial = int(request.form.get('numero_inicial', 1))
+        minimo_terminal = int(request.form.get('minimo_terminal', 6))
+        maximo_terminal = int(request.form.get('maximo_terminal', 1200))  
+
         bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
 
         if not all([data_evento_str, hora_evento, descricao, unidade_de_venda]):
@@ -3912,6 +3920,8 @@ def gravar_evento():
             "valor_de_venda": Decimal128(str(valor_de_venda)),
             "numero_inicial": numero_inicial,
             "numero_maximo": numero_maximo,
+            "minimo_terminal": minimo_terminal,
+            "maximo_terminal": maximo_terminal,  
             "premio_quadra": Decimal128(str(premio_quadra)),
             "quantidade_de_linhas": quantidade_de_linhas,
             "premio_linha": Decimal128(str(premio_linha)),
@@ -3969,7 +3979,6 @@ def gravar_evento():
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
         return redirect(url_for('cadastro_evento', error=f"Erro ao salvar: {e}", view=view_redirect, id_evento=id_evento_edicao))
-
 
 
 @app.route('/consulta_vendas', methods=['GET'])
@@ -6644,6 +6653,8 @@ def parametros():
             'limite_de_credito': 0,
             'acumulado': Decimal128("0.00"),
             'tope': 0,
+            'minimo_terminal': 6,
+            'maximo_terminal': 1200,
             'em_treinamento': False,
             'porcento_premios': 0,
             'porcento_15': {'linha': Decimal128("0.00"), 'bingo': Decimal128("0.00"), 'segundobingo': Decimal128("0.00")},
@@ -6666,6 +6677,8 @@ def parametros():
         'limite_de_credito': safe_get_int(param_doc.get('limite_de_credito', 0)),
         'acumulado': safe_get_float(param_doc.get('acumulado', 0)),
         'tope': safe_get_int(param_doc.get('tope', 0)),
+        'minimo_terminal': safe_get_int(param_doc.get('minimo_terminal', 6)),
+        'maximo_terminal': safe_get_int(param_doc.get('maximo_terminal', 1200)),  
         'porcento_premios': safe_get_int(param_doc.get('porcento_premios', 0)),
         # --- EM TREINAMENTO   ---   
         'em_treinamento': bool(param_doc.get('em_treinamento', False)), 
@@ -6755,6 +6768,8 @@ def gravar_parametros():
             'limite_de_credito': int(request.form.get('limite_de_credito', 0)),
             'acumulado': safe_dec(request.form.get('acumulado', '0')),
             'tope': int(request.form.get('tope', 0)),
+            'minimo_terminal': int(request.form.get('minimo_terminal', 6)),
+            'maximo_terminal': int(request.form.get('maximo_terminal', 1200)),
             'porcento_premios': porcento_premios_val,
             'em_treinamento': treinamento_ativo, # Campo original
             'tempo_atualizacao_premios': int(request.form.get('tempo_atualizacao_premios', 1)),
