@@ -5,7 +5,7 @@ import threading
 import traceback
 import pymongo
 from zoneinfo import ZoneInfo
-from flask import Flask, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response, send_file
+from flask import Blueprint, Flask, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response, send_file
 #from flask_login import login_required, current_user
 from fpdf import FPDF
 # import pdfkit
@@ -27,6 +27,9 @@ from functools import wraps # Para o decorator login_required
 import certifi  # Para certificados SSL
 import html 
 import unicodedata # Para limpeza de nome de arquivo
+
+# Importa o blueprint do arquivo que criamos
+from rotas_venda_lite import venda_lite_bp
 
 MODO_DEBUG = True
 #    log_sistema(f"🚨 ERRO IRRECUPERÁVEL AO CRIAR O CLIENTE DE CONTROLE: {e}", nivel="ERRO")
@@ -189,6 +192,7 @@ class PDFCartelas(FPDF):
 app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta_aqui' 
 app.permanent_session_lifetime = timedelta(minutes=60) 
+app.register_blueprint(venda_lite_bp)
 
 # ---- UTILITARIOS
 # --- DECORATOR DE AUTENTICAÇÃO ---
@@ -557,7 +561,6 @@ db_vendas_client_cache_lock = threading.Lock()
 DB_NAME_VENDAS = 'bingo_vendas_db' 
 
 # --- FUNÇÃO DE CONEXÃO DINÂMICA (CRÍTICA) ---
-# --- FUNÇÃO DE CONEXÃO DINÂMICA (CRÍTICA) ---
 def get_vendas_db():
     """
     Retorna o objeto do banco de dados de vendas com base no id_sala
@@ -632,7 +635,6 @@ def get_vendas_db():
             
         except Exception as e:
             return None
-
 
 
 # --- FUNÇÕES AUXILIARES GLOBAIS (DB/UTILS) ---
@@ -1116,6 +1118,7 @@ def before_request():
                         'http_apk': params.get('http_apk', 'http://localhost:5000'), 
                         'http_vendas': params.get('http_vendas', 'http://localhost:5000'),
                         'id_sala_param': g.id_sala,
+                        'venda_lite': params.get('venda_lite', False), 
                         'tipo_cadastro_cliente': params.get('tipo_cadastro_cliente', default_config_cadastro), 
                         'comissao_padrao': params.get('comissao_padrao', 20),
                         'comissao_autoatendimento': params.get('comissao_autoatendimento', 10), 
@@ -1241,7 +1244,20 @@ def login():
             registrar_log("LOGIN", "ACESSO", f"Colaborador {session.get('nick')} (Reg: {session.get('id_regional')}) iniciou sessão.")
 
             if tipo_usuario == 'colaborador':
-                return redirect(url_for('menu_operacoes'))
+                # 🎛️ INTEGRAÇÃO DA CHAVE GERAL DO MÓDULO LITE
+                parametros = db.parametros.find_one({}) or {}
+                usar_modo_lite = parametros.get('venda_lite', False) # Captura o Booleano do banco
+
+                print("\n" + "="*40)
+                print(f"🚥 [DEBUG LOGIN] Modo Venda Lite no BD: {usar_modo_lite}")
+                print("="*40 + "\n")
+
+                if usar_modo_lite:
+                    # Se estiver ativo, ignora o menu padrão e vai direto pro Caixa Rápido
+                    return redirect(url_for('venda_lite.nova_venda_lite'))
+                else:
+                    # Se estiver desativado, segue o fluxo tradicional do sistema
+                    return redirect(url_for('menu_operacoes'))
                 
         else:
             print(f"[DEBUG] Falha: Senha incorreta (Testado)")
@@ -2522,6 +2538,7 @@ def processar_venda():
             f"Ocorreu um erro ao gerar o comprovante completo, mas a venda foi registrada."
         )
         return redirect(url_for('nova_venda', id_evento=id_evento_string))
+
 
 
 @app.route('/processar_vendaB', methods=['POST'])

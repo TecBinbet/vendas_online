@@ -67,7 +67,11 @@
             </div>
         {% endif %}
 
-        <a href="{{ url_for('nova_venda') }}" onclick="ativarSpinner('Abrindo Terminal de Venda...')" class="menu-item menu-item-venda">⭐ Nova Venda</a>
+        {% if g.parametros_globais.get('venda_lite') == True %}
+            <a href="{{ url_for('venda_lite.nova_venda_lite') }}" onclick="ativarSpinner('Abrindo Caixa Rápido...')" class="menu-item menu-item-venda" style="background-color: #059669;">⚡ Nova Venda (Lite)</a>
+        {% else %}
+            <a href="{{ url_for('nova_venda') }}" onclick="ativarSpinner('Abrindo Terminal de Venda...')" class="menu-item menu-item-venda">⭐ Nova Venda</a>
+        {% endif %}
         
         <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" onclick="ativarSpinner('Consultando Eventos...')" class="menu-item">🗓️ Consulta de Eventos Ativos</a>
         

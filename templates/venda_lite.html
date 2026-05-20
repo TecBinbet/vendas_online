@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Venda</title>
+    <script src="https://html2canvas.hertzen.com/dist/html2canvas.min.js"></script> 
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'primary': '#059669', // Emerald Green
+                        'secondary': '#10B981', // Green
+                        'danger': '#EF4444',
+                        'modal-bg':'#F0FFF4', 
+                        'active-border': '#10B981', 
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F7F7F7; }
+        .container { max-width: 90%; margin: 20px auto; padding: 20px; background-color: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1); }
+        .alert-danger { background-color: #FEE2E2; color: #991B1B; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #FCA5A5; }
+        .alert-success { background-color: #D1FAE5; color: #065F46; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #6EE7B7; }
+        .alert-info { background-color: #DBEAFE; color: #1E40AF; padding: 12px; border-radius: 8px; margin-bottom: 15px; border: 1px solid #93C5FD; }
+        .form-group label { font-weight: 600; display: block; margin-bottom: 5px; color: #374151; }
+        .form-control { width: 100%; padding: 10px; border: 1px solid #D1D5DB; border-radius: 6px; box-sizing: border-box; margin-bottom: 10px; }
+        .btn { padding: 10px 20px; border-radius: 8px; font-weight: bold; cursor: pointer; transition: background-color 0.3s; }
+        
+        .btn-primary { background-color: #059669; color: white; border: none; }
+        .btn-primary:hover { background-color: #047857; }
+        .btn-warning { background-color: #25D366; color: white; border: none; }
+        .btn-warning:hover { background-color: #1DA851; }
+        .btn-small { padding: 6px 12px; font-size: 0.9rem; }
+
+        .client-search-group { display: flex; gap: 8px; margin-bottom: 0; position: relative; }
+        .client-search-group input { flex-grow: 1; margin-bottom: 0; }
+        
+        .btn-novo { background-color: #FFC107; color: #333; }
+        .btn-novo:hover { background-color: #e0a800; }
+
+        #receipt-content { background-color: white !important; padding: 15px; border: 1px dashed #38B2AC; border-radius: 8px; margin-bottom: 15px; color: #065F46; white-space: pre-wrap; font-family: monospace; text-align: left; }
+        #total-custo { font-size: 1.25rem; font-weight: 700; color: #B91C1C; margin-top: 15px; padding: 10px; border: 2px solid #FCA5A5; border-radius: 8px; text-align: center; }
+
+        /* Modal */
+        .modal {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background-color: rgba(0, 0, 0, 0.6); z-index: 1000;
+            display: none; justify-content: center; align-items: center;
+        }
+        .modal-content {
+            background-color: #DCFCE7; max-width: 95%; max-height: 90%; 
+            padding: 20px; border-radius: 12px; box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            overflow-y: auto;
+        }
+        .event-card {
+            background-color: white; border: 2px solid transparent; 
+            border-radius: 8px; padding: 15px; cursor: pointer;
+            transition: border-color 0.2s, box-shadow 0.2s, transform 0.2s;
+        }
+        .event-card:hover { transform: scale(1.01); box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1); }
+
+        #search-results-list {
+            position: absolute; top: 100%; left: 0; right: 0;
+            background: white; border: 1px solid #D1D5DB; border-radius: 0 0 6px 6px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1); z-index: 50;
+            max-height: 200px; overflow-y: auto; display: none;
+        }
+        
+        .search-result-item { padding: 10px; border-bottom: 1px solid #F3F4F6; cursor: pointer; }
+        .search-result-item:hover { background-color: #F0FDF4; }
+        
+        .search-type-selector { display: flex; gap: 15px; margin-bottom: 8px; font-size: 0.9rem; color: #4B5563; }
+        .search-type-selector label { font-weight: normal; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+
+        /* --- CSS DO SPINNER --- */
+        .spinner-overlay {
+            position: fixed;
+            inset: 0;
+            background-color: rgba(17, 24, 39, 0.75);
+            display: none; 
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        
+        .spinner-visible { display: flex; }
+
+        .spinner-animation {
+            animation: spin 1s linear infinite;
+            border-radius: 9999px;
+            height: 5rem;
+            width: 5rem;
+            border-width: 4px;
+            border-style: solid;
+            border-color: rgba(255, 255, 255, 0.1);
+            border-top-color: #3B82F6;
+        }
+
+        @keyframes spin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Estrutura do Spinner -->
+    <div id="loading-spinner" class="spinner-overlay">
+        <div class="flex flex-col items-center">
+            <div class="spinner-animation"></div>
+            <p id="spinner-text" class="text-white mt-4 font-bold animate-pulse uppercase tracking-widest text-sm">Processando...</p>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="flex justify-center font-bold -mt-4">
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
+        </div>
+
+         <!-- Cabeçalho com Título e Ícones -->
+        <div class="flex justify-center items-center gap-3 mb-2">
+            <h2 class="text-xl font-bold text-gray-900 m-0">⚡ Nova Venda (Lite)</h2>
+            <div class="flex gap-2">
+                <button type="button" onclick="openUltimasVendas()" 
+                        class="p-2 rounded-full transition-colors shadow-sm bg-blue-100 text-blue-800 border border-blue-400 hover:bg-blue-200" 
+                        title="Últimas 5 Vendas">
+                    🕒
+                </button>
+                
+                <button type="button" id="btn-copy-list" onclick="copiarListagemVendas()" 
+                        class="p-2 rounded-full transition-colors shadow-sm bg-green-100 text-green-800 border border-green-400 hover:bg-green-200" 
+                        title="Copiar Relatório de Vendas (Texto)">
+                    📋
+                </button>
+
+                <button type="button" id="btn-printer-toggle" onclick="togglePrinter()" 
+                        class="p-2 rounded-full transition-colors shadow-sm" 
+                        title="Configurar Impressora 58mm">
+                    🖨️
+                </button>
+            </div>
+        </div>
+
+        {% if error %}
+            <div class="alert alert-danger">{{ error }}</div>
+        {% endif %}
+        
+        {% if success %}
+          <div id="success-block">
+            <div class="alert alert-success text-center">
+                <h3 class="text-lg font-bold -mt-2">Venda Registrada com Sucesso!</h3>
+                <!-- O cupom agora nasce oculto -->
+                <div id="receipt-content" style="display: none;">{{ success | safe }}</div>
+            </div>
+            <div class="flex justify-center mb-1 gap-3 flex-wrap">
+                <button onclick="copyReceiptText()" class="btn btn-primary shadow-lg">📋 Copiar Texto</button>
+                <button onclick="shareReceiptImage()" class="btn btn-warning shadow-lg">🖼️ Gerar Imagem</button>
+                <!-- Botão transformado em um 'Interruptor' -->
+                <button id="btn-toggle-cupom" onclick="toggleReceipt()" class="btn bg-green-500 text-white hover:bg-green-700 shadow-lg">👁️ Mostrar Cupom</button>
+            </div>
+          </div>
+        {% endif %}
+
+        <form method="GET" action="{{ url_for('venda_lite.nova_venda_lite') }}" class="form-venda" id="main-form">
+            <input type="hidden" name="id_evento" id="input_id_evento" 
+                   value="{% if selected_event %}{{ selected_event._id }}{% endif %}">
+            
+            <div class="form-group flex gap-1 items-center">
+                <button type="button" onclick="openEventSelector()" 
+                        class="py-3 btn btn-primary btn-small self-end mb-2 min-w-[283px]">
+                    Selecionar um Evento
+                </button>
+            </div>
+
+            {% if selected_event %}
+                <div class="alert alert-info mb-1 font-normal text-center">
+                    <h4 class="text-lg -mt-2.5 -mb-1">
+                        {{ selected_event.descricao }}
+                        {% if selected_event.tipo_de_evento == 'Especial' %}
+                            <span class="ml-2 text-xs bg-yellow-400 text-yellow-900 px-2 py-0.5 rounded-full font-black">⭐ ESPECIAL</span>
+                        {% endif %}
+                    </h4>
+                    <p>Data: <strong>{{ selected_event.data_evento }}</strong> - | - Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
+                    <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
+                    <p class="text-lg text-red-600 -mt-1.5 -mb-2.5 ">  Numeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
+                </div>
+            </form> <hr class="my-4 border-gray-300">
+            <form method="POST" action="{{ url_for('venda_lite.processar_venda_lite') }}" id="confirm-form">
+                <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
+                
+                <div class="form-group relative mt-2">
+                    <label for="busca_cliente_lite">2. Cliente (Nome Livre ou Auto-completar):</label>
+<div class="form-group relative mt-2">
+    <label for="busca_cliente_lite" class="font-bold">Cliente:</label>
+<div class="flex gap-2">
+    <input type="text" id="busca_cliente_lite" name="nick_cliente_lite" class="form-control flex-grow" 
+           placeholder="Digite apelido ou nome..." autocomplete="off" required>
+    <button type="button" onclick="limparCliente()" class="bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded text-sm font-bold border border-gray-400">
+        Limpar
+    </button>
+</div>
+</div>
+                    
+                    <input type="hidden" name="nick_cliente_lite" id="nick_cliente_lite">
+                    <input type="hidden" name="colaborador_cliente_lite" id="colaborador_cliente_lite">
+                </div>
+
+                {% if padrao_venda == 'quantidade' %}
+                    <div class="form-group mt-3">
+                        <label for="quantidade">3. Quantidade de Kits:</label>
+                        <input type="number" id="quantidade" name="quantidade" 
+                               min="1" required class="form-control text-xl px-2 py-1" 
+                               oninput="updateTotalCostLite(); updateCartelasDisplay();">
+                        <small class="form-text text-muted font-bold text-blue-700">
+                            A numeração será gerada automaticamente na fila.
+                            Total de cartelas: <span id="cartelas-display">0</span>
+                        </small>
+                    </div>
+{% elif padrao_venda == 'numeracao' %}
+    <div class="form-group mt-3 flex gap-2">
+        <div class="w-1/2">
+            <label for="numero_kit_inicial">3. Kit/Rodapé Inicial:</label>
+            <input type="number" id="numero_kit_inicial" name="numero_kit_inicial" 
+                   min="1" required class="form-control text-xl px-2 py-1 border-yellow-500 bg-yellow-50" 
+                   oninput="updateTotalCostKit();">
+        </div>
+        <div class="w-1/2">
+            <label for="numero_kit_final">Kit/Rodapé Final (Opcional):</label>
+            <input type="number" id="numero_kit_final" name="numero_kit_final" 
+                   min="1" class="form-control text-xl px-2 py-1 border-yellow-500 bg-yellow-50" 
+                   oninput="updateTotalCostKit();" placeholder="Igual ao Inicial">
+        </div>
+    </div>
+    <small class="form-text text-muted font-bold text-red-600 block -mt-2">
+        Atenção: O sistema bloqueará a venda se algum Kit do período já foi vendido.
+    </small>
+    <div id="info_cartelas_kit" class="mt-2 text-center text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 p-2 rounded hidden">
+    </div>
+{% endif %}
+
+                <div id="total-custo" class="mt-2 text-center text-xl font-bold text-red-600 border border-red-300 p-2 rounded bg-red-50" style="display: none;">
+                    Custo Total: R$ 0,00
+                </div>
+
+                <div id="confirm-sales-container" class="flex justify-center mt-4" style="display: none;">
+                    <button type="submit" id="btn-confirmar-venda" class="btn btn-primary btn-lg shadow-xl" onclick="return syncAndConfirm(event)">
+                        ✅ Confirmar e Gravar Venda (<span id="btn-custo-text">R$ 0,00</span>)
+                    </button>
+                </div>
+            </form>
+            {% else %}
+            </form> {% endif %}
+
+        {% if cliente_encontrado and selected_event %}
+            <div id="confirm-sales-container" style="display: {{ 'block' if quantidade and quantidade > 0 else 'none' }};">
+                <hr class="my-4 border-gray-300">
+                <form method="POST" action="{{ url_for('venda_lite.processar_venda_lite') }}" class="flex justify-center" id="confirm-form">
+                    <input type="hidden" name="id_cliente_final" value="{{ id_cliente_final }}">
+                    <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
+                    <input type="hidden" name="quantidade" id="post_quantidade" value="{{ quantidade }}">
+                    <button type="submit" id="btn-confirmar-venda" class="btn btn-primary btn-lg shadow-xl" onclick="return syncAndConfirm(event)">
+                        ✅ Confirmar e Gravar Venda (<span id="btn-custo-text">R$ {{ "%.2f" | format(custo) }}</span>)
+                    </button>
+                </form>
+            </div>
+        {% endif %}
+    </div>
+    
+    <!-- MODAL DE SELEÇÃO DE EVENTOS -->
+    <div id="event-selector-modal" class="modal">
+        <div class="modal-content bg-blue-200 p-3 w-full md:w-3/4 lg:w-1/2">
+            <h3 class="text-lg font-semibold text-gray-700 border-b pb-1 -mb-2 -mt-2">Selecione o Evento Ativo</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-110 overflow-y-auto pr-2 mt-2">
+                {% for evento in eventos %}
+                    {# Lógica de Cores para o Cartão de Seleção #}
+                    {% set is_especial = evento.tipo_de_evento == 'Especial' %}
+                    {% set bg_class = 'bg-yellow-100 border-yellow-400' if is_especial else 'bg-white border-transparent' %}
+
+                    <div class="event-card shadow-md flex flex-col justify-between {{ bg_class }}"
+                        data-id="{{ evento._id }}"
+                        data-descricao="{{ evento.descricao }}"
+                        data-valor="{{ '%.2f' | format(evento.valor_de_venda_float) }}"
+                        data-unidade="{{ evento.unidade_de_venda }}"
+                        onclick="selectEvent(this)">
+                        <div>
+                            {% if is_especial %}
+                                <p class="text-[9px] bg-yellow-600 text-white text-center px-1.5 py-0.5 mb-3 -mt-3 rounded font-black uppercase tracking-wider shadow-sm">Especial</p>
+                            {% endif %}
+                            <div class="flex justify-between items-start -mt-3">
+                                <p class="text-md font-bold text-primary">{{ evento.descricao }} ( {{ evento.id_evento }} )</p>
+                            </div>
+                            <p class="text-md font-bold text-blue-700 ">{{ evento.data_evento }} às {{ evento.hora_evento }}</p>
+                            
+                            <div class="mt-1 space-y-0.5">
+                                <p class="text-sm font-semibold text-gray-700">💰 Valor Kit: R$ {{ '%.2f' | format(evento.valor_de_venda_float) }}</p>
+                                <p class="text-md font-black text-green-900 bg-green-100/50 px-2 py-0.5 rounded border border-green-200 inline-block">
+                                    🏆 Premiação: R$ {{ evento.premio_total | format_moeda }}
+                                    {% if evento.get('is_premio_dinamico_ativo', False) %}
+                                        <span title="Prêmio Reajustado Pelas Vendas!" class="cursor-help ml-1">🚀</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                        </div>
+                        <div class="pt-1 border-t border-dashed mt-2">
+                            <button class="py-2 btn btn-primary btn-small w-full mt-0 -mb-2 {{ 'bg-yellow-600 hover:bg-yellow-700' if is_especial else 'bg-green-600 hover:bg-green-800' }}">
+                                Selecionar
+                            </button>
+                        </div>
+                    </div>
+                {% else %}
+                    <p class="text-center text-gray-500 md:col-span-2">Nenhum evento ativo.</p>
+                {% endfor %}
+            </div>
+            <button onclick="closeEventSelector()" class="btn bg-gray-400 text-white hover:bg-red-500 mt-4 w-full">Fechar Janela</button>
+        </div>
+    </div>
+
+     <!-- MODAL ÚLTIMAS VENDAS (HISTÓRICO RÁPIDO) -->
+    <div id="ultimas-vendas-modal" class="modal">
+        <div class="modal-content bg-white p-2 w-full md:w-3/4 lg:w-1/2">
+            <h3 class="text-lg font-bold text-gray-800 border-b pb-2 mb-2">🕒 Suas Últimas 5 Vendas</h3>
+            
+            {% if ultimas_vendas %}
+                <div class="space-y-2">
+                {% for v in ultimas_vendas %}
+                    <div class="border rounded p-3 shadow-sm bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-2 hover:bg-blue-50 transition-colors">
+                        <div class="text-left w-full sm:w-auto">
+                            <p class="text-sm font-bold text-blue-800">{{ v.id_venda }} - {{ v.nome_cliente }}</p>
+                            <p class="text-xl text-gray-600">Cartelas: <strong>{{ v.numero_inicial }} a {{ v.numero_final }}</strong></p>
+                            <p class="text-xs font-bold text-green-700">R$ {{ "%.2f"|format(v.valor_total_float) }}</p>
+                        </div>
+                        <div class="flex gap-2 w-full sm:w-auto justify-end mt-1 sm:mt-0">
+                            <!-- Botão de Gerar Recibo TXT -->
+                            <button type="button" onclick="reimprimirReciboTxt('{{ v.id_venda }}', '{{ v.id_cliente }}')" class="btn btn-primary btn-small py-2 px-3 text-xs shadow">📋 Copiar Cupom</button>
+                            
+                            <!-- Botão de Imprimir 58mm -->
+                            <button type="button" onclick="dispararReimpressao58mm('{{ v.nome_cliente }}', {{ v.numero_inicial }}, {{ v.numero_final }}, '{{ v.id_evento }}')" class="btn bg-gray-600 hover:bg-gray-800 text-white btn-small py-2 px-3 text-xs shadow">🖨️ 58mm</button>
+                        </div>
+                    </div>
+                {% endfor %}
+                </div>
+            {% else %}
+                <p class="text-center text-gray-500 py-4 font-semibold">Nenhuma venda sua registrada neste evento ainda.</p>
+            {% endif %}
+            
+            <button onclick="closeUltimasVendas()" class="btn bg-red-500 text-white hover:bg-red-700 mt-4 w-full shadow-lg">Fechar Janela</button>
+        </div>
+    </div>
+
+    <script>
+        let Venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}");
+        let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
+        let searchTimeout = null;
+        const dadosImpressaoStr = '{{ print_data | tojson | safe if print_data else "null" }}';
+        const dadosImpressao = dadosImpressaoStr !== "null" ? JSON.parse(dadosImpressaoStr) : null;
+        // ==========================================
+        // --- JAVASCRIPT EXCLUSIVO DA VENDA LITE ---
+        // ==========================================
+        
+        // Autocomplete Lite
+        const inputBuscaLite = document.getElementById('busca_cliente_lite');
+        const listaResultados = document.getElementById('lite-autocomplete-results');
+        const hiddenNick = document.getElementById('nick_cliente_lite');
+        const hiddenColab = document.getElementById('colaborador_cliente_lite');
+
+        if (inputBuscaLite) {
+            inputBuscaLite.addEventListener('input', function() {
+                this.value = this.value
+                    .toLowerCase()
+                    .split(' ')
+                    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                    .join(' ')
+; 
+                const termo = this.value.trim();
+                hiddenNick.value = termo; // Já salva o que digitar como cliente avulso
+                
+                if (searchTimeout) clearTimeout(searchTimeout);
+
+                if (termo.length < 2) {
+                    listaResultados.style.display = 'none';
+                    return;
+                }
+
+                searchTimeout = setTimeout(async () => {
+                    try {
+                        const response = await fetch(`/api/clientes/autocomplete?q=${encodeURIComponent(termo)}`);
+                        const clientes = await response.json();
+
+                        listaResultados.innerHTML = '';
+                        if (clientes.length > 0) {
+                            clientes.forEach(cli => {
+                                const div = document.createElement('div');
+                                div.className = 'search-result-item';
+                                div.innerHTML = `<div class="font-bold text-gray-800">${cli.nick}</div><div class="text-sm text-gray-600">Colab: ${cli.colaborador || 'S/C'}</div>`;
+                                
+                                div.onclick = () => {
+                                    inputBuscaLite.value = cli.nick;
+                                    hiddenNick.value = cli.nick;
+                                    hiddenColab.value = cli.colaborador || 'S/C';
+                                    listaResultados.style.display = 'none';
+                                };
+                                listaResultados.appendChild(div);
+                            });
+                            listaResultados.style.display = 'block';
+                        } else {
+                            listaResultados.style.display = 'none';
+                        }
+                    } catch (err) {
+                        console.error('Erro no autocomplete:', err);
+                    }
+                }, 300);
+            });
+
+            // Oculta lista clicando fora
+            document.addEventListener('click', (e) => {
+                if (e.target !== inputBuscaLite && !listaResultados.contains(e.target)) {
+                    listaResultados.style.display = 'none';
+                }
+            });
+        }
+
+        // Cálculos de Custo
+        function exibirBotaoCusto(mostrar, valorTotal) {
+            const totalCustoDiv = document.getElementById('total-custo');
+            const spanBotaoCusto = document.getElementById('btn-custo-text');
+            const containerConfirmacao = document.getElementById('confirm-sales-container');
+            
+            const formatado = valorTotal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            
+            if (totalCustoDiv) {
+                totalCustoDiv.textContent = `Custo Total: ${formatado}`;
+                totalCustoDiv.style.display = mostrar ? 'block' : 'none';
+            }
+            if (spanBotaoCusto) spanBotaoCusto.textContent = formatado;
+            if (containerConfirmacao) containerConfirmacao.style.display = mostrar ? 'flex' : 'none';
+        }
+
+        function updateTotalCostLite() {
+            const campoQuantidade = document.getElementById('quantidade');
+            if (campoQuantidade) {
+                const q = parseInt(campoQuantidade.value) || 0;
+                exibirBotaoCusto(q > 0, q * Venda_ValorUnitario);
+            }
+        }
+
+function updateTotalCostKit() {
+    const campoInicial = document.getElementById('numero_kit_inicial');
+    const campoFinal = document.getElementById('numero_kit_final');
+    const divInfo = document.getElementById('info_cartelas_kit');
+
+    if (campoInicial && campoInicial.value) {
+        const kIni = parseInt(campoInicial.value);
+        // Se o final estiver vazio, ele assume o valor do inicial (1 kit só)
+        let kFim = campoFinal && campoFinal.value ? parseInt(campoFinal.value) : kIni;
+
+        // Trava visual para não permitir que o final seja menor que o inicial
+        if (kFim < kIni) kFim = kIni; 
+
+        const qtdKits = (kFim - kIni) + 1;
+        
+        // Conversão matemática: Kit 301 x 6 = Cartelas 1801 a 1806
+        const cartelaInicial = ((kIni - 1) * Venda_UnidadeCartelas) + 1;
+        const cartelaFinal = kFim * Venda_UnidadeCartelas;
+
+        exibirBotaoCusto(qtdKits > 0, qtdKits * Venda_ValorUnitario);
+
+        if (divInfo && qtdKits > 0) {
+            divInfo.style.display = 'block';
+            divInfo.innerHTML = `Venda de <strong>${qtdKits}</strong> Kit(s) <br> Cartelas correspondentes: <strong>${cartelaInicial} à ${cartelaFinal}</strong>`;
+        }
+    } else {
+        exibirBotaoCusto(false, 0);
+        if (divInfo) divInfo.style.display = 'none';
+    }
+}
+
+        // --- FUNÇÃO DO SPINNER ---
+        function ativarSpinner(mensagem) {
+            const spinner = document.getElementById('loading-spinner');
+            const text = document.getElementById('spinner-text');
+            if (text && mensagem) text.innerText = mensagem;
+            if (spinner) spinner.classList.add('spinner-visible');
+            document.body.style.pointerEvents = 'none'; // Bloqueia cliques
+        }
+
+        // Remove o spinner se o usuário voltar na página
+        window.onpageshow = function(event) {
+            const spinner = document.getElementById('loading-spinner');
+            if (spinner) spinner.classList.remove('spinner-visible');
+            document.body.style.pointerEvents = 'auto';
+        };
+        
+        function updateCartelasDisplay() {
+            const campoQuantidade = document.getElementById('quantidade');
+            
+            // Trava de segurança: Se o campo não existir na tela, aborta a função silenciosamente
+            if (!campoQuantidade) return;
+            
+            const q = parseInt(document.getElementById('quantidade').value) || 0;
+            const display = document.getElementById('cartelas-display');
+            if (display) display.textContent = (q * Venda_UnidadeCartelas);
+        }
+
+        function openEventSelector() { document.getElementById('event-selector-modal').style.display = 'flex'; }
+        function closeEventSelector() { document.getElementById('event-selector-modal').style.display = 'none'; }
+        
+        function selectEvent(cardElement) {
+            document.getElementById('input_id_evento').value = cardElement.dataset.id;
+            ativarSpinner('A carregar evento e regras...'); // SPINNER AQUI
+            document.getElementById('main-form').submit();
+        }
+        
+        function syncAndConfirm(event) {
+        // 👇 TRAVA OBRIGATÓRIA DO CLIENTE 👇
+            const clienteInput = document.getElementById('busca_cliente_lite');
+            if (clienteInput && !clienteInput.value.trim()) {
+                alert("⚠️ O Nome do Cliente é obrigatório!");
+               clienteInput.focus();
+               return false;
+            }
+
+            const confirmar = confirm("Confirmar a gravação desta venda?");                   
+            if (!confirmar) return false;
+            
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent); 
+            const btn = document.getElementById('btn-confirmar-venda');
+            const form = document.getElementById('confirm-form');
+            
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Gravando...';            
+            ativarSpinner('A processar venda e a gerar bilhetes...');
+
+            if (isMobile) {
+                // NO CELULAR: Abre em aba nova para não imprimir a tela de venda
+                form.setAttribute('target', '_blank');
+                form.submit();       
+                // Recarrega a tela de venda original após 1.5s
+                setTimeout(() => { window.location.reload(); }, 1500);
+            } else {
+                // NO PC: Mantém na mesma aba (Simplicidade total)
+                form.removeAttribute('target'); 
+                form.submit();
+            }
+            return false; 
+        }
+
+        function syncAndConfirm2(event) {
+            const confirmar = confirm("Confirmar a gravação desta venda?");                   
+            if (!confirmar) return false;
+           
+            const btn = document.getElementById('btn-confirmar-venda');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Gravando...';
+            
+            ativarSpinner('A processar venda e a gerar bilhetes...'); // SPINNER AQUI
+            
+            document.getElementById('confirm-form').submit();
+            return false; // Previne comportamento nativo enquanto o form submete
+        }
+
+        function copyReceiptText() {
+            const content = document.getElementById('receipt-content');
+            if (!content) return;
+            const text = content.innerText.trim();
+            const el = document.createElement('textarea');
+            el.value = text;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+            
+            const rawTelefone = "{{ cliente_encontrado.telefone if cliente_encontrado else '' }}";
+            const tel = rawTelefone.replace(/\D/g, '');
+            let telFinal = tel;
+            if (tel.length > 0) {
+                if (tel.length <= 9) telFinal = "11" + tel;
+                if (telFinal.length <= 11) telFinal = "55" + telFinal;
+            }
+            window.open(`https://wa.me/${telFinal}?text=${encodeURIComponent(text)}`, '_blank');
+        }
+
+        function shareReceiptImage() {
+            const content = document.getElementById('receipt-content');
+            if (!content) return;
+            html2canvas(content, { scale: 2, backgroundColor: '#FFFFFF' }).then(canvas => {
+                const img = canvas.toDataURL('image/png');
+                const w = window.open('about:blank');
+                w.document.write(`<img src="${img}"/>`);
+            });
+        }
+
+        // Variável para guardar o tempo do sumiço automático
+        let autoHideTimeout;
+
+        function toggleReceipt() {
+            const content = document.getElementById('receipt-content');
+            const btn = document.getElementById('btn-toggle-cupom');
+            const inputBusca = document.getElementById('busca_cliente_lite');
+            const successBlock = document.getElementById('success-block');
+            
+            // Se o usuário interagiu com o botão, cancelamos o cronômetro de auto-ocultar
+            if (autoHideTimeout) clearTimeout(autoHideTimeout);
+            
+            // Garante que o bloco fique 100% visível caso estivesse no meio da animação de sumir
+            if (successBlock) {
+                successBlock.style.opacity = "1";
+            }
+
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                btn.innerHTML = '👁️ Ocultar Cupom';
+            } else {
+                content.style.display = 'none';
+                btn.innerHTML = '👁️ Mostrar Cupom';
+                if (inputBusca) inputBusca.focus();
+            }
+        }
+
+        function clearSearch() {
+            const inputBusca = document.getElementById('id_cliente_busca');
+            if (inputBusca) inputBusca.value = '';
+            const results = document.getElementById('search-results-list');
+            if (results) results.style.display = 'none';
+        }
+
+        // ==========================================
+        // --- LÓGICA DA IMPRESSORA TÉRMICA 58MM ---
+        // ==========================================
+        function initPrinterConfig() {
+            let printConfig = localStorage.getItem('imprimirCartelas');
+            
+            if (printConfig === null) {
+                const desejaImprimir = confirm("🖨️ CONFIGURAÇÃO DE IMPRESSORA\n\nDeseja habilitar a IMPRESSÃO AUTOMÁTICA de cartelas via mini impressora térmica (58mm) neste celular?\n\nVocê pode ligar/desligar isso depois clicando no ícone da impressora no topo da tela.");
+                printConfig = desejaImprimir ? 'true' : 'false';
+                localStorage.setItem('imprimirCartelas', printConfig);
+            }
+            
+            updatePrinterUI(printConfig === 'true');
+            
+            const successBlock = document.getElementById('success-block');
+            
+            // SE a venda for concluída E a impressora estiver ativa E existirem dados
+            if (successBlock && printConfig === 'true' && dadosImpressao) {
+                
+                // 🚦 SEMÁFORO DE IMPRESSÃO
+                // Puxa o limite do banco de dados (se falhar, usa 18 como segurança)
+                const limiteImpressao = parseInt("{{ limite_impressao_auto_vendas | default(18) }}");
+                
+                // Calcula quantas cartelas estão sendo impressas nesta venda
+                const qtdComprada = (parseInt(dadosImpressao.numero_final) - parseInt(dadosImpressao.numero_inicial)) + 1;
+                
+                if (qtdComprada > limiteImpressao) {
+                    // Aciona a trava de segurança pedindo confirmação manual
+                    const confirmar = confirm(`⚠️ ALERTA DE IMPRESSÃO EM LOTE!\n\nVocê está prestes a imprimir ${qtdComprada} cartelas.\n\nDeseja realmente gastar papel imprimindo todas elas agora?`);
+                    
+                    if (confirmar) {
+                        console.log("Impressão grande autorizada pelo operador.");
+                        imprimirCartelas58mm(dadosImpressao);
+                    } else {
+                        console.log("Impressão bloqueada pelo semáforo de limite.");
+                        // Opcional: Você pode colocar um alertzinho aqui avisando que cancelou a impressão física.
+                    }
+                } else {
+                    // Abaixo do limite: Imprime direto silenciosamente (Zero Clique)
+                    console.log("Iniciando impressão automática 58mm...");
+                    imprimirCartelas58mm(dadosImpressao);
+                }
+            }
+        }
+
+        // --- FUNÇÃO QUE MANDA IMPRIMIR (EFEITO BUMERANGUE NO MOBILE) ---
+        function imprimirCartelas58mm(dados) {
+            const baseUrl = dados.tipo_cartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
+            
+            const params = new URLSearchParams({
+                numero_inicial: dados.numero_inicial,
+                numero_final: dados.numero_final,
+                id_evento: dados.id_evento,
+                nome_cliente: dados.nome_cliente
+            });
+            
+            const urlAbsoluta = window.location.origin + baseUrl + '?' + params.toString();
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent);
+            
+            if (isMobile) {
+                // NO CELULAR: Navega na mesma aba (Chrome adora isso, não quebra o Spooler)
+                console.log("Modo Mobile: Carregando cartela na mesma aba...");
+                window.location.href = urlAbsoluta;
+            } else {
+                // NO COMPUTADOR: Abre a aba normal (o PC aguenta)
+                console.log("Modo Desktop: Abrindo aba de impressão...");
+                window.open(urlAbsoluta, '_blank');
+            }
+        }
+
+        function togglePrinter() {
+            let currentState = localStorage.getItem('imprimirCartelas') === 'true';
+            let newState = !currentState; // Inverte o valor
+            
+            // Salva a nova escolha no celular do operador
+            localStorage.setItem('imprimirCartelas', newState ? 'true' : 'false');
+            
+            // Atualiza o visual do botão
+            updatePrinterUI(newState);
+            
+            // Mostra um aviso rápido na tela
+            const msg = newState ? "🖨️ Impressão Automática ATIVADA!" : "🚫 Impressão Automática DESATIVADA!";
+            alert(msg); // Mais tarde podemos trocar pelo seu toast personalizado
+        }
+
+        function updatePrinterUI(isActive) {
+            const btn = document.getElementById('btn-printer-toggle');
+            if (!btn) return;
+            
+            if (isActive) {
+                // Estilo ATIVADO (Verde)
+                btn.classList.remove('bg-gray-200', 'text-gray-500');
+                btn.classList.add('bg-green-100', 'text-green-800', 'border', 'border-green-400');
+            } else {
+                // Estilo DESATIVADO (Cinza)
+                btn.classList.remove('bg-green-100', 'text-green-800', 'border', 'border-green-400');
+                btn.classList.add('bg-gray-200', 'text-gray-500');
+            }
+        }
+
+        // ====================================================
+        // --- LÓGICA DE ÚLTIMAS VENDAS E REIMPRESSÃO (FALHA) ---
+        // ====================================================
+        function openUltimasVendas() {
+            document.getElementById('ultimas-vendas-modal').style.display = 'flex';
+        }
+
+        function closeUltimasVendas() {
+            document.getElementById('ultimas-vendas-modal').style.display = 'none';
+        }
+
+        function dispararReimpressao58mm(nomeCliente, numInicial, numFinal, idEvento) {
+            let printConfig = localStorage.getItem('imprimirCartelas');
+            if (printConfig !== 'true') {
+                alert("A impressora 58mm está DESATIVADA neste celular.\n\nAtive clicando no ícone da impressora (🖨️) no topo da tela antes de reimprimir.");
+                return;
+            }
+            // Agora pegamos o ID do Evento direto do botão, limpo e perfeito (ex: 145)
+            const dadosReimpressao = {
+                id_evento: idEvento,
+                nome_cliente: nomeCliente,
+                numero_inicial: numInicial,
+                numero_final: numFinal,
+                tipo_cartela: parseInt('{{ selected_event.tipo_de_cartela | default(25) }}')
+            };
+            console.log("Reimprimindo recuperação em 58mm...", dadosReimpressao);
+            imprimirCartelas58mm(dadosReimpressao); 
+        }
+
+        async function reimprimirReciboTxt(idVenda, idCliente) {
+            ativarSpinner("Puxando o cupom...");
+            const data = {
+                tipo_reimpressao: 'unica', // Puxa apenas a venda específica
+                id_venda: idVenda,
+                id_cliente: idCliente,
+                id_evento: document.getElementById('input_id_evento').value
+            };
+
+            try {
+                // Consulta nossa API de textos
+                const urlAbsoluta = window.location.origin + "/reimprimir_comprovante_txt";    
+                const response = await fetch(urlAbsoluta, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // Copia furtivamente para a área de transferência do celular
+                    const tempTextArea = document.createElement('textarea');
+                    tempTextArea.value = result.receipt_text;
+                    document.body.appendChild(tempTextArea);
+                    tempTextArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(tempTextArea);
+                    
+                    alert("✅ Cupom copiado com sucesso para a área de transferência!\n\nAgora é só colar no WhatsApp do cliente.");
+                } else {
+                    alert(`❌ Erro: ${result.message}`);
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Erro de conexão ao puxar o cupom.');
+            } finally {
+                const spinner = document.getElementById('loading-spinner');
+                if (spinner) spinner.classList.remove('spinner-visible');
+                document.body.style.pointerEvents = 'auto';
+            }
+        }
+
+// Função para formatar Nome (ex: 'rivaldo silva' -> 'Rivaldo Silva')
+    function formatarTitleCase(str) {
+        return str.toLowerCase().split(' ').map(word => {
+            return word.charAt(0).toUpperCase() + word.slice(1);
+        }).join(' ');
+    }
+
+    // Ao digitar: formata e salva
+    inputBusca.addEventListener('input', function() {
+        this.value = formatarTitleCase(this.value);
+        localStorage.setItem('ultimo_cliente_lite', this.value);
+    });
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initPrinterConfig();
+
+            const inputId = document.getElementById('input_id_evento');
+
+            if (!inputId || !inputId.value) openEventSelector();
+ 
+            const nomeSalvo = localStorage.getItem('ultimo_cliente_lite');
+            if (nomeSalvo) {
+                inputBusca.value = nomeSalvo;
+            }
+           
+            // Chama a função correta dependendo de qual campo existe na tela
+            if (document.getElementById('quantidade')) {
+                updateTotalCostLite();
+            } else if (document.getElementById('numero_kit')) {
+                updateTotalCostKit();
+            }
+            
+            updateCartelasDisplay();
+            // ====================================================
+            // NOVO: DISPARO AUTOMÁTICO PARA APP BLUETOOTH PRINT        
+            // ====================================================
+            {% if session.get('url_bluetooth_print') %}
+                console.log("Detectado comando de impressão via App Bluetooth Print...");
+        
+                // Dispara o aplicativo externo usando o protocolo do esquema
+                window.location.href = "{{ session.get('url_bluetooth_print') }}";
+
+                // Limpa a instrução de impressão da sessão para evitar repetição no F5
+                // Nota: O redirecionamento abaixo limpa o estado na próxima carga
+                console.log("Impressão enviada ao Spooler do App.");
+            {% endif %}
+
+            // --- NOVA LÓGICA: Auto-ocultar o bloco de sucesso após 5 segundos ---
+            const successBlock = document.getElementById('success-block');
+            if (successBlock) {
+                autoHideTimeout = setTimeout(() => {
+                    // Adiciona um efeito suave de "esmaecer" (fade out)
+                    successBlock.style.transition = "opacity 0.5s ease";
+                    successBlock.style.opacity = "0";
+                    // Após os 0.5s da animação, remove o bloco da tela
+                    setTimeout(() => {
+                        successBlock.style.display = 'none';
+                    }, 500);
+                }, 8000); // 8000 milissegundos = 8 segundos
+            }
+        });
+
+// Salva o nome no localStorage toda vez que o operador digita
+document.getElementById('busca_cliente_lite').addEventListener('input', function() {
+    localStorage.setItem('ultimo_cliente_lite', this.value);
+});
+
+// Ao carregar a página, recupera o nome se existir
+window.onload = function() {
+    const nomeSalvo = localStorage.getItem('ultimo_cliente_lite');
+    if (nomeSalvo) {
+        document.getElementById('busca_cliente_lite').value = nomeSalvo;
+    }
+};
+
+// Limpa também o armazenamento local quando o botão de limpar é usado
+function limparCliente() {
+        inputBuscaLite.value = '';
+         
+        localStorage.removeItem('ultimo_cliente_lite');
+        inputBuscaLite.focus();
+    }
+
+        function copiarListagemVendas() {
+            // Pega o ID do evento atual (verifique se o ID do input oculto/select do evento se chama 'id_evento')
+            const idEvento = '{{ evento.id_evento if evento else request.args.get("id_evento", "") }}';
+            
+            if (!idEvento) {
+                alert("Nenhum evento selecionado!");
+                return;
+            }
+
+            const btn = document.getElementById('btn-copy-list');
+            const originalIcon = btn.innerHTML;
+            btn.innerHTML = "⏳"; // Feedback visual de carregamento
+
+            fetch(`/api/copiar_listagem_vendas?id_evento=${idEvento}`)
+                .then(res => res.json())
+                .then(data => {
+                    if (data.erro) {
+                        alert(data.erro);
+                        btn.innerHTML = originalIcon;
+                        return;
+                    }
+                    
+                    if (!data.texto) {
+                        alert("Nenhuma venda registrada para este evento ainda.");
+                        btn.innerHTML = originalIcon;
+                        return;
+                    }
+
+                    // Tenta usar a API moderna de Clipboard
+                    if (navigator.clipboard && window.isSecureContext) {
+                        navigator.clipboard.writeText(data.texto).then(() => {
+                            feedbackCopiaSucesso(btn, originalIcon);
+                        }).catch(() => fallbackCopiaTexto(data.texto, btn, originalIcon));
+                    } else {
+                        // Método Fallback
+                        fallbackCopiaTexto(data.texto, btn, originalIcon);
+                    }
+                })
+                .catch(err => {
+                    console.error("Erro no fetch:", err);
+                    alert("Falha de conexão com o servidor.");
+                    btn.innerHTML = originalIcon;
+                });
+        }
+
+        // Motor Fallback de cópia (Cria um textarea invisível, seleciona e copia)
+        function fallbackCopiaTexto(texto, btn, originalIcon) {
+            const textArea = document.createElement("textarea");
+            textArea.value = texto;
+            textArea.style.top = "0";
+            textArea.style.left = "0";
+            textArea.style.position = "fixed";
+
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                const successful = document.execCommand('copy');
+                if (successful) {
+                    feedbackCopiaSucesso(btn, originalIcon);
+                } else {
+                    alert('Seu navegador bloqueou a cópia. Tente atualizar a página.');
+                    btn.innerHTML = originalIcon;
+                }
+            } catch (err) {
+                alert('Erro ao copiar.');
+                btn.innerHTML = originalIcon;
+            }
+            document.body.removeChild(textArea);
+        }
+
+        // Animação de sucesso rápida no botão
+        function feedbackCopiaSucesso(btn, originalIcon) {
+            btn.innerHTML = "✅";
+            setTimeout(() => {
+                btn.innerHTML = originalIcon;
+            }, 2000);
+        }
+
+    </script>
+</body>
+</html>
