@@ -8,7 +8,7 @@ venda_lite_bp = Blueprint('venda_lite', __name__)
 # ==============================================================================
 # 🧮 FUNÇÕES MATEMÁTICAS E DE VALIDAÇÃO
 # ==============================================================================
-def converter_intervalo_kits_para_cartelas(kit_inicial, kit_final, cartelas_por_kit):
+def converter_intervalo_kits_para_cartelas(kit_inicial, kit_final, unidade_de_venda):
     """
     Converte um intervalo de kits nos limites exatos de cartelas.
     Ex: Kit Inicial 301, Kit Final 302 (com 6 cartelas por kit)
@@ -17,8 +17,8 @@ def converter_intervalo_kits_para_cartelas(kit_inicial, kit_final, cartelas_por_
     if kit_inicial < 1 or kit_final < kit_inicial:
         raise ValueError("Intervalo de kits inválido.")
 
-    cartela_inicial = ((kit_inicial - 1) * cartelas_por_kit) + 1
-    cartela_final = kit_final * cartelas_por_kit
+    cartela_inicial = ((kit_inicial - 1) * unidade_de_venda) + 1
+    cartela_final = kit_final * unidade_de_venda
 
     return cartela_inicial, cartela_final
 
@@ -182,7 +182,7 @@ def processar_venda_lite():
     # Carregar Parâmetros Globais
     parametros = db.parametros.find_one({}) or {}
     padrao_venda = parametros.get('padrao_registro_vendas', 'quantidade')
-    cartelas_por_kit = parametros.get('cartelas_por_kit', 6)
+    #cartelas_por_kit = parametros.get('unidade_de_venda', 6)
 
     id_evento_int_para_controle = selected_event.get('id_evento')
     limite_maximo_cartelas = int(selected_event.get('numero_maximo', 72000))
@@ -213,17 +213,29 @@ def processar_venda_lite():
             else:
                 numero_kit_final = int(numero_kit_final_str)
 
+            # =================================================================
+            # 🛡️ VALIDAÇÃO CRÍTICA: LIMITE MÁXIMO DE KITS PERMITIDO
+            # =================================================================
+            # Evita divisão por zero caso unidade_de_venda esteja nulo ou inválido
+            divisor_unidade = unidade_de_venda if unidade_de_venda > 0 else 1
+            limite_maximo_kits = limite_maximo_cartelas // divisor_unidade
+
+            if numero_kit_inicial > limite_maximo_kits or numero_kit_final > limite_maximo_kits:
+                error_redirect_kwargs['error'] = f"⛔ Venda Bloqueada! O número máximo de kit permitido para este evento é {limite_maximo_kits} (Limite: {limite_maximo_cartelas} cartelas)."
+                return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
+            # =================================================================
+
             if numero_kit_final < numero_kit_inicial:
                 error_redirect_kwargs['error'] = "O Kit Final não pode ser menor que o Kit Inicial."
                 return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
 
             quantidade_kits = (numero_kit_final - numero_kit_inicial) + 1
             quantidade = quantidade_kits # Unidades brutas (Kits)
-            quantidade_cartelas_atual = quantidade_kits * cartelas_por_kit
+            quantidade_cartelas_atual = quantidade_kits * unidade_de_venda
             
             # Chama a nossa nova função matemática baseada no período
             numero_inicial_atual, numero_final_atual = converter_intervalo_kits_para_cartelas(
-                numero_kit_inicial, numero_kit_final, cartelas_por_kit
+                numero_kit_inicial, numero_kit_final, unidade_de_venda
             )
             
             # Validação de Conflito
@@ -252,7 +264,7 @@ def processar_venda_lite():
             quantidade = int(request.form.get('quantidade', 0))
             if quantidade <= 0: raise ValueError("Quantidade deve ser positiva.")
             
-            quantidade_cartelas_atual = quantity * unidade_de_venda
+            quantidade_cartelas_atual = quantidade * unidade_de_venda
             
             numero_inicial_atual = get_next_bilhete_sequence(
                 db, id_evento_int_para_controle, 'inicial_proxima_venda', 
@@ -306,7 +318,8 @@ def processar_venda_lite():
             {"$inc": {"valor_pendente_telemovel": float(valor_total_atual)}}
         )
 
-        taxa_operador = g.parametros_globais.get('perc_venda_direta', 15.0) 
+        taxa_operador_bruta = parametros.get('perc_venda_direta', 15.0)
+        taxa_operador = float(str(taxa_operador_bruta))
         registrar_comissao_vendedor(
             db=db, 
             id_colaborador=colaborador_id, 

@@ -313,7 +313,7 @@
                             <button type="button" onclick="reimprimirReciboTxt('{{ v.id_venda }}', '{{ v.id_cliente }}')" class="btn btn-primary btn-small py-2 px-3 text-xs shadow">📋 Copiar Cupom</button>
                             
                             <!-- Botão de Imprimir 58mm -->
-                            <button type="button" onclick="dispararReimpressao58mm('{{ v.nome_cliente }}', {{ v.numero_inicial }}, {{ v.numero_final }}, '{{ v.id_evento }}')" class="btn bg-gray-600 hover:bg-gray-800 text-white btn-small py-2 px-3 text-xs shadow">🖨️ 58mm</button>
+                            <button type="button" onclick="dispararReimpressao58mm('{{ v.nome_cliente }}', {{ v.numero_inicial }}, {{ v.numero_final }}, '{{ v.id_evento }}')" class="btn bg-gray-600 hover:bg-gray-800 text-white btn-small py-2 px-3 text-xs shadow">🖨️ Recibo</button>
                         </div>
                     </div>
                 {% endfor %}

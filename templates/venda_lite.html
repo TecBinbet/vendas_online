@@ -150,20 +150,41 @@
             <div class="alert alert-danger">{{ error }}</div>
         {% endif %}
         
-        {% if success %}
+       {% if success %}
           <div id="success-block">
-            <div class="alert alert-success text-center">
+            <div class="alert alert-success text-center transition-opacity duration-500">
                 <h3 class="text-lg font-bold -mt-2">Venda Registrada com Sucesso!</h3>
-                <!-- O cupom agora nasce oculto -->
                 <div id="receipt-content" style="display: none;">{{ success | safe }}</div>
             </div>
             <div class="flex justify-center mb-1 gap-3 flex-wrap">
                 <button onclick="copyReceiptText()" class="btn btn-primary shadow-lg">📋 Copiar Texto</button>
                 <button onclick="shareReceiptImage()" class="btn btn-warning shadow-lg">🖼️ Gerar Imagem</button>
-                <!-- Botão transformado em um 'Interruptor' -->
                 <button id="btn-toggle-cupom" onclick="toggleReceipt()" class="btn bg-green-500 text-white hover:bg-green-700 shadow-lg">👁️ Mostrar Cupom</button>
             </div>
           </div>
+
+          <script>
+            (function() {
+                const block = document.getElementById('success-block');
+                if (!block) return;
+                
+                // Inicia a contagem de 8 segundos
+                let autoHideTimer = setTimeout(() => {
+                    block.style.transition = "opacity 0.5s ease";
+                    block.style.opacity = '0';
+                    setTimeout(() => { block.style.display = 'none'; }, 500);
+                }, 8000);
+
+                // Trava inteligente: Só cancela o sumiço se o operador clicar especificamente em um dos BOTÕES
+                const botoes = block.querySelectorAll('button');
+                botoes.forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        clearTimeout(autoHideTimer);
+                        console.log("Temporizador cancelado para o operador ver o recibo.");
+                    });
+                });
+            })();
+          </script>
         {% endif %}
 
         <form method="GET" action="{{ url_for('venda_lite.nova_venda_lite') }}" class="form-venda" id="main-form">
@@ -194,7 +215,7 @@
                 <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
                 
                 <div class="form-group relative mt-2">
-                    <label for="busca_cliente_lite">2. Cliente (Nome Livre ou Auto-completar):</label>
+                    <label for="busca_cliente_lite">2. Cliente (Nome Livre):</label>
 <div class="form-group relative mt-2">
     <label for="busca_cliente_lite" class="font-bold">Cliente:</label>
 <div class="flex gap-2">
@@ -235,7 +256,13 @@
                    min="1" class="form-control text-xl px-2 py-1 border-yellow-500 bg-yellow-50" 
                    oninput="updateTotalCostKit();" placeholder="Igual ao Inicial">
         </div>
+
     </div>
+
+    <div id="alerta-limite-kit" class="hidden -mt-1 mb-2 bg-red-100 border-l-4 border-red-500 text-red-700 p-2 text-sm rounded shadow-sm">
+          <strong>⚠️ Atenção:</strong> O limite para este evento é de <span id="span-max-kits" class="font-bold"></span> kits.
+    </div>
+
     <small class="form-text text-muted font-bold text-red-600 block -mt-2">
         Atenção: O sistema bloqueará a venda se algum Kit do período já foi vendido.
     </small>
@@ -339,7 +366,15 @@
                             <button type="button" onclick="reimprimirReciboTxt('{{ v.id_venda }}', '{{ v.id_cliente }}')" class="btn btn-primary btn-small py-2 px-3 text-xs shadow">📋 Copiar Cupom</button>
                             
                             <!-- Botão de Imprimir 58mm -->
-                            <button type="button" onclick="dispararReimpressao58mm('{{ v.nome_cliente }}', {{ v.numero_inicial }}, {{ v.numero_final }}, '{{ v.id_evento }}')" class="btn bg-gray-600 hover:bg-gray-800 text-white btn-small py-2 px-3 text-xs shadow">🖨️ 58mm</button>
+                            <button type="button" onclick="dispararReimpressao58mm('{{ v.nome_cliente }}', {{ v.numero_inicial }}, {{ v.numero_final }}, '{{ v.id_evento }}')" 
+                                   class="btn bg-gray-600 hover:bg-gray-800 text-white btn-small py-2 px-3 text-xs shadow">                
+                                  🖨️ Recibo
+                             </button>
+
+                            <button type="button" onclick="handleGerarPdfLite('{{ v.numero_inicial }}', '{{ v.numero_final }}', '{{ selected_event.id_evento }}', '{{ v.nome_cliente | escape }}', '{{ selected_event.tipo_de_cartela | default(25) }}')" 
+                                 class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-bold border border-blue-300 hover:bg-blue-200">
+                                📄 Gerar Cartelas
+                             </button>
                         </div>
                     </div>
                 {% endfor %}
@@ -453,6 +488,17 @@ function updateTotalCostKit() {
     const campoFinal = document.getElementById('numero_kit_final');
     const divInfo = document.getElementById('info_cartelas_kit');
 
+    // Elementos do alerta de limite e botão de gravar
+    const alertaDiv = document.getElementById('alerta-limite-kit');
+    const spanMaxKits = document.getElementById('span-max-kits');
+    const btnSubmit = document.querySelector('button[type="submit"]');
+
+    // Calcula o limite máximo de kits puxando os dados do evento
+    const limiteMaximoCartelas = parseInt('{{ selected_event.numero_maximo | default(72000) }}', 10);
+    const unidadeDeVenda = parseInt('{{ selected_event.unidade_de_venda | default(6) }}', 10);
+    const divisorUnidade = unidadeDeVenda > 0 ? unidadeDeVenda : 1;
+    const limiteMaximoKits = Math.floor(limiteMaximoCartelas / divisorUnidade);
+
     if (campoInicial && campoInicial.value) {
         const kIni = parseInt(campoInicial.value);
         // Se o final estiver vazio, ele assume o valor do inicial (1 kit só)
@@ -461,9 +507,35 @@ function updateTotalCostKit() {
         // Trava visual para não permitir que o final seja menor que o inicial
         if (kFim < kIni) kFim = kIni; 
 
+        // =================================================================
+        // 🛡️ TRAVA VISUAL E BLOQUEIO DE BOTÃO (EXCESSO DE LIMITE)
+        // =================================================================
+        if (kIni > limiteMaximoKits || kFim > limiteMaximoKits) {
+            if (spanMaxKits) spanMaxKits.textContent = limiteMaximoKits;
+            if (alertaDiv) alertaDiv.classList.remove('hidden');
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+            
+            // Oculta previsão e zera os custos (venda inválida)
+            exibirBotaoCusto(false, 0);
+            if (divInfo) divInfo.style.display = 'none';
+            return; // Interrompe a função aqui!
+        } else {
+            // Tudo certo: esconde o alerta e reativa o botão
+            if (alertaDiv) alertaDiv.classList.add('hidden');
+            if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+        }
+        // =================================================================
+
         const qtdKits = (kFim - kIni) + 1;
         
         // Conversão matemática: Kit 301 x 6 = Cartelas 1801 a 1806
+        // Usamos a sua variável global Venda_UnidadeCartelas que já cuida disso
         const cartelaInicial = ((kIni - 1) * Venda_UnidadeCartelas) + 1;
         const cartelaFinal = kFim * Venda_UnidadeCartelas;
 
@@ -474,8 +546,15 @@ function updateTotalCostKit() {
             divInfo.innerHTML = `Venda de <strong>${qtdKits}</strong> Kit(s) <br> Cartelas correspondentes: <strong>${cartelaInicial} à ${cartelaFinal}</strong>`;
         }
     } else {
+        // Se o operador apagou os campos numéricos, limpa a tela e garante o botão ativo
         exibirBotaoCusto(false, 0);
         if (divInfo) divInfo.style.display = 'none';
+        
+        if (alertaDiv) alertaDiv.classList.add('hidden');
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
     }
 }
 
@@ -858,7 +937,16 @@ function updateTotalCostKit() {
                     setTimeout(() => {
                         successBlock.style.display = 'none';
                     }, 500);
-                }, 8000); // 8000 milissegundos = 8 segundos
+                }, 6000); // 6000 milissegundos = 6 segundos
+                
+                // 2. Trava de Segurança: Se o operador interagir com o bloco, cancela o sumiço
+                successBlock.addEventListener('click', () => {
+                    if (autoHideTimeout) {
+                        clearTimeout(autoHideTimeout);
+                        // Opcional: Console log só para você saber que funcionou nos testes
+                        console.log("Temporizador cancelado: Operador interagiu com os botões.");
+                    }
+                });
             }
         });
 
@@ -884,7 +972,7 @@ function limparCliente() {
     }
 
         function copiarListagemVendas() {
-            // Pega o ID do evento atual (verifique se o ID do input oculto/select do evento se chama 'id_evento')
+            // Pega o ID do evento atual
             const idEvento = '{{ evento.id_evento if evento else request.args.get("id_evento", "") }}';
             
             if (!idEvento) {
@@ -898,7 +986,7 @@ function limparCliente() {
 
             fetch(`/api/copiar_listagem_vendas?id_evento=${idEvento}`)
                 .then(res => res.json())
-                .then(data => {
+                .then(async (data) => { // <-- Adicionado 'async' aqui para permitir o await do share
                     if (data.erro) {
                         alert(data.erro);
                         btn.innerHTML = originalIcon;
@@ -911,14 +999,38 @@ function limparCliente() {
                         return;
                     }
 
-                    // Tenta usar a API moderna de Clipboard
+                    const textoRelatorio = data.texto;
+
+                    // =================================================================
+                    // 🚀 1. TENTA O COMPARTILHAMENTO NATIVO (Mobile / WhatsApp / etc)
+                    // =================================================================
+                    if (navigator.share) {
+                        try {
+                            await navigator.share({
+                                title: 'Relatório de Vendas',
+                                text: textoRelatorio
+                            });
+                            console.log("Relatório enviado com sucesso via menu de compartilhamento.");
+                            btn.innerHTML = originalIcon; // Restaura o botão após o envio
+                            return; // Encerra a função aqui, pois já deu certo!
+                        } catch (err) {
+                            console.log("Compartilhamento cancelado pelo usuário ou falhou. Tentando copiar...", err);
+                            // Se ele fechar o menu no celular sem enviar, o código ignora o erro
+                            // e desce para copiar o texto automaticamente como plano B.
+                        }
+                    }
+
+                    // =================================================================
+                    // 📋 2. PLANO B: COPIA PARA A ÁREA DE TRANSFERÊNCIA (Desktop / Fallback)
+                    // =================================================================
                     if (navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(data.texto).then(() => {
-                            feedbackCopiaSucesso(btn, originalIcon);
-                        }).catch(() => fallbackCopiaTexto(data.texto, btn, originalIcon));
+                        navigator.clipboard.writeText(textoRelatorio).then(() => {
+                            // Supondo que você já tenha essa função declarada em outro lugar do seu código
+                            feedbackCopiaSucesso(btn, originalIcon); 
+                        }).catch(() => fallbackCopiaTexto(textoRelatorio, btn, originalIcon));
                     } else {
-                        // Método Fallback
-                        fallbackCopiaTexto(data.texto, btn, originalIcon);
+                        // Método Fallback final
+                        fallbackCopiaTexto(textoRelatorio, btn, originalIcon);
                     }
                 })
                 .catch(err => {
@@ -961,6 +1073,57 @@ function limparCliente() {
             setTimeout(() => {
                 btn.innerHTML = originalIcon;
             }, 2000);
+        }
+
+       async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, tipoCartela) {
+            if (!numInicial || !numFinal || !idEvento) {
+                alert("Erro: Dados incompletos para gerar PDF.");
+                return;
+            }
+            
+            // Monta a URL baseada no tipo de cartela do evento
+            const baseUrl = `/gerar_cartelas_pdf_${tipoCartela}`;            
+            
+            const params = new URLSearchParams({
+                numero_inicial_pdf: numInicial,
+                numero_final_pdf: numFinal,
+                id_evento: idEvento,
+                id_cliente: 0, // Na Venda Lite o ID é sempre 0 (Balcão)
+                nome_cliente: nomeCliente
+            });
+            
+            const urlCompleta = `${baseUrl}?${params.toString()}`;
+            
+            // Altera o cursor para "carregando" para o operador saber que o sistema está trabalhando
+            document.body.style.cursor = 'wait';
+
+            try {
+                // 1. Verifica se o celular/navegador suporta compartilhamento direto
+                if (navigator.canShare && navigator.share) {
+                    
+                    const response = await fetch(urlCompleta);
+                    const blob = await response.blob();
+                    const file = new File([blob], `cartelas_${idEvento}.pdf`, { type: "application/pdf" });
+                    
+                    if (navigator.canShare({ files: [file] })) {
+                        document.body.style.cursor = 'default';
+                        await navigator.share({
+                            files: [file],
+                            title: 'Cartelas de Bingo',
+                            text: `Olá ${nomeCliente}, aqui estão suas cartelas!`
+                        });
+                    } else {
+                        throw new Error("Compartilhamento de arquivos não suportado.");
+                    }
+                } else {
+                    throw new Error("API de compartilhamento não suportada (Desktop Antigo).");
+                }
+            } catch (err) {
+                console.log("Fallback para download/abertura normal:", err);
+                // Se der erro no compartilhamento ou for pelo PC, abre a janela/faz o download
+                document.body.style.cursor = 'default';
+                window.open(urlCompleta, '_blank');
+            }
         }
 
     </script>
