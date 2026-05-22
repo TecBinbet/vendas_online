@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Master: Gestão de Regionais</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
     <style>
         .modal-overlay {
             position: fixed; top: 0; left: 0; right: 0; bottom: 0;
@@ -127,7 +128,11 @@
                                 {% endif %}
                             </td>
                             <td class="p-2.5 text-center space-x-2 whitespace-nowrap">
-                                <!-- Passando os dados via JSON para preencher o form -->
+                                <button type="button" onclick="abrirModalQRCode('{{ r.id_regional }}', '{{ r.descricao }}')" 
+                                        class="text-green-600 hover:text-green-800 font-bold text-sm">
+                                    🔗 Link
+                                </button>
+                                
                                 <button onclick='editarRegional({{ r.id_regional }}, {{ r.descricao|tojson }}, {{ r.localidades|tojson }}, {{ r.gestores|tojson }})' 
                                         class="text-blue-600 hover:text-blue-800 font-bold text-sm">
                                     ✏️ Alterar
@@ -178,8 +183,146 @@
         </div>
     </div>
 
+
+    <div id="modal-qrcode" class="modal-overlay">
+        <div class="modal-content text-center max-w-sm w-full">
+            <h2 class="text-xl font-bold text-gray-800 mb-2">Acesso da Regional</h2>
+            <p id="modal-qr-desc" class="text-sm text-gray-600 mb-4 font-semibold"></p>
+            
+            <div class="flex justify-center mb-4">
+                <div id="qrcode-container" class="bg-white p-3 rounded-lg shadow-sm border"></div>
+            </div>
+            
+            <p id="qr-link-text" class="text-[11px] text-blue-500 break-all mb-5 bg-gray-100 p-2 rounded select-all"></p>
+            
+            <div class="flex justify-between gap-3 mt-2">
+                <button type="button" onclick="fecharModalQRCode()" class="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 rounded shadow-sm">
+                    Fechar
+                </button>
+                <button type="button" id="btn-copy-link" onclick="copiarLinkQRCodeRegional()" class="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-2 rounded shadow-sm">
+                    📋 Compartilhar
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <input type="hidden" id="base-http-apk" value="{{ g.parametros_globais.http_apk }}">
+
     <script>
         const containerGestores = document.getElementById('container-gestores');
+        // =================================================================
+        // 🚀 LÓGICA DE QR CODE E COMPARTILHAMENTO DA REGIONAL
+        // =================================================================
+        let qrcodeRegional = null; // Instância global para recriar a imagem
+
+        function abrirModalQRCode(idRegional, descricao) {
+            const container = document.getElementById('qrcode-container');
+            container.innerHTML = '';
+            
+            // Lendo a URL base armazenada na variável/input oculto do sistema
+            let baseUrl = document.getElementById('base-http-apk').value;
+            
+            console.log("URL Base detectada:", baseUrl);
+
+            if (!baseUrl || baseUrl === "http://localhost:5000") {
+                console.error("ERRO: URL do APK não carregada corretamente do banco.");
+            }
+
+            if (!baseUrl.endsWith('/')) {
+                baseUrl += '/';
+            }
+
+            const idFormatado = String(idRegional).padStart(3, '0');
+            const finalUrl = `${baseUrl}?id_reg=${idFormatado}`;
+            
+            console.log("URL Final Gerada:", finalUrl);
+
+            // Atualiza os textos da Modal
+            document.getElementById('modal-qr-desc').innerText = `Regional ${idFormatado} - ${descricao}`;
+            document.getElementById('qr-link-text').textContent = finalUrl;
+            
+            const btnCopy = document.getElementById('btn-copy-link');
+            if (btnCopy) btnCopy.textContent = "📋 Compartilhar";
+
+            // Gera o QRCode com a nova URL padronizada
+            qrcodeRegional = new QRCode(container, {
+                text: finalUrl,
+                width: 160,
+                height: 160,
+                colorDark : "#111827",
+                colorLight : "#ffffff",
+                correctLevel : QRCode.CorrectLevel.H
+            });
+
+            document.getElementById('modal-qrcode').style.display = 'flex';
+        }
+
+        function fecharModalQRCode() {
+            document.getElementById('modal-qrcode').style.display = 'none';
+        }
+
+        async function copiarLinkQRCodeRegional() {
+            const linkText = document.getElementById('qr-link-text').textContent;
+            const btn = document.getElementById('btn-copy-link');
+            const originalIcon = "📋 Compartilhar";
+
+            // 1. TENTA O COMPARTILHAMENTO NATIVO (Mobile)
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: 'Acesso Regional',
+                        text: 'Acesse o sistema desta regional através do link: ',
+                        url: linkText
+                    });
+                    return; // Sai se deu certo
+                } catch (err) {
+                    console.log("Compartilhamento cancelado. Copiando...");
+                }
+            }
+
+            // 2. PLANO B: COPIA PARA A ÁREA DE TRANSFERÊNCIA
+            const sucessoVisual = () => {
+                btn.textContent = "Copiado! ✅";
+                btn.classList.add("bg-green-600", "text-white");
+                setTimeout(() => { 
+                    btn.textContent = originalIcon; 
+                    btn.classList.remove("bg-green-600", "text-white");
+                }, 2000);
+            };
+
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(linkText)
+                    .then(() => sucessoVisual())
+                    .catch(err => fallbackCopiaLinkRegional(linkText, btn, originalIcon));
+            } else {
+                fallbackCopiaLinkRegional(linkText, btn, originalIcon);
+            }
+        }
+
+        function fallbackCopiaLinkRegional(texto, btn, originalIcon) {
+            const textArea = document.createElement("textarea");
+            textArea.value = texto;
+            textArea.style.position = "fixed"; 
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                if (document.execCommand('copy')) {
+                    btn.textContent = "Copiado! ✅";
+                    btn.classList.add("bg-green-600", "text-white");
+                    setTimeout(() => { 
+                        btn.textContent = originalIcon; 
+                        btn.classList.remove("bg-green-600", "text-white");
+                    }, 2000);
+                } else {
+                    alert("Navegador bloqueou a cópia.");
+                }
+            } catch (err) {
+                alert("Erro ao copiar.");
+            }
+            document.body.removeChild(textArea);
+        }
 
         // Adiciona uma linha de inputs para gestor COM required
         function adicionarGestor(nome = '', telefone = '') {

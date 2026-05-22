@@ -319,7 +319,7 @@
             
             <div id="qrcode-container" class="border p-2 rounded mb-4 mt-2"></div>
             <p id="qr-link-text" class="text-xs text-gray-300 break-all text-center mb-2 px-2 bg-gray-100 rounded py-1 w-full"></p>
-            <button type="button" id="btn-copy-link" onclick="copiarLinkQRCode()" class="mb-1 px-4 py-2 bg-blue-600 text-white rounded font-bold w-full">📋 Copiar Link</button>
+            <button type="button" id="btn-copy-link" onclick="copiarLinkQRCode()" class="mb-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded font-bold w-full">📋 Compartilhar Link</button>
             <button type="button" class="w-full py-2 mt-2 bg-gray-200 rounded font-bold text-sm" onclick="closeQrModal()">Fechar</button>
         </div>
     </div>
@@ -446,7 +446,7 @@
             console.log("URL Final Gerada:", finalUrl);
 
             document.getElementById('qr-link-text').textContent = finalUrl;
-            document.getElementById('btn-copy-link').textContent = "📋 Copiar Link";
+            document.getElementById('btn-copy-link').textContent = "📋 Compartilhar Link";
 
             new QRCode(container, {
                 text: finalUrl,
@@ -462,13 +462,82 @@
 
         function closeQrModal() { document.getElementById('qr-modal').style.display = 'none'; }
 
-        function copiarLinkQRCode() {
+        async function copiarLinkQRCode() {
             const linkText = document.getElementById('qr-link-text').textContent;
-            navigator.clipboard.writeText(linkText).then(() => {
-                const btn = document.getElementById('btn-copy-link');
+            const btn = document.getElementById('btn-copy-link');
+            const originalIcon = "📋 Copiar Link";
+
+            // =================================================================
+            // 🚀 1. TENTA O COMPARTILHAMENTO NATIVO (Mobile)
+            // =================================================================
+            if (navigator.share) {
+                try {
+                    await navigator.share({
+                        title: 'Meu Link de Acesso',
+                        text: 'Acesse através do meu link: ',
+                        url: linkText
+                    });
+                    console.log("Link compartilhado com sucesso via menu nativo.");
+                    return; // Encerra a função aqui, pois já enviou!
+                } catch (err) {
+                    console.log("Compartilhamento cancelado. Tentando copiar para a área de transferência...", err);
+                    // Se o usuário fechar a gaveta do celular sem enviar, o código ignora 
+                    // o erro e desce automaticamente para o Plano B (Copiar).
+                }
+            }
+
+            // =================================================================
+            // 📋 2. PLANO B: COPIA PARA A ÁREA DE TRANSFERÊNCIA (Desktop / Fallback)
+            // =================================================================
+            
+            // Função interna para dar o feedback visual de sucesso
+            const sucessoVisual = () => {
                 btn.textContent = "Copiado! ✅";
-                setTimeout(() => { btn.textContent = "📋 Copiar Link"; }, 2000);
-            });
+                btn.classList.add("bg-green-600", "text-white");
+                setTimeout(() => { 
+                    btn.textContent = originalIcon; 
+                    btn.classList.remove("bg-green-600", "text-white");
+                }, 2000);
+            };
+
+            // Tenta usar a API moderna do navegador
+            if (navigator.clipboard && window.isSecureContext) {
+                navigator.clipboard.writeText(linkText)
+                    .then(() => sucessoVisual())
+                    .catch(err => fallbackCopiaLink(linkText, btn, originalIcon));
+            } else {
+                // Se a API moderna estiver bloqueada, usa o método raiz
+                fallbackCopiaLink(linkText, btn, originalIcon);
+            }
+        }
+
+        // =================================================================
+        // 🛠️ FUNÇÃO AUXILIAR DE CÓPIA (Método Raiz)
+        // =================================================================
+        function fallbackCopiaLink(texto, btn, originalIcon) {
+            const textArea = document.createElement("textarea");
+            textArea.value = texto;
+            textArea.style.position = "fixed"; // Evita que a tela pule
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+
+            try {
+                const sucesso = document.execCommand('copy');
+                if (sucesso) {
+                    btn.textContent = "Copiado! ✅";
+                    btn.classList.add("bg-green-600", "text-white");
+                    setTimeout(() => { 
+                        btn.textContent = originalIcon; 
+                        btn.classList.remove("bg-green-600", "text-white");
+                    }, 2000);
+                } else {
+                    alert("Erro ao copiar o link. O navegador bloqueou a ação.");
+                }
+            } catch (err) {
+                alert("Erro ao copiar o link.");
+            }
+            document.body.removeChild(textArea);
         }
 
 // --- LÓGICA DE ALTERNÂNCIA DE FILTROS (MÚLTIPLOS EVENTOS) ---
