@@ -9,9 +9,9 @@
         /* --- CSS DO SPINNER --- */
         .spinner-overlay {
             position: fixed;
-            inset: 0; /* top: 0, right: 0, bottom: 0, left: 0 */
-            background-color: rgba(17, 24, 39, 0.75); /* Fundo escuro semi-transparente */
-            display: none; /* Inicia oculto */
+            inset: 0; 
+            background-color: rgba(17, 24, 39, 0.75); 
+            display: none; 
             align-items: center;
             justify-content: center;
             z-index: 9999;
@@ -29,7 +29,7 @@
             border-width: 4px;
             border-style: solid;
             border-color: rgba(255, 255, 255, 0.1);
-            border-top-color: #3B82F6; /* Azul no topo */
+            border-top-color: #3B82F6; 
         }
 
         @keyframes spin {
@@ -39,11 +39,42 @@
 
         /* Ajuste fino para o container do menu */
         .container { position: relative; }
+
+        /* --- CONFIGURAÇÃO DE DUAS COLUNAS E LARGURA DUPLICADA --- */
+        .coluna-menu {
+            display: flex;
+            flex-direction: column;
+            gap: 12px; /* Espaçamento vertical entre os botões */
+        }
+
+        /* Aplicado apenas em PC e telas largas */
+        @media (min-width: 768px) {
+            .container {
+                max-width: 900px !important; /* 🚀 DUPLICADO: Expande a largura da tela mantendo a proporção */
+            }
+            
+            .menu-layout-grid {
+                display: grid;
+                grid-template-columns: 1fr 1fr; /* Duas colunas idênticas e simétricas */
+                gap: 32px; /* Espaçamento proporcional entre as colunas */
+                align-items: start; 
+            }
+        }
+        
+        /* Título discreto para a coluna administrativa */
+        .titulo-coluna {
+            font-size: 0.75rem;
+            font-weight: bold;
+            color: #9CA3AF;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: -4px;
+            padding-left: 4px;
+        }
     </style>
 </head>
 <body>
 
-    <!-- Estrutura do Spinner -->
     <div id="loading-spinner" class="spinner-overlay">
         <div class="flex flex-col items-center">
             <div class="spinner-animation"></div>
@@ -67,67 +98,67 @@
             </div>
         {% endif %}
 
-        {% if g.parametros_globais.get('venda_lite') == True %}
-            <a href="{{ url_for('venda_lite.nova_venda_lite') }}" onclick="ativarSpinner('Abrindo Caixa Rápido...')" class="menu-item menu-item-venda" style="background-color: #059669;">⚡ Nova Venda (Lite)</a>
-        {% else %}
-            <a href="{{ url_for('nova_venda') }}" onclick="ativarSpinner('Abrindo Terminal de Venda...')" class="menu-item menu-item-venda">⭐ Nova Venda</a>
-        {% endif %}
-        
-        <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" onclick="ativarSpinner('Consultando Eventos...')" class="menu-item">🗓️ Consulta de Eventos Ativos</a>
-        
-        <a href="{{ url_for('consulta_vendas') }}" onclick="ativarSpinner('Carregando Relatório...')" class="menu-item">
-             <span class="emoji">📊</span>
-             <span class="menu-text">Consultar Vendas</span>
-        </a>
-        
-        <a href="{{ url_for('consulta_resultados') }}" onclick="ativarSpinner('Buscando Resultados...')" class="menu-item">🏆 Consulta de Resultados</a>
-        
-        <a href="{{ url_for('cadastro_cliente', view='novo', next='menu_operacoes') }}" onclick="ativarSpinner('Módulo de Clientes...')" class="menu-item">👥 Cadastro de Clientes</a>
-        
-        <a href="{{ url_for('minha_conta', view='novo', next='menu_operacoes') }}" onclick="ativarSpinner('Acessando sua Conta...')" class="menu-item">🛠️ Minha Conta</a>
-       
-        {% if nivel >= 3 %} 
-            <hr class="my-0 ">
-            <a href="{{ url_for('submenu_financeiro') }}" onclick="ativarSpinner('Acessando Módulo Financeiro...')" class="menu-item gerencial-item">
-                  <span class="emoji">🏦</span>
-                  <span class="menu-text">Menu Financeiro</span>
-             </a>
-             <a href="{{ url_for('submenu_eventos') }}" onclick="ativarSpinner('Gestão de Eventos...')" class="menu-item gerencial-item">
-                 🎉 Menu Eventos
-            </a>
-            <a href="{{ url_for('cadastro_colaborador', view='listar') }}" onclick="ativarSpinner('Gestão de Equipe...')" class="menu-item gerencial-item">
-                 🛠️ Cadastro de Colaboradores
-            </a>
-        {% endif %}
+        <div class="{% if nivel >= 3 %}menu-layout-grid{% else %}coluna-menu{% endif %}">
+            
+            <div class="coluna-menu">
+                {% if g.parametros_globais.get('venda_lite') == True %}
+                    <a href="{{ url_for('venda_lite.nova_venda_lite') }}" onclick="ativarSpinner('Abrindo Caixa Rápido...')" class="menu-item menu-item-venda" style="background-color: #059669; margin:0;">⚡ Nova Venda (Lite)</a>
+                {% else %}
+                    <a href="{{ url_for('nova_venda') }}" onclick="ativarSpinner('Abrindo Terminal de Venda...')" class="menu-item menu-item-venda" style="margin:0;">⭐ Nova Venda</a>
+                {% endif %}
+                
+                <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" onclick="ativarSpinner('Consultando Eventos...')" class="menu-item" style="margin:0;">🗓️ Consulta de Eventos Ativos</a>
+                
+                <a href="{{ url_for('consulta_vendas') }}" onclick="ativarSpinner('Carregando Relatório...')" class="menu-item" style="margin:0;">
+                     <span class="emoji">📊</span>
+                     <span class="menu-text">Consultar Vendas</span>
+                </a>
+                
+                <a href="{{ url_for('consulta_resultados') }}" onclick="ativarSpinner('Buscando Resultados...')" class="menu-item" style="margin:0;">🏆 Consulta de Resultados</a>
+                
+                <a href="{{ url_for('cadastro_cliente', view='novo', next='menu_operacoes') }}" onclick="ativarSpinner('Módulo de Clientes...')" class="menu-item" style="margin:0;">👥 Cadastro de Clientes</a>
+                
+                <a href="{{ url_for('minha_conta', view='novo', next='menu_operacoes') }}" onclick="ativarSpinner('Acessando sua Conta...')" class="menu-item" style="margin:0;">🛠️ Minha Conta</a>
+            </div>
 
-        <!-- NOVO: BOTÃO MASTER PARA GESTÃO DE REGIONAIS -->
-        {% if nivel >= 4 %}
-            <a href="{{ url_for('gerenciar_regionais') }}" onclick="ativarSpinner('Acessando Painel Master...')" class="menu-item" style="background-color: #1e293b; color: #f8fafc; border-left: 5px solid #3b82f6;">
-                🌎 Master: Gestão de Regionais
-            </a>
-        {% endif %}
-        
-        <!-- Botão Sair sem spinner conforme solicitado -->
-        <a href="{{ url_for('login_page') }}" class="-mt-10 menu-item menu-item-exit">🚪 Sair</a>
+            {% if nivel >= 3 %} 
+            <div class="coluna-menu">
+                <div class="titulo-coluna">💼 Painel Administrativo</div>
+
+                <a href="{{ url_for('submenu_financeiro') }}" onclick="ativarSpinner('Acessando Módulo Financeiro...')" class="menu-item gerencial-item" style="margin:0;">
+                      <span class="emoji">🏦</span>
+                      <span class="menu-text">Menu Financeiro</span>
+                 </a>
+                 
+                 <a href="{{ url_for('submenu_eventos') }}" onclick="ativarSpinner('Gestão de Eventos...')" class="menu-item gerencial-item" style="margin:0;">
+                     🎉 Menu Eventos
+                </a>
+                
+                <a href="{{ url_for('cadastro_colaborador', view='listar') }}" onclick="ativarSpinner('Gestão de Equipe...')" class="menu-item gerencial-item" style="margin:0;">
+                     🛠️ Cadastro de Colaboradores
+                </a>
+
+                {% if nivel >= 4 %}
+                    <a href="{{ url_for('gerenciar_regionais') }}" onclick="ativarSpinner('Acessando Painel Master...')" class="menu-item" style="background-color: #1e293b; color: #f8fafc; border-left: 5px solid #3b82f6; margin:0;">
+                        🌎 Master: Gestão de Regionais
+                    </a>
+                {% endif %}
+            </div>
+            {% endif %}
+            
+        </div>
+        <a href="{{ url_for('login_page') }}" class="menu-item menu-item-exit" style="margin-top: 30px;">🚪 Sair</a>
     </div>
 
     <script>
-        /**
-         * Ativa o overlay de carregamento e personaliza a mensagem
-         */
-        function ativarSpinner(mensagem) {
+        function activarSpinner(mensagem) {
             const spinner = document.getElementById('loading-spinner');
             const text = document.getElementById('spinner-text');
             if (text && mensagem) text.innerText = mensagem;
             if (spinner) spinner.classList.add('spinner-visible');
-            
-            // Bloqueia cliques adicionais na página
             document.body.style.pointerEvents = 'none';
         }
 
-        /**
-         * Previne o travamento do spinner caso o usuário utilize o botão 'Voltar' do navegador
-         */
         window.onpageshow = function(event) {
             if (event.persisted) {
                 const spinner = document.getElementById('loading-spinner');
@@ -136,16 +167,10 @@
             }
         };
 
-        /**
-         * EASTER EGG / ATALHO DE TECLADO: Ctrl + Shift + C
-         * Redireciona para o painel oculto de parâmetros.
-         * A validação real de segurança ocorre no Backend (Python).
-         */
         document.addEventListener('keydown', function(event) {
-            // Verifica se as teclas Ctrl, Shift e 'C' (ou 'c') foram pressionadas em simultâneo
             if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'c') {
-                event.preventDefault(); // Previne aberturas acidentais de consolas de browsers
-                ativarSpinner("A aceder ao painel técnico...");
+                event.preventDefault();
+                activarSpinner("A aceder ao painel técnico...");
                 window.location.href = "{{ url_for('parametros') }}";
             }
         });

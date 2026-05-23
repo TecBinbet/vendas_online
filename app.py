@@ -1117,6 +1117,7 @@ def before_request():
                         'http_apk': params.get('http_apk', 'http://localhost:5000'), 
                         'http_vendas': params.get('http_vendas', 'http://localhost:5000'),
                         'id_sala_param': g.id_sala,
+                        'url_canal_live': params.get('url_canal_live', ''),
                         'venda_lite': params.get('venda_lite', False), 
                         'tipo_cadastro_cliente': params.get('tipo_cadastro_cliente', default_config_cadastro), 
                         'comissao_padrao': params.get('comissao_padrao', 20),
@@ -4522,15 +4523,21 @@ def reimprimir_comprovante_txt():
         id_evento_int = evento.get('id_evento')
 
         http_apk = g.parametros_globais.get('http_apk', '')
+        url_canal_live = g.parametros_globais.get('url_canal_live', '')
         nome_sala = g.parametros_globais.get('nome_sala', '')
         data_evento_str = evento.get('data_evento', 'N/A')
         hora_evento_str = evento.get('hora_evento', 'N/A')
         data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
         
         nome_colecao_venda = f"vendas{id_evento_int}"
-        
+
         receipt_html = "" 
-        link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
+        
+        if id_cliente_int > 0:
+           link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
+        else:
+           link_final_limpo = f"{url_canal_live}" 
+           
         if tipo_reimpressao == 'unica':
             venda = db[nome_colecao_venda].find_one({'id_venda': id_venda_str})
             if not venda:

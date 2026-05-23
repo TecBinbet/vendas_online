@@ -4,9 +4,24 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistema de Vendas de Cartelas - Login</title>
-    <!-- Certifique-se de que o caminho para o CSS está correto -->
+    
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}"> 
+    
     <style>
+        /* --- AJUSTE DE TAMANHO E CENTRALIZAÇÃO DOS TÍTULOS --- */
+        h1 {
+            text-align: center !important;
+            font-size: 1.5rem !important; /* Assume o tamanho proporcional que era do H2 */
+            margin-top: 5px !important;
+            margin-bottom: 10px !important;
+        }
+
+        h2 {
+            text-align: center !important;
+            font-size: 1.1rem !important; /* Reduz o tamanho do H2 anterior */
+            color: #4B5563 !important;    /* Deixa o H2 com uma cor ligeiramente mais suave para dar hierarquia */
+            margin-bottom: 20px !important;
+        }
         /* --- CSS DO SPINNER --- */
         .spinner-overlay {
             position: fixed;
@@ -52,20 +67,49 @@
             padding: 2px;
             margin-bottom: 20px;
             border-radius: 6px;
-            /*font-weight: bold;*/
             text-align: center;
             border: 1px solid #B3D9FF;
             font-size: 0.9rem;
+        }
+
+        /* ================================================================= */
+        /* 🎨 CLASSES DE ERRO MAPEADAS MANUALMENTE (SEM QUEBRAR O LAYOUT)    */
+        /* ================================================================= */
+        .bg-red-100 { background-color: #FEE2E2 !important; }
+        .border-red-400 { border: 1px solid #FCA5A5 !important; }
+        .text-red-700 { color: #991B1B !important; }
+        .text-red-500 { color: #EF4444 !important; }
+        .px-4 { padding-left: 16px !important; padding-right: 16px !important; }
+        .py-3 { padding-top: 12px !important; padding-bottom: 12px !important; }
+        .rounded { border-radius: 8px !important; }
+        .mb-4 { margin-bottom: 16px !important; }
+        .font-bold { font-weight: bold !important; }
+        .text-center { text-align: center !important; }
+        .text-sm { font-size: 0.875rem !important; }
+
+        /* Estilização extra para o container de mensagem do Javascript */
+        #message-container:not(.hidden) {
+            background-color: #FEE2E2;
+            border: 1px solid #FCA5A5;
+            color: #991B1B;
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 16px;
+            font-weight: bold;
+            text-align: center;
+            font-size: 0.875rem;
         }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h2>🔒 Login  -  v.1.1</h2>
+        <h1> 📊 Gestor de Vendas -  v.2.1</h1>
+
+        <h2>🔒 Login de Usuário</h2>
         
         <!-- Mensagens de Erro do Flask -->
-        <div id="message-container" class="text-xl text-red-500"></div> 
+        <div id="message-container" class="hidden text-xl text-red-700 mb-4 p-3 bg-red-100 border border-red-400 rounded shadow-sm font-bold text-center"></div> 
         
         {% if error %}
             <div class="text-xl text-red-500 mb-4 p-3 bg-red-100 border border-red-400 rounded">{{ error }}</div>

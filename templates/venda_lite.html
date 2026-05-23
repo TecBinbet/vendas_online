@@ -302,6 +302,8 @@
     <div id="event-selector-modal" class="modal">
         <div class="modal-content bg-blue-200 p-3 w-full md:w-3/4 lg:w-1/2">
             <h3 class="text-lg font-semibold text-gray-700 border-b pb-1 -mb-2 -mt-2">Selecione o Evento Ativo</h3>
+            <button onclick="closeEventSelector()" class="btn bg-gray-400 text-white hover:bg-red-500 mt-4 w-full">Fechar Janela</button>
+
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-110 overflow-y-auto pr-2 mt-2">
                 {% for evento in eventos %}
                     {# Lógica de Cores para o Cartão de Seleção #}
@@ -343,7 +345,6 @@
                     <p class="text-center text-gray-500 md:col-span-2">Nenhum evento ativo.</p>
                 {% endfor %}
             </div>
-            <button onclick="closeEventSelector()" class="btn bg-gray-400 text-white hover:bg-red-500 mt-4 w-full">Fechar Janela</button>
         </div>
     </div>
 
@@ -351,11 +352,12 @@
     <div id="ultimas-vendas-modal" class="modal">
         <div class="modal-content bg-white p-2 w-full md:w-3/4 lg:w-1/2">
             <h3 class="text-lg font-bold text-gray-800 border-b pb-2 mb-2">🕒 Suas Últimas 5 Vendas</h3>
-            
+           <button onclick="closeUltimasVendas()" class="btn bg-red-500 text-white hover:bg-red-700 -mt-2 mb-1 w-full shadow-lg">Fechar Janela</button>
+
             {% if ultimas_vendas %}
                 <div class="space-y-2">
                 {% for v in ultimas_vendas %}
-                    <div class="border rounded p-3 shadow-sm bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-2 hover:bg-blue-50 transition-colors">
+                    <div class="border rounded p-1 shadow-sm bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-2 hover:bg-blue-50 transition-colors">
                         <div class="text-left w-full sm:w-auto">
                             <p class="text-sm font-bold text-blue-800">{{ v.id_venda }} - {{ v.nome_cliente }}</p>
                             <p class="text-xl text-gray-600">Cartelas: <strong>{{ v.numero_inicial }} a {{ v.numero_final }}</strong></p>
@@ -383,7 +385,6 @@
                 <p class="text-center text-gray-500 py-4 font-semibold">Nenhuma venda sua registrada neste evento ainda.</p>
             {% endif %}
             
-            <button onclick="closeUltimasVendas()" class="btn bg-red-500 text-white hover:bg-red-700 mt-4 w-full shadow-lg">Fechar Janela</button>
         </div>
     </div>
 
@@ -839,15 +840,14 @@ function updateTotalCostKit() {
         async function reimprimirReciboTxt(idVenda, idCliente) {
             ativarSpinner("Puxando o cupom...");
             const data = {
-                tipo_reimpressao: 'unica', // Puxa apenas a venda específica
+                tipo_reimpressao: 'unica', 
                 id_venda: idVenda,
                 id_cliente: idCliente,
                 id_evento: document.getElementById('input_id_evento').value
             };
 
             try {
-                // Consulta nossa API de textos
-                const urlAbsoluta = window.location.origin + "/reimprimir_comprovante_txt";    
+                const urlAbsoluta = window.location.origin + "/reimprimir_comprovante_txt";  
                 const response = await fetch(urlAbsoluta, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -857,15 +857,44 @@ function updateTotalCostKit() {
                 const result = await response.json();
 
                 if (result.status === 'success') {
-                    // Copia furtivamente para a área de transferência do celular
-                    const tempTextArea = document.createElement('textarea');
-                    tempTextArea.value = result.receipt_text;
-                    document.body.appendChild(tempTextArea);
-                    tempTextArea.select();
-                    document.execCommand('copy');
-                    document.body.removeChild(tempTextArea);
+                    const textoRecibo = result.receipt_text;
                     
-                    alert("✅ Cupom copiado com sucesso para a área de transferência!\n\nAgora é só colar no WhatsApp do cliente.");
+                    // Prepara os dados para partilha nativa
+                    const shareData = {
+                        title: 'Comprovante de Venda',
+                        text: textoRecibo
+                    };
+
+                    // Função interna de fallback (a sua cópia furtiva original)
+                    const executarCopiaFallback = (texto) => {
+                        const tempTextArea = document.createElement('textarea');
+                        tempTextArea.value = texto;
+                        document.body.appendChild(tempTextArea);
+                        tempTextArea.select();
+                        document.execCommand('copy');
+                        document.body.removeChild(tempTextArea);
+                        
+                        alert("✅ Cupom copiado com sucesso para a área de transferência!\n\nAgora é só colar no WhatsApp do cliente.");
+                    };
+
+                    // Verifica se o navegador suporta a partilha nativa (ex: Celular)
+                    if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+                        try {
+                            // Abre a gaveta de partilha do Android/iOS
+                            await navigator.share(shareData);
+                            console.log("Cupom compartilhado com sucesso nativamente.");
+                        } catch (error) {
+                            // Se o utilizador apenas fechar a janela de partilha, ignoramos.
+                            // Se falhar por outro motivo técnico, fazemos a cópia clássica.
+                            if (error.name !== 'AbortError') {
+                                executarCopiaFallback(textoRecibo);
+                            }
+                        }
+                    } else {
+                        // Navegador de PC ou sem suporte -> Cai direto na cópia clássica
+                        executarCopiaFallback(textoRecibo);
+                    }
+
                 } else {
                     alert(`❌ Erro: ${result.message}`);
                 }
