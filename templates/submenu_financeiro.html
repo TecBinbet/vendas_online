@@ -84,12 +84,23 @@
 
             <!-- Ajustado para grid-cols-2 para ficar lado a lado -->
             <div class="p-2 grid gap-2 md:grid-cols-2">
+
+                 <!-- Finanças Dos Eventos(Auditoria) -->
+                <a href="{{ url_for('financeiro_evento') }}" onclick="ativarSpinner()"
+                   class="menu-card card-financeiro bg-gray-50 hover:bg-blue-50 p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center text-center group no-underline">
+                    <div class="bg-blue-100 p-3 rounded-full mb-2 group-hover:bg-blue-200 transition">
+                        <span class="text-2xl">💰</span>
+                    </div>
+                    <h3 class="text-xl font-bold text-gray-800 group-hover:text-blue-600">Financeiro do Evento</h3>
+                    <p class="text-sm text-gray-500 -mt-1">Fechamento, comissões, saldos e prêmios.</p>
+                </a>
+
                 
                 <!-- Finanças Clientes (Auditoria) -->
                 <a href="{{ url_for('financeiro_clientes') }}" onclick="ativarSpinner()"
                    class="menu-card card-auditoria bg-gray-50 hover:bg-blue-50 p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center text-center group no-underline">
                     <div class="bg-blue-100 p-3 rounded-full mb-2 group-hover:bg-blue-200 transition">
-                        <span class="text-3xl">📊</span>
+                        <span class="text-2xl">📊</span>
                     </div>
                     <h3 class="text-xl font-bold text-gray-800 group-hover:text-blue-600">Finanças de Clientes</h3>
                     <p class="text-sm text-gray-500 mt-1">Auditoria de carteiras, extratos, entradas (PIX/Prêmios) e saídas.</p>
@@ -99,7 +110,7 @@
                 <a href="{{ url_for('monitor_saques') }}" onclick="ativarSpinner()"
                    class="menu-card card-saques bg-gray-50 hover:bg-red-50 p-4 rounded-lg shadow-sm border border-gray-200 flex flex-col items-center text-center group no-underline">
                     <div class="bg-red-100 p-3 rounded-full mb-2 group-hover:bg-red-200 transition">
-                        <span class="text-3xl">💸</span>
+                        <span class="text-2xl">💸</span>
                     </div>
                     <h3 class="text-xl font-bold text-gray-800 group-hover:text-red-600">Monitor de Saques</h3>
                     <p class="text-sm text-gray-500 mt-1">Analisar, aprovar ou rejeitar solicitações de saque dos clientes.</p>

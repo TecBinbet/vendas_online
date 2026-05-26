@@ -32,7 +32,7 @@
             <div class="flex gap-2">
                 <button onclick="window.print()" class="bg-gray-200 hover:bg-gray-300 text-gray-700 px-4 py-2 rounded font-bold">🖨️ Imprimir</button>
                 <a href="{{ url_for('financeiro_evento') }}" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded font-bold">🔄 Trocar Evento</a>
-                <a href="{{ url_for('submenu_eventos') }}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded font-bold">🏠 Sair</a>
+                <a href="{{ url_for('submenu_financeiro') }}" class="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded font-bold">🏠 Sair</a>
             </div>
         </div>
 
@@ -203,11 +203,20 @@
         </div>
     </div>
 
-    <!-- SCRIPT DO GRÁFICO (APENAS MASTER) -->
     {% if session.get('nivel') >= 4 %}
     <script>
         document.addEventListener('DOMContentLoaded', function() {
-            fetch('/api/faturamento_pizza?id_evento={{ evento.id_evento }}')
+            
+            // 🚀 AQUI ESTÁ O AJUSTE: Define a URL correta dinamicamente
+            let urlGrafico = '';
+            {% if evento.tipo_consulta == 'periodo' %}
+                urlGrafico = `/api/faturamento_pizza?data_inicio={{ evento.data_inicio }}&data_fim={{ evento.data_fim }}&id_regional_filtro={{ evento.id_regional_filtro }}`;
+            {% else %}
+                urlGrafico = `/api/faturamento_pizza?id_evento={{ evento.id_evento }}&id_regional_filtro={{ request.args.get('id_regional_filtro', '') }}`;
+            {% endif %}
+
+            // Substituímos a string fixa pela variável urlGrafico
+            fetch(urlGrafico)
                 .then(res => res.json())
                 .then(data => {
                     if (data.values && data.values.length > 0) {

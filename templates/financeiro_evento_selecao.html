@@ -7,10 +7,9 @@
 </head>
 <body class="bg-gray-100 p-6">
     <div class="max-w-4xl mx-auto">
-        <div class="flex justify-between items-center mb-6">
+        <div class="flex justify-between items-center -mb-1">
             <div>
-                <h1 class="text-2xl font-bold text-gray-800">📊 Selecione o Evento para Fechamento</h1>
-                <!-- Identificação da Regional Logada -->
+                <h1 class="text-2xl font-bold text-gray-800">📊 Selecione o Período ou Evento para Fechamento</h1>
                 <p class="text-sm text-gray-500 font-bold uppercase tracking-wider">
                     {% if session.get('nivel') >= 4 %}
                         🌐 Modo Administrador Master
@@ -19,66 +18,190 @@
                     {% endif %}
                 </p>
             </div>
-            <a href="{{ url_for('submenu_eventos') }}" class="text-blue-600 hover:underline">← Voltar</a>
+            <a href="{{ url_for('submenu_financeiro') }}" class="text-blue-600 hover:underline font-bold">← Voltar</a>
         </div>
-
-        <!-- Filtros para Nível 4 (Master) -->
-        {% if session.get('nivel') >= 4 %}
-        <div class="bg-white p-4 rounded-lg shadow mb-6 border-t-4 border-blue-500 no-print">
-            <form method="GET" action="{{ url_for('financeiro_evento') }}" class="flex flex-wrap items-end gap-4">
-                <div class="flex-1 min-w-[200px]">
-                    <label class="block text-xs font-bold text-gray-600 mb-1">FILTRAR LISTA POR REGIONAL</label>
-                    <select name="id_regional_filtro" class="w-full border p-2 rounded bg-gray-50 font-bold text-gray-700">
-                        <option value="">🌎 Todas as Regionais (Global)</option>
-                        <!-- Assumindo que você passe a lista 'regionais' no contexto da rota -->
-                        {% for reg in regionais %}
-                            <option value="{{ reg.id_regional }}" {% if request.args.get('id_regional_filtro') == reg.id_regional|string %}selected{% endif %}>
-                                📍 {{ reg.descricao }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <button type="submit" class="bg-blue-600 text-white px-6 py-2 rounded font-bold hover:bg-blue-700 transition">Filtrar</button>
-            </form>
-        </div>
-        {% endif %}
 
         {% if request.args.get('error') %}
-            <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 shadow-sm">{{ request.args.get('error') }}</div>
+            <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 shadow-sm font-bold">{{ request.args.get('error') }}</div>
         {% endif %}
 
-        <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {% for e in eventos %}
-            <!-- O link agora pode carregar o filtro regional se necessário -->
-            <a href="{{ url_for('financeiro_evento', id_evento=e.id_evento, id_regional_filtro=request.args.get('id_regional_filtro')) }}" 
-               class="block bg-white p-4 rounded-lg shadow hover:shadow-md transition border-l-4 {% if e.status=='ativo' %}border-green-500{% elif e.status=='finalizado' %}border-gray-500{% else %}border-yellow-500{% endif %}">
-                <div class="flex justify-between items-start">
-                    <div>
-                        <div class="flex items-center gap-2 mb-1">
-                            <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded {% if e.status=='ativo' %}bg-green-100 text-green-700{% elif e.status=='finalizado' %}bg-gray-100 text-gray-600{% else %}bg-yellow-100 text-yellow-700{% endif %}">
-                                {{ e.status }}
-                            </span>
-                            {% if e.is_premio_dinamico %}
-                            <span class="text-[10px] font-bold uppercase bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">📊 Dinâmico</span>
-                            {% endif %}
+        <div class="flex space-x-2 mb-2 border-b border-gray-300">
+            <button id="btn-tab-periodo" onclick="mudarAba('periodo')" class="px-6 py-3 font-bold text-blue-600 border-b-4 border-blue-600 transition-colors flex items-center gap-2">
+                📅 Consulta por Período
+            </button>
+            <button id="btn-tab-evento" onclick="mudarAba('evento')" class="px-6 py-3 font-bold text-gray-500 hover:text-blue-600 border-b-4 border-transparent transition-colors flex items-center gap-2">
+                🎫 Consulta por Evento
+            </button>
+        </div>
+
+        <div id="view-periodo" class="block">
+            <div class="bg-white p-2 rounded-lg shadow border-t-4 border-blue-500">
+                <form method="GET" action="{{ url_for('financeiro_periodo') }}" class="space-y-2">
+                    <input type="hidden" name="tipo_consulta" value="periodo">
+                    
+                    {% if session.get('nivel') >= 4 %}
+                    <div class="mb-2 bg-gray-50 p-3 rounded border border-gray-200">
+                        <label class="block text-xs font-bold text-gray-600 mb-1">FILTRAR POR REGIONAL</label>
+                        <select name="id_regional_filtro" class="w-full border p-2 rounded bg-white font-bold text-gray-700">
+                            <option value="">🌎 Todas as Regionais (Global)</option>
+                            {% for reg in regionais %}
+                                <option value="{{ reg.id_regional }}">📍 {{ reg.descricao }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    {% endif %}
+
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <div class="bg-gray-50 p-2 rounded-lg border border-gray-200">
+                            <h3 class="text-sm font-bold text-gray-700 mb-3 -mt-2 border-b pb-1">Início do Período</h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 mb-1 -mt-2">DATA</label>
+                                    <input type="date" name="data_inicio" required class="w-full border p-2 rounded font-bold text-gray-700 focus:border-blue-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 mb-1 -mt-2">HORA</label>
+                                    <input type="time" name="hora_inicio" value="00:00" class="w-full border p-2 rounded font-bold text-gray-700 focus:border-blue-500 outline-none">
+                                </div>
+                            </div>
                         </div>
-                        <h3 class="text-lg font-bold text-gray-800 leading-tight">{{ e.descricao }}</h3>
-                        <p class="text-sm text-gray-600 mt-1">📅 {{ e.data_fmt }}</p>
-                        <p class="text-xs text-gray-400">🕒 {{ e.hora_evento }}</p>
+
+                        <div class="bg-gray-50 p-2 rounded-lg border border-gray-200">
+                            <h3 class="text-sm font-bold text-gray-700 mb-3 -mt-2 border-b pb-1">Fim do Período</h3>
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 mb-1 -mt-2">DATA</label>
+                                    <input type="date" name="data_fim" required class="w-full border p-2 rounded font-bold text-gray-700 focus:border-blue-500 outline-none">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-bold text-gray-500 mb-1 -mt-2">HORA</label>
+                                    <input type="time" name="hora_fim" value="23:59" class="w-full border p-2 rounded font-bold text-gray-700 focus:border-blue-500 outline-none">
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                    <div class="text-right">
-                         <span class="bg-blue-50 text-blue-800 text-[10px] font-black px-2 py-1 rounded-full border border-blue-200">ID: {{ e.id_evento }}</span>
+
+                    <div class="mt-6">
+                        <button type="submit" class="w-full bg-blue-600 text-white px-6 py-3 rounded-lg font-bold hover:bg-blue-700 shadow-md transition-transform active:scale-95 text-lg">
+                            🔍 Gerar Fechamento do Período
+                        </button>
                     </div>
-                </div>
-            </a>
-            {% endfor %}
+                </form>
+            </div>
         </div>
 
-        {% if not eventos %}
-        <div class="text-center py-12">
-            <p class="text-gray-400 font-bold">Nenhum evento encontrado para os critérios selecionados.</p>
+        <div id="view-evento" class="hidden">
+            
+            {% if session.get('nivel') >= 4 %}
+            <div class="bg-white p-2 rounded-lg shadow mb-2 border-t-4 border-gray-400 no-print">
+                <form method="GET" action="{{ url_for('financeiro_evento') }}" class="flex flex-wrap items-end gap-4">
+                    <input type="hidden" name="aba" value="evento"> 
+                    
+                    <div class="flex-1 min-w-[200px]">
+                        <label class="block text-xs font-bold text-gray-600 mb-1">FILTRAR LISTA DE EVENTOS POR REGIONAL</label>
+                        <select id="select_regional_evento" name="id_regional_filtro" onchange="atualizarLinksDinamicos()" class="w-full border p-2 rounded bg-gray-50 font-bold text-gray-700">
+                            <option value="">🌎 Todas as Regionais (Global)</option>
+                            {% for reg in regionais %}
+                                <option value="{{ reg.id_regional }}" {% if request.args.get('id_regional_filtro') == reg.id_regional|string %}selected{% endif %}>
+                                    📍 {{ reg.descricao }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <button type="submit" class="bg-gray-600 text-white px-6 py-2 rounded font-bold hover:bg-gray-700 transition shadow">Filtrar Eventos</button>
+                </form>
+            </div>
+            {% endif %}
+
+            <div class="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {% for e in eventos %}
+                <a href="{{ url_for('financeiro_evento', id_evento=e.id_evento, id_regional_filtro=request.args.get('id_regional_filtro')) }}" 
+   class="link-evento block bg-white p-2 rounded-lg shadow hover:shadow-md transition border-l-4 {% if e.status=='ativo' %}border-green-500{% elif e.status=='finalizado' %}border-gray-500{% else %}border-yellow-500{% endif %}">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <div class="flex items-center gap-2 mb-1">
+                                <span class="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded {% if e.status=='ativo' %}bg-green-100 text-green-700{% elif e.status=='finalizado' %}bg-gray-100 text-gray-600{% else %}bg-yellow-100 text-yellow-700{% endif %}">
+                                    {{ e.status }}
+                                </span>
+                                {% if e.is_premio_dinamico %}
+                                <span class="text-[10px] font-bold uppercase bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded">📊 Dinâmico</span>
+                                {% endif %}
+                            </div>
+                            <h3 class="text-lg font-bold text-gray-800 leading-tight">{{ e.descricao }}</h3>
+                            <p class="text-sm text-gray-600 mt-1">📅 {{ e.data_fmt }}</p>
+                            <p class="text-xs text-gray-400">🕒 {{ e.hora_evento }}</p>
+                        </div>
+                        <div class="text-right">
+                             <span class="bg-blue-50 text-blue-800 text-[10px] font-black px-2 py-1 rounded-full border border-blue-200">ID: {{ e.id_evento }}</span>
+                        </div>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+
+            {% if not eventos %}
+            <div class="text-center py-12 bg-white rounded-lg shadow">
+                <p class="text-gray-400 font-bold text-lg">🎫 Nenhum evento encontrado.</p>
+                <p class="text-sm text-gray-400 mt-2">Altere o filtro de regional ou inicie um novo evento.</p>
+            </div>
+            {% endif %}
         </div>
-        {% endif %}
+
     </div>
+
+    <script>
+        // Função para alternar entre a visão de Período e a visão de Eventos
+        function mudarAba(abaEscolhida) {
+            const btnPeriodo = document.getElementById('btn-tab-periodo');
+            const btnEvento = document.getElementById('btn-tab-evento');
+            const viewPeriodo = document.getElementById('view-periodo');
+            const viewEvento = document.getElementById('view-evento');
+
+            if (abaEscolhida === 'periodo') {
+                viewPeriodo.classList.remove('hidden');
+                viewEvento.classList.add('hidden');
+                
+                btnPeriodo.className = "px-6 py-3 font-bold text-blue-600 border-b-4 border-blue-600 transition-colors flex items-center gap-2";
+                btnEvento.className = "px-6 py-3 font-bold text-gray-500 hover:text-blue-600 border-b-4 border-transparent transition-colors flex items-center gap-2";
+            } else {
+                viewPeriodo.classList.add('hidden');
+                viewEvento.classList.remove('hidden');
+
+                btnEvento.className = "px-6 py-3 font-bold text-blue-600 border-b-4 border-blue-600 transition-colors flex items-center gap-2";
+                btnPeriodo.className = "px-6 py-3 font-bold text-gray-500 hover:text-blue-600 border-b-4 border-transparent transition-colors flex items-center gap-2";
+            }
+        }
+
+        // Caso a página seja recarregada após o usuário tentar filtrar por um evento, mantém a aba de eventos aberta.
+        window.onload = function() {
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.get('aba') === 'evento' || urlParams.get('id_regional_filtro')) {
+                mudarAba('evento');
+            }
+        };
+
+        // Função para injetar o filtro automaticamente nos links sem precisar recarregar a página
+        function atualizarLinksDinamicos() {
+            const selectRegional = document.getElementById('select_regional_evento');
+            const linksEventos = document.querySelectorAll('.link-evento');
+            
+            if (!selectRegional) return;
+            
+            const valorRegional = selectRegional.value;
+
+            linksEventos.forEach(link => {
+                let url = new URL(link.href, window.location.origin); // Adicionado window.location.origin por segurança
+                
+                if (valorRegional !== "") {
+                    url.searchParams.set('id_regional_filtro', valorRegional);
+                } else {
+                    url.searchParams.delete('id_regional_filtro');
+                }
+                
+                link.href = url.pathname + url.search;
+            });
+        }
+
+    </script>
 </body>
 </html>

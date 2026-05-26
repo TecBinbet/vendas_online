@@ -313,41 +313,81 @@ def dashboard_faturamento_regional():
 
 
 @app.route('/api/faturamento_pizza', methods=['GET'])
-@login_required  # <--- Usando o SEU decorator!
+@login_required
 def api_faturamento_pizza():
     db = get_vendas_db()
+    
     id_evento = request.args.get('id_evento')
+    data_inicio = request.args.get('data_inicio')
+    data_fim = request.args.get('data_fim')
     
-    if db is None or not id_evento:
-        return jsonify({'labels': [], 'values': []})
+    # 🚀 RECEBE O FILTRO
+    id_regional_filtro = request.args.get('id_regional_filtro', '').strip()
     
-    try:
+    match_regional_pipe = None
+    if id_regional_filtro:
+        val_int = int(id_regional_filtro) if id_regional_filtro.isdigit() else None
+        condicao = {'$in': [val_int, str(val_int)]} if val_int is not None else id_regional_filtro
+        match_regional_pipe = {'$match': {'id_regional': condicao}}
+
+    regionais = list(db.regionais.find({}))
+    mapa_regionais = {r.get('id_regional'): r.get('descricao', f"Regional {r.get('id_regional')}") for r in regionais}
+    faturamento_por_regional = {}
+
+    if id_evento:
         nome_col_vendas = f"vendas{id_evento}"
-        if nome_col_vendas not in db.list_collection_names():
-            return jsonify({'labels': [], 'values': []})
+        if nome_col_vendas in db.list_collection_names():
+            pipeline = []
+            if match_regional_pipe: pipeline.append(match_regional_pipe) # Aplica filtro
+            pipeline.append({'$group': {'_id': '$id_regional', 'total': {'$sum': {'$toDouble': '$valor_total'}}}})
             
-        # Agrupa o faturamento por Regional
-        pipeline = [
-            {
-                '$group': {
-                    '_id': '$id_regional',
-                    'total_arrecadado': {'$sum': {'$toDouble': '$valor_total'}}
-                }
-            },
-            {'$sort': {'total_arrecadado': -1}} # Ordena do maior para o menor
-        ]
-        
-        resultados = list(db[nome_col_vendas].aggregate(pipeline))
-        
-        # Formata os dados para o Chart.js
-        labels = [f"Regional {r['_id']}" if r['_id'] else "Sem Regional" for r in resultados]
-        values = [r['total_arrecadado'] for r in resultados]
-        
-        return jsonify({'labels': labels, 'values': values})
-        
-    except Exception as e:
-        print(f"Erro ao gerar gráfico de pizza: {e}")
-        return jsonify({'labels': [], 'values': []})
+            for v in db[nome_col_vendas].aggregate(pipeline):
+                id_reg = v['_id']
+                faturamento_por_regional[id_reg] = faturamento_por_regional.get(id_reg, 0) + v['total']
+                
+    elif data_inicio and data_fim:
+        from datetime import datetime
+        try:
+            dt_inicio = datetime.strptime(data_inicio, '%Y-%m-%d')
+            dt_fim = datetime.strptime(data_fim, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        except: return jsonify({'labels': [], 'values': []})
+
+        todos_eventos = list(db.eventos.find({'status': {'$in': ['ativo', 'paralizado', 'finalizado']}}))
+        eventos_validos = []
+        for ev in todos_eventos:
+            data_ev = ev.get('data_evento')
+            if not data_ev: continue
+            dt_ev = None
+            if hasattr(data_ev, 'strftime'): dt_ev = data_ev
+            else:
+                try:
+                    if '-' in str(data_ev): dt_ev = datetime.strptime(str(data_ev).strip(), '%Y-%m-%d')
+                    elif '/' in str(data_ev): dt_ev = datetime.strptime(str(data_ev).strip(), '%d/%m/%Y')
+                except: pass
+            
+            if dt_ev and (dt_inicio <= dt_ev <= dt_fim):
+                eventos_validos.append(ev.get('id_evento'))
+
+        for ev_id in eventos_validos:
+            if ev_id is None: continue
+            nome_col = f"vendas{int(ev_id)}"
+            if nome_col in db.list_collection_names():
+                pipeline = []
+                if match_regional_pipe: pipeline.append(match_regional_pipe) # Aplica filtro
+                pipeline.append({'$group': {'_id': '$id_regional', 'total': {'$sum': {'$toDouble': '$valor_total'}}}})
+                
+                for v in db[nome_col].aggregate(pipeline):
+                    id_reg = v['_id']
+                    faturamento_por_regional[id_reg] = faturamento_por_regional.get(id_reg, 0) + v['total']
+
+    labels = []
+    values = []
+    for id_reg, total in faturamento_por_regional.items():
+        if total > 0:
+            labels.append(mapa_regionais.get(id_reg, f"Regional {id_reg}"))
+            values.append(total)
+
+    return jsonify({'labels': labels, 'values': values})
 
 
 # --- NOVO FILTRO DE MOEDA ---
@@ -403,6 +443,29 @@ def hora_brasil():
     # Assim o banco salva exatamente o que vê, sem tentar converter.
     return agora_sp.replace(tzinfo=None)
 
+def formatar_nome_proprio(nome):
+    """
+    Formata nomes próprios garantindo as primeiras letras maiúsculas,
+    mas ignorando preposições comuns do português (da, de, do, etc).
+    """
+    if not nome:
+        return ""
+        
+    preposicoes = {'de', 'da', 'do', 'das', 'dos', 'e'}
+    
+    # Transforma tudo em minúsculo primeiro e divide por espaços
+    palavras = str(nome).strip().lower().split()
+    
+    nome_formatado = []
+    for i, palavra in enumerate(palavras):
+        # Se for preposição e não for a primeira palavra, mantém minúsculo
+        if i > 0 and palavra in preposicoes:
+            nome_formatado.append(palavra)
+        else:
+            # Capitalize deixa a primeira letra maiúscula (ex: "maria" -> "Maria")
+            nome_formatado.append(palavra.capitalize())
+            
+    return " ".join(nome_formatado)
 
 def log_sistema(mensagem, nivel="INFO"):
     """Função centralizada para controlar o que aparece no console"""
@@ -1535,7 +1598,7 @@ def gerenciar_regionais():
                 
                 gestores = []
                 for nome, tel in zip(nomes_gestores, tels_gestores):
-                    nome_limpo = nome.strip()
+                    nome_limpo = formatar_nome_proprio(nome)
                     # Garante que funciona mesmo se o clean_numeric não existir no contexto
                     tel_limpo = clean_numeric_string(tel) if 'clean_numeric_string' in globals() else tel.strip()
                     
@@ -1729,8 +1792,8 @@ def gravar_colaborador():
         campos_config = g.parametros_globais.get('tipo_cadastro_colaborador', default_colab_config)
 
         # Captura dos campos
-        nome_colaborador = format_title_case(request.form.get('nome_colaborador'))
-        nick = format_title_case(request.form.get('nick'))
+        nome_colaborador = formatar_nome_proprio(request.form.get('nome_colaborador'))
+        nick = formatar_nome_proprio(request.form.get('nick'))
         telefone = clean_numeric_string(request.form.get('telefone'))
         cpf_raw = request.form.get('cpf')
         cidade = format_title_case(request.form.get('cidade'))
@@ -2817,8 +2880,8 @@ def gravar_cliente():
         }
         campos_config = getattr(g, 'parametros_globais', {}).get('tipo_cadastro_cliente', default_config)
 
-        nome_cliente = format_title_case(request.form.get('nome_cliente'))
-        nick = format_title_case(request.form.get('nick'))
+        nome_cliente = formatar_nome_proprio(request.form.get('nome_cliente'))
+        nick = formatar_nome_proprio(request.form.get('nick'))
         telefone = clean_numeric_string(request.form.get('telefone'))
         cpf_raw = request.form.get('cpf')
         cidade = format_title_case(request.form.get('cidade'))
@@ -5731,6 +5794,7 @@ def financeiro_evento():
     is_master = (nivel_usuario >= 4)
 
     id_evento_param = request.args.get('id_evento')
+    id_regional_filtro = request.args.get('id_regional_filtro', '').strip()
 
     # SE NÃO TEM EVENTO SELECIONADO: MOSTRA LISTA
     if not id_evento_param:
@@ -5744,7 +5808,11 @@ def financeiro_evento():
                  try: e['data_fmt'] = e['data_evento'].strftime('%d/%m/%Y') if hasattr(e['data_evento'], 'strftime') else e['data_evento']
                  except: e['data_fmt'] = str(e['data_evento'])
 
-        return render_template('financeiro_evento_selecao.html', eventos=eventos, g=g)
+        lista_regionais = []
+        if is_master:
+            lista_regionais = list(db.regionais.find({}, {'_id': 0, 'id_regional': 1, 'descricao': 1}).sort('id_regional', 1))
+
+        return render_template('financeiro_evento_selecao.html', eventos=eventos, regionais=lista_regionais, g=g)
 
     # SE TEM EVENTO: CALCULA O RELATÓRIO
     try:
@@ -5768,8 +5836,14 @@ def financeiro_evento():
         p_ind_b = get_perc('perc_venda_indireta_b', 10.0)
         comissao_auto = g.parametros_globais.get('comissao_autoatendimento', 10) / 100.0
         
-        # Filtro de colaboradores: Se não for Master, só carrega os da regional dele
-        query_colab = {} if is_master else {"id_regional": id_regional_sessao}
+        # 🚀 CORREÇÃO: Filtra os colaboradores de acordo com a regional selecionada pelo Master
+        if is_master and id_regional_filtro:
+            query_colab = {"id_regional": int(id_regional_filtro)}
+        elif not is_master and id_regional_sessao:
+            query_colab = {"id_regional": id_regional_sessao}
+        else:
+            query_colab = {}
+            
         colabs = list(db.colaboradores.find(query_colab))
         
         mapa_nicks = {0: 'AutoAtendimento', '0': 'AutoAtendimento', None: 'AutoAtendimento', 'None': 'AutoAtendimento'}
@@ -5784,18 +5858,21 @@ def financeiro_evento():
         nome_col_pagtos = f"pagamentos{id_evento_int}"
         nome_col_cupons = f"vendas_sorte_extra{id_evento_int}"
 
+        # 🚀 CORREÇÃO: Aplica o filtro da regional nas agregações do Master
         match_regional = {}
-        if not is_master and id_regional_sessao:
+        if is_master and id_regional_filtro:
+            match_regional['id_regional'] = int(id_regional_filtro)
+        elif not is_master and id_regional_sessao:
             match_regional['id_regional'] = int(id_regional_sessao)
 
-        # 3. Agregação de VENDAS (BINGO) - Foco no CAIXA (id_vendedor)
+        # 3. Agregação de VENDAS
         vendas_agg = []
         if nome_col_vendas in db.list_collection_names():
             pipeline = [
                 {'$match': match_regional},
                 {
                     '$group': {
-                        '_id': '$id_vendedor',  # AGRUPANDO POR QUEM OPEROU O TERMINAL E PEGOU O DINHEIRO
+                        '_id': '$id_vendedor',
                         'total_qtd': {'$sum': '$quantidade_unidades'},
                         'total_val': {'$sum': {'$toDouble': '$valor_total'}},
                         'vol_direto': {
@@ -5809,14 +5886,14 @@ def financeiro_evento():
             ]
             vendas_agg = list(db[nome_col_vendas].aggregate(pipeline))
 
-        # 4. Agregação de SORTE EXTRA (Também por Operador/Vendedor)
+        # 4. Agregação de SORTE EXTRA
         cupons_agg = []
         if nome_col_cupons in db.list_collection_names():
             pipeline_cupons = [
                 {'$match': match_regional},
                 {
                     '$group': {
-                        '_id': { '$ifNull': ['$id_vendedor', '$id_colaborador'] }, # Fallback seguro
+                        '_id': { '$ifNull': ['$id_vendedor', '$id_colaborador'] },
                         'total_qtd_cupons': {'$sum': '$qtd_cartelas'},
                         'total_val_cupons': {'$sum': {'$toDouble': '$valor_total'}}
                     }
@@ -5824,14 +5901,14 @@ def financeiro_evento():
             ]
             cupons_agg = list(db[nome_col_cupons].aggregate(pipeline_cupons))
 
-        # 5. Agregação de PAGAMENTOS (A Central recebe de quem operou o caixa)
+        # 5. Agregação de PAGAMENTOS
         pagtos_agg = {}
         if nome_col_pagtos in db.list_collection_names():
             pipeline_pagtos = [
                 {'$match': match_regional},
                 {
                     '$group': {
-                        '_id': '$id_colaborador', # No pagamento, o colaborador registrado é quem pagou
+                        '_id': '$id_colaborador',
                         'total_pago': {'$sum': {'$toDouble': '$valor_pago'}}
                     }
                 }
@@ -5844,28 +5921,21 @@ def financeiro_evento():
         for v in vendas_agg:
             id_vend = v['_id']
             valor = safe_float(v['total_val'])
-            
-            # Cálculo de Comissão Dinâmico
             if id_vend in [0, '0', None, 'None']:
-                comissao_merecida = valor * comissao_auto # Autoatendimento
+                comissao_merecida = valor * comissao_auto
             else:
                 comissao_merecida = (v['vol_direto'] * p_direta) + (v['vol_ind_b'] * p_ind_b)
             
             relatorio[id_vend] = {
-                'id': id_vend, 
-                'nick': mapa_nicks.get(id_vend, f'ID {id_vend}'), 
-                'qtd': v['total_qtd'], 
-                'vendas': valor, 
-                'comissao': comissao_merecida, 
-                'qtd_cupons': 0, 
-                'vendas_cupons': 0.0, 
-                'pago_central': 0.0
+                'id': id_vend, 'nick': mapa_nicks.get(id_vend, f'ID {id_vend}'), 
+                'qtd': v['total_qtd'], 'vendas': valor, 'comissao': comissao_merecida, 
+                'qtd_cupons': 0, 'vendas_cupons': 0.0, 'pago_central': 0.0
             }
 
         for c in cupons_agg:
             id_vend_cupom = c['_id']
             if id_vend_cupom not in relatorio:
-                relatorio[id_vend_cupom] = {'id': id_vend_cupom, 'nick': mapa_nicks.get(id_vend_cupom, f'ID {id_vend_cupom}'), 'qtd': 0, 'vendas': 0.0, 'comissao': 0.0, 'qtd_cupons': 0, 'vendas_cupons': 0.0, 'pago_central': 0.0}
+                relatorio[id_vend_cupom] = {'id': id_vend_cupom, 'nick': mapa_nicks.get(id_vend_cupom, f'ID {id_vend_cupom}'), 'text_color': '', 'qtd': 0, 'vendas': 0.0, 'comissao': 0.0, 'qtd_cupons': 0, 'vendas_cupons': 0.0, 'pago_central': 0.0}
             relatorio[id_vend_cupom]['qtd_cupons'] += c['total_qtd_cupons']
             relatorio[id_vend_cupom]['vendas_cupons'] += safe_float(c['total_val_cupons'])
 
@@ -5893,32 +5963,33 @@ def financeiro_evento():
             totais['pago_central'] += dados['pago_central'] 
             totais['pendente_central'] += dados['pendente']
 
-        lista_final.sort(key=lambda x: x['pendente'], reverse=True) # Quem deve mais fica no topo
+        lista_final.sort(key=lambda x: x['pendente'], reverse=True)
         
-        # --- PRÊMIOS REGIONALIZADOS ---
-        if is_master:
+        # 🚀 CORREÇÃO: Regionaliza os prêmios caso o Master aplique o filtro
+        if is_master and not id_regional_filtro:
             premio_bingo = safe_float(evento.get('premio_total', 0))
             premio_extra = safe_float(evento.get('premios_sorte_extra', 0))
         else:
+            old_regional = session.get('id_regional')
+            if is_master and id_regional_filtro:
+                session['id_regional'] = int(id_regional_filtro)
+            
             evento_reg = calcular_premios_dinamicos(db, evento.copy(), g.parametros_globais)
             premio_bingo = safe_float(evento_reg.get('premio_total', 0))
-            premio_extra = 0.0 
+            premio_extra = safe_float(evento.get('premios_sorte_extra', 0)) if is_master else 0.0
+            
+            if is_master:
+                session['id_regional'] = old_regional
         
         premio_total_geral = premio_bingo + premio_extra
         receita_liquida_casa = (totais['vendas'] - totais['comissao']) + totais['vendas_cupons']
         saldo_evento_projetado = receita_liquida_casa - premio_total_geral
 
         dados_painel = {
-            'total_vendas_bingo': totais['vendas'],
-            'total_vendas_cupons': totais['vendas_cupons'],
-            'receita_bruta_total': totais['vendas'] + totais['vendas_cupons'],
-            'total_comissao': totais['comissao'],
-            'premio_bingo': premio_bingo,
-            'premio_extra': premio_extra,
-            'premio_total_geral': premio_total_geral,
-            'saldo_projetado': saldo_evento_projetado,
-            'total_recebido': totais['pago_central'],
-            'total_a_receber': totais['pendente_central']
+            'total_vendas_bingo': totais['vendas'], 'total_vendas_cupons': totais['vendas_cupons'],
+            'receita_bruta_total': totais['vendas'] + totais['vendas_cupons'], 'total_comissao': totais['comissao'],
+            'premio_bingo': premio_bingo, 'premio_extra': premio_extra, 'premio_total_geral': premio_total_geral,
+            'saldo_projetado': saldo_evento_projetado, 'total_recebido': totais['pago_central'], 'total_a_receber': totais['pendente_central']
         }
         
         return render_template('financeiro_evento.html', evento=evento, lista=lista_final, painel=dados_painel, totais=totais, g=g)
@@ -5927,6 +5998,265 @@ def financeiro_evento():
         import traceback
         traceback.print_exc()
         return redirect(url_for('financeiro_evento', error=f"Erro interno: {e}"))
+
+
+@app.route('/financeiro_periodo', methods=['GET'])
+@login_required
+def financeiro_periodo():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+    
+    nivel_usuario = session.get('nivel', 0)
+    if nivel_usuario < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+
+    id_regional_sessao = session.get('id_regional')
+    is_master = (nivel_usuario >= 4)
+
+    data_inicio = request.args.get('data_inicio')
+    hora_inicio = request.args.get('hora_inicio', '00:00')
+    data_fim = request.args.get('data_fim')
+    hora_fim = request.args.get('hora_fim', '23:59')
+                                     
+    id_regional_filtro = request.args.get('id_regional_filtro', '').strip()
+
+    if not data_inicio or not data_fim:
+        return redirect(url_for('financeiro_evento', error="Informe as datas de início e fim."))
+
+    try:
+        from datetime import datetime
+        try:
+            dt_inicio = datetime.strptime(data_inicio, '%Y-%m-%d')
+            dt_fim = datetime.strptime(data_fim, '%Y-%m-%d').replace(hour=23, minute=59, second=59)
+        except Exception as e:
+            return redirect(url_for('financeiro_evento', error=f"Erro ao formatar datas: {e}"))
+
+        todos_eventos = list(db.eventos.find({'status': {'$in': ['ativo', 'paralizado', 'finalizado']}}))
+        eventos_no_periodo = []
+
+        for ev in todos_eventos:
+            data_ev = ev.get('data_evento')
+            if not data_ev: continue
+            dt_ev = None
+            if hasattr(data_ev, 'strftime'): dt_ev = data_ev
+            else:
+                data_ev_str = str(data_ev).strip()
+                try:
+                    if '-' in data_ev_str: dt_ev = datetime.strptime(data_ev_str, '%Y-%m-%d')
+                    elif '/' in data_ev_str: dt_ev = datetime.strptime(data_ev_str, '%d/%m/%Y')
+                except: pass
+            
+            if dt_ev and (dt_inicio <= dt_ev <= dt_fim):
+                eventos_no_periodo.append(ev)
+
+        if not eventos_no_periodo:
+            return redirect(url_for('financeiro_evento', error="Nenhum evento encontrado neste período."))
+
+        params = db.parametros.find_one({}) or {}
+        def get_perc(key, default_percent):
+            val = params.get(key)
+            if val is None: return default_percent / 100.0
+            try: return (float(val.to_decimal()) if hasattr(val, 'to_decimal') else float(val)) / 100.0
+            except: return default_percent / 100.0
+
+        p_direta = get_perc('perc_venda_direta', 15.0)
+        p_ind_b = get_perc('perc_venda_indireta_b', 10.0)
+        comissao_auto = g.parametros_globais.get('comissao_autoatendimento', 10) / 100.0
+
+        # 🚀 CORREÇÃO: Sincroniza os filtros de agregação e colaboradores
+        match_regional = {}
+        if is_master and id_regional_filtro:
+            match_regional['id_regional'] = int(id_regional_filtro)
+        elif not is_master and id_regional_sessao:
+            match_regional['id_regional'] = int(id_regional_sessao)
+
+        if is_master and id_regional_filtro:
+            query_colab = {"id_regional": int(id_regional_filtro)}
+        elif not is_master and id_regional_sessao:
+            query_colab = {"id_regional": id_regional_sessao}
+        else:
+            query_colab = {}
+
+        colabs = list(db.colaboradores.find(query_colab))
+        mapa_nicks = {0: 'AutoAtendimento', '0': 'AutoAtendimento', None: 'AutoAtendimento', 'None': 'AutoAtendimento'}
+        for c in colabs:
+            cid = c.get('id_colaborador')
+            cnick = c.get('nick') or c.get('nome_colaborador') or f"ID {cid}"
+            mapa_nicks[cid] = cnick
+            mapa_nicks[str(cid)] = cnick
+
+        acumulado_vendas = {}
+        acumulado_cupons = {}
+        acumulado_pagamentos = {}
+        premio_bingo_total = 0.0
+        premio_extra_total = 0.0
+        colecoes_existentes = db.list_collection_names()
+
+        for ev in eventos_no_periodo:
+            id_ev = ev.get('id_evento')
+            if id_ev is None: continue
+            id_evento_int = int(id_ev)
+            
+            # 🚀 CORREÇÃO: Regionaliza prêmios no laço acumulador se houver filtro ativo
+            if is_master and not id_regional_filtro:
+                premio_bingo_total += safe_float(ev.get('premio_total', 0))
+                premio_extra_total += safe_float(ev.get('premios_sorte_extra', 0))
+            else:
+                old_regional = session.get('id_regional')
+                if is_master and id_regional_filtro:
+                    session['id_regional'] = int(id_regional_filtro)
+                
+                ev_reg = calcular_premios_dinamicos(db, ev.copy(), g.parametros_globais)
+                premio_bingo_total += safe_float(ev_reg.get('premio_total', 0))
+                if is_master:
+                    premio_extra_total += safe_float(ev.get('premios_sorte_extra', 0))
+                
+                if is_master:
+                    session['id_regional'] = old_regional
+
+            nome_col_vendas = f"vendas{id_evento_int}"
+            nome_col_pagtos = f"pagamentos{id_evento_int}"
+            nome_col_cupons = f"vendas_sorte_extra{id_evento_int}"
+
+            if nome_col_vendas in colecoes_existentes:
+                pipeline = [
+                    {'$match': match_regional},
+                    {
+                        '$group': {
+                            '_id': '$id_vendedor',
+                            'total_qtd': {'$sum': '$quantidade_unidades'},
+                            'total_val': {'$sum': {'$toDouble': '$valor_total'}},
+                            'vol_direto': {
+                                '$sum': { '$cond': [{'$eq': ['$id_vendedor', '$id_colaborador']}, {'$toDouble': '$valor_total'}, 0] }
+                            },
+                            'vol_ind_b': {
+                                '$sum': { '$cond': [{'$ne': ['$id_vendedor', '$id_colaborador']}, {'$toDouble': '$valor_total'}, 0] }
+                            }
+                        }
+                    }
+                ]
+                for v in db[nome_col_vendas].aggregate(pipeline):
+                    id_v = v['_id']
+                    if id_v not in acumulado_vendas:
+                        acumulado_vendas[id_v] = {'total_qtd': 0, 'total_val': 0.0, 'vol_direto': 0.0, 'vol_ind_b': 0.0}
+                    acumulado_vendas[id_v]['total_qtd'] += v['total_qtd']
+                    acumulado_vendas[id_v]['total_val'] += safe_float(v['total_val'])
+                    acumulado_vendas[id_v]['vol_direto'] += safe_float(v['vol_direto'])
+                    acumulado_vendas[id_v]['vol_ind_b'] += safe_float(v['vol_ind_b'])
+
+            if nome_col_cupons in colecoes_existentes:
+                pipeline_cupons = [
+                    {'$match': match_regional},
+                    {
+                        '$group': {
+                            '_id': { '$ifNull': ['$id_vendedor', '$id_colaborador'] },
+                            'total_qtd_cupons': {'$sum': '$qtd_cartelas'},
+                            'total_val_cupons': {'$sum': {'$toDouble': '$valor_total'}}
+                        }
+                    }
+                ]
+                for c in db[nome_col_cupons].aggregate(pipeline_cupons):
+                    id_c = c['_id']
+                    if id_c not in acumulado_cupons:
+                        acumulado_cupons[id_c] = {'total_qtd_cupons': 0, 'total_val_cupons': 0.0}
+                    acumulado_cupons[id_c]['total_qtd_cupons'] += c['total_qtd_cupons']
+                    acumulado_cupons[id_c]['total_val_cupons'] += safe_float(c['total_val_cupons'])
+
+            if nome_col_pagtos in colecoes_existentes:
+                pipeline_pagtos = [
+                    {'$match': match_regional},
+                    {
+                        '$group': {
+                            '_id': '$id_colaborador',
+                            'total_pago': {'$sum': {'$toDouble': '$valor_pago'}}
+                        }
+                    }
+                ]
+                for p in db[nome_col_pagtos].aggregate(pipeline_pagtos):
+                    id_p = p['_id']
+                    acumulado_pagamentos[id_p] = acumulado_pagamentos.get(id_p, 0.0) + safe_float(p['total_pago'])
+
+        relatorio = {}
+        for id_vend, v in acumulado_vendas.items():
+            valor = v['total_val']
+            if id_vend in [0, '0', None, 'None']:
+                comissao_merecida = valor * comissao_auto
+            else:
+                comissao_merecida = (v['vol_direto'] * p_direta) + (v['vol_ind_b'] * p_ind_b)
+                
+            relatorio[id_vend] = {
+                'id': id_vend, 'nick': mapa_nicks.get(id_vend, f'ID {id_vend}'),
+                'qtd': v['total_qtd'], 'vendas': valor, 'comissao': comissao_merecida,
+                'qtd_cupons': 0, 'vendas_cupons': 0.0, 'pago_central': 0.0
+            }
+
+        for id_vend_cupom, c in acumulado_cupons.items():
+            if id_vend_cupom not in relatorio:
+                relatorio[id_vend_cupom] = {
+                    'id': id_vend_cupom, 'nick': mapa_nicks.get(id_vend_cupom, f'ID {id_vend_cupom}'),
+                    'qtd': 0, 'vendas': 0.0, 'comissao': 0.0, 'qtd_cupons': 0, 'vendas_cupons': 0.0, 'pago_central': 0.0
+                }
+            relatorio[id_vend_cupom]['qtd_cupons'] += c['total_qtd_cupons']
+            relatorio[id_vend_cupom]['vendas_cupons'] += c['total_val_cupons']
+
+        for id_pag, valor_pago in acumulado_pagamentos.items():
+            if id_pag in relatorio:
+                relatorio[id_pag]['pago_central'] += valor_pago
+
+        lista_final = []
+        totais = {'vendas': 0.0, 'qtd': 0, 'comissao': 0.0, 'vendas_cupons': 0.0, 'qtd_cupons': 0, 'pago_central': 0.0, 'pendente_central': 0.0}
+
+        for dados in relatorio.values():
+            liquido_total_devido = (dados['vendas'] - dados['comissao']) + dados['vendas_cupons']
+            if dados['id'] in [0, '0', None, 'None']: dados['pago_central'] = liquido_total_devido
+                
+            saldo_final = liquido_total_devido - dados['pago_central']
+            dados['pendente'] = saldo_final if saldo_final > 0 else 0.0
+            dados['a_receber_colab'] = abs(saldo_final) if saldo_final < 0 else 0.0
+            lista_final.append(dados)
+            
+            totais['vendas'] += dados['vendas']
+            totais['qtd'] += dados['qtd']
+            totais['comissao'] += dados['comissao']
+            totais['vendas_cupons'] += dados['vendas_cupons']
+            totais['qtd_cupons'] += dados['qtd_cupons']
+            totais['pago_central'] += dados['pago_central'] 
+            totais['pendente_central'] += dados['pendente']
+
+        lista_final.sort(key=lambda x: x['pendente'], reverse=True)
+        receita_liquida_casa = (totais['vendas'] - totais['comissao']) + totais['vendas_cupons']
+        premio_total_geral = premio_bingo_total + premio_extra_total
+
+        try:
+            data_ini_br = datetime.strptime(data_inicio, '%Y-%m-%d').strftime('%d/%m/%Y')
+            data_fim_br = datetime.strptime(data_fim, '%Y-%m-%d').strftime('%d/%m/%Y')
+        except:
+            data_ini_br, data_fim_br = data_inicio, data_fim
+
+        dados_painel = {
+            'total_vendas_bingo': totais['vendas'], 'total_vendas_cupons': totais['vendas_cupons'],
+            'receita_bruta_total': totais['vendas'] + totais['vendas_cupons'], 'total_comissao': totais['comissao'],
+            'premio_bingo': premio_bingo_total, 'premio_extra': premio_extra_total, 'premio_total_geral': premio_total_geral,
+            'saldo_projetado': receita_liquida_casa - premio_total_geral, 'total_recebido': totais['pago_central'], 'total_a_receber': totais['pendente_central']
+        }
+
+        evento_fake = {
+            'descricao': f"Fechamento por Período Acumulado",
+            'data_fmt': f"{data_ini_br} até {data_fim_br}",
+            'hora_evento': f"{hora_inicio} - {hora_fim}",
+            'status': 'finalizado',
+            'tipo_consulta': 'periodo',
+            'data_inicio': data_inicio,
+            'data_fim': data_fim,
+            'id_regional_filtro': id_regional_filtro 
+        }
+
+        return render_template('financeiro_evento.html', evento=evento_fake, lista=lista_final, painel=dados_painel, totais=totais, g=g)
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return redirect(url_for('financeiro_evento', error=f"Erro interno no processamento do período: {e}"))
 
 
 @app.route('/salvar_senha_obrigatoria', methods=['POST'])
