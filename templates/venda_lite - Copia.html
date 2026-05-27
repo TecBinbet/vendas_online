@@ -110,6 +110,7 @@
 </head>
 <body>
 
+    <!-- Estrutura do Spinner -->
     <div id="loading-spinner" class="spinner-overlay">
         <div class="flex flex-col items-center">
             <div class="spinner-animation"></div>
@@ -122,7 +123,8 @@
             <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
         </div>
 
-         <div class="flex justify-center items-center gap-3 mb-2">
+         <!-- Cabeçalho com Título e Ícones -->
+        <div class="flex justify-center items-center gap-3 mb-2">
             <h2 class="text-xl font-bold text-gray-900 m-0">⚡ Nova Venda (Lite)</h2>
             <div class="flex gap-2">
                 <button type="button" onclick="openUltimasVendas()" 
@@ -214,16 +216,17 @@
                 <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
                 
                 <div class="form-group relative mt-2">
-                    <label for="busca_cliente_lite" class="font-bold">Cliente:</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="busca_cliente_lite" name="nick_cliente_lite" class="form-control flex-grow" 
-                               placeholder="Digite apelido ou nome..." autocomplete="off" required>
-                        <button type="button" onclick="limparCliente()" class="bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded text-sm font-bold border border-gray-400">
-                            Limpar
-                        </button>
-                    </div>
-                    
-                    <div id="lite-autocomplete-results" class="bg-white border border-gray-300 shadow absolute w-full z-50 rounded" style="display: none; max-height: 200px; overflow-y: auto;"></div>
+                    <label for="busca_cliente_lite">2. Cliente (Nome Livre):</label>
+<div class="form-group relative mt-2">
+    <label for="busca_cliente_lite" class="font-bold">Cliente:</label>
+<div class="flex gap-2">
+    <input type="text" id="busca_cliente_lite" name="nick_cliente_lite" class="form-control flex-grow" 
+           placeholder="Digite apelido ou nome..." autocomplete="off" required>
+    <button type="button" onclick="limparCliente()" class="bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded text-sm font-bold border border-gray-400">
+        Limpar
+    </button>
+</div>
+</div>
                     
                     <input type="hidden" name="nick_cliente_lite" id="nick_cliente_lite">
                     <input type="hidden" name="colaborador_cliente_lite" id="colaborador_cliente_lite">
@@ -240,32 +243,33 @@
                             Total de cartelas: <span id="cartelas-display">0</span>
                         </small>
                     </div>
-                {% elif padrao_venda == 'numeracao' %}
-                    <div class="form-group mt-3 flex gap-2">
-                        <div class="w-1/2">
-                            <label for="numero_kit_inicial">3. Kit/Rodapé Inicial:</label>
-                            <input type="number" id="numero_kit_inicial" name="numero_kit_inicial" 
-                                   min="1" required class="form-control text-xl px-2 py-1 border-yellow-500 bg-yellow-50" 
-                                   oninput="updateTotalCostKit();">
-                        </div>
-                        <div class="w-1/2">
-                            <label for="numero_kit_final">Kit/Rodapé Final (Opcional):</label>
-                            <input type="number" id="numero_kit_final" name="numero_kit_final" 
-                                   min="1" class="form-control text-xl px-2 py-1 border-yellow-500 bg-yellow-50" 
-                                   oninput="updateTotalCostKit();" placeholder="Igual ao Inicial">
-                        </div>
-                    </div>
+{% elif padrao_venda == 'numeracao' %}
+    <div class="form-group mt-3 flex gap-2">
+        <div class="w-1/2">
+            <label for="numero_kit_inicial">3. Kit/Rodapé Inicial:</label>
+            <input type="number" id="numero_kit_inicial" name="numero_kit_inicial" 
+                   min="1" required class="form-control text-xl px-2 py-1 border-yellow-500 bg-yellow-50" 
+                   oninput="updateTotalCostKit();">
+        </div>
+        <div class="w-1/2">
+            <label for="numero_kit_final">Kit/Rodapé Final (Opcional):</label>
+            <input type="number" id="numero_kit_final" name="numero_kit_final" 
+                   min="1" class="form-control text-xl px-2 py-1 border-yellow-500 bg-yellow-50" 
+                   oninput="updateTotalCostKit();" placeholder="Igual ao Inicial">
+        </div>
 
-                    <div id="alerta-limite-kit" class="hidden -mt-1 mb-2 bg-red-100 border-l-4 border-red-500 text-red-700 p-2 text-sm rounded shadow-sm">
-                          <strong>⚠️ Atenção:</strong> O limite para este evento é de <span id="span-max-kits" class="font-bold"></span> kits.
-                    </div>
+    </div>
 
-                    <small class="form-text text-muted font-bold text-red-600 block -mt-2">
-                        Atenção: O sistema bloqueará a venda se algum Kit do período já foi vendido.
-                    </small>
-                    <div id="info_cartelas_kit" class="mt-2 text-center text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 p-2 rounded hidden">
-                    </div>
-                {% endif %}
+    <div id="alerta-limite-kit" class="hidden -mt-1 mb-2 bg-red-100 border-l-4 border-red-500 text-red-700 p-2 text-sm rounded shadow-sm">
+          <strong>⚠️ Atenção:</strong> O limite para este evento é de <span id="span-max-kits" class="font-bold"></span> kits.
+    </div>
+
+    <small class="form-text text-muted font-bold text-red-600 block -mt-2">
+        Atenção: O sistema bloqueará a venda se algum Kit do período já foi vendido.
+    </small>
+    <div id="info_cartelas_kit" class="mt-2 text-center text-sm font-bold text-blue-700 bg-blue-50 border border-blue-200 p-2 rounded hidden">
+    </div>
+{% endif %}
 
                 <div id="total-custo" class="mt-2 text-center text-xl font-bold text-red-600 border border-red-300 p-2 rounded bg-red-50" style="display: none;">
                     Custo Total: R$ 0,00
@@ -295,6 +299,7 @@
         {% endif %}
     </div>
     
+    <!-- MODAL DE SELEÇÃO DE EVENTOS -->
     <div id="event-selector-modal" class="modal">
         <div class="modal-content bg-blue-200 p-3 w-full md:w-3/4 lg:w-1/2">
             <h3 class="text-lg font-semibold text-gray-700 border-b pb-1 -mb-2 -mt-2">Selecione o Evento Ativo</h3>
@@ -302,6 +307,7 @@
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-110 overflow-y-auto pr-2 mt-2">
                 {% for evento in eventos %}
+                    {# Lógica de Cores para o Cartão de Seleção #}
                     {% set is_especial = evento.tipo_de_evento == 'Especial' %}
                     {% set bg_class = 'bg-yellow-100 border-yellow-400' if is_especial else 'bg-white border-transparent' %}
 
@@ -343,7 +349,8 @@
         </div>
     </div>
 
-     <div id="ultimas-vendas-modal" class="modal">
+     <!-- MODAL ÚLTIMAS VENDAS (HISTÓRICO RÁPIDO) -->
+    <div id="ultimas-vendas-modal" class="modal">
         <div class="modal-content bg-white p-2 w-full md:w-3/4 lg:w-1/2">
             <h3 class="text-lg font-bold text-gray-800 border-b pb-2 mb-2">🕒 Suas Últimas 5 Vendas</h3>
            <button onclick="closeUltimasVendas()" class="btn bg-red-500 text-white hover:bg-red-700 -mt-2 mb-1 w-full shadow-lg">Fechar Janela</button>
@@ -357,36 +364,24 @@
                             <p class="text-xl text-gray-600">Cartelas: <strong>{{ v.numero_inicial }} a {{ v.numero_final }}</strong></p>
                             <p class="text-xs font-bold text-green-700">R$ {{ "%.2f"|format(v.valor_total_float) }}</p>
                         </div>
-<div class="flex gap-2 w-full sm:w-auto justify-end mt-1 sm:mt-0">
-    <button type="button" 
-            onclick="abrirMenuAcao('{{ v.id_venda }}', '{{ v.id_cliente }}', 'cupom')" 
-            class="btn bg-blue-600 hover:bg-blue-800 text-white btn-small py-2 px-3 text-xs shadow">
-        📄 Cupom
-    </button>
-    
-    <button type="button" 
-            onclick="abrirMenuAcao('{{ v.id_venda }}', '{{ v.id_cliente }}', 'cartelas')" 
-            class="btn bg-emerald-600 hover:bg-emerald-800 text-white btn-small py-2 px-3 text-xs shadow">
-        🎲 Cartelas
-    </button>
-</div>
+                        <div class="flex gap-2 w-full sm:w-auto justify-end mt-1 sm:mt-0">
+                            <!-- Botão de Gerar Recibo TXT -->
+                            <button type="button" onclick="executarReimpressao('{{ v.id_venda }}', '{{ v.id_cliente }}', 'whatsapp')" 
+                                class="btn btn-primary btn-small py-2 px-3 text-xs shadow">
+                                📋 Copiar Cupom
+                            </button>
+                            
+                            <!-- Botão de Imprimir 58mm -->
+                            <button type="button" onclick="executarReimpressao('{{ v.id_venda }}', '{{ v.id_cliente }}', 'imprimir')" 
+                                class="btn bg-gray-600 hover:bg-gray-800 text-white btn-small py-2 px-3 text-xs shadow">                 
+                               🖨️ Recibo
+                            </button>
 
-<div id="acao-modal" class="modal">
-    <div class="modal-content bg-white p-4 w-full md:w-1/3 lg:w-1/4 text-center">
-        <h3 id="titulo-acao" class="text-lg font-bold text-gray-800 mb-4">Ações</h3>
-        
-        <input type="hidden" id="temp-id-venda">
-        <input type="hidden" id="temp-id-cliente">
-        <input type="hidden" id="temp-tipo-acao">
-
-        <div class="flex flex-col gap-3">
-            <button onclick="executarAcao('imprimir')" class="btn bg-gray-700 text-white py-3 shadow">🖨️ Imprimir</button>
-            <button onclick="executarAcao('whatsapp')" class="btn bg-green-600 text-white py-3 shadow">📲 Enviar / Copiar</button>
-            <button onclick="document.getElementById('acao-modal').style.display='none'" class="btn bg-red-500 text-white py-2 mt-2">Fechar</button>
-        </div>
-    </div>
-</div>
-
+                            <button type="button" onclick="handleGerarPdfLite('{{ v.numero_inicial }}', '{{ v.numero_final }}', '{{ selected_event.id_evento }}', '{{ v.nome_cliente | escape }}', '{{ selected_event.tipo_de_cartela | default(25) }}')" 
+                                 class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs font-bold border border-blue-300 hover:bg-blue-200">
+                                📄 Gerar Cartelas
+                             </button>
+                        </div>
                     </div>
                 {% endfor %}
                 </div>
@@ -398,12 +393,15 @@
     </div>
 
     <script>
-        let venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}");
+        let Venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}");
         let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
         let searchTimeout = null;
         const dadosImpressaoStr = '{{ print_data | tojson | safe if print_data else "null" }}';
         const dadosImpressao = dadosImpressaoStr !== "null" ? JSON.parse(dadosImpressaoStr) : null;
-
+        // ==========================================
+        // --- JAVASCRIPT EXCLUSIVO DA VENDA LITE ---
+        // ==========================================
+        
         // Autocomplete Lite
         const inputBuscaLite = document.getElementById('busca_cliente_lite');
         const listaResultados = document.getElementById('lite-autocomplete-results');
@@ -416,19 +414,19 @@
                     .toLowerCase()
                     .split(' ')
                     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-                    .join(' '); 
+                    .join(' ')
+; 
                 const termo = this.value.trim();
                 hiddenNick.value = termo; // Já salva o que digitar como cliente avulso
                 
                 if (searchTimeout) clearTimeout(searchTimeout);
 
                 if (termo.length < 2) {
-                    if(listaResultados) listaResultados.style.display = 'none';
+                    listaResultados.style.display = 'none';
                     return;
                 }
 
                 searchTimeout = setTimeout(async () => {
-                    if (!listaResultados) return;
                     try {
                         const response = await fetch(`/api/clientes/autocomplete?q=${encodeURIComponent(termo)}`);
                         const clientes = await response.json();
@@ -460,7 +458,7 @@
 
             // Oculta lista clicando fora
             document.addEventListener('click', (e) => {
-                if (listaResultados && e.target !== inputBuscaLite && !listaResultados.contains(e.target)) {
+                if (e.target !== inputBuscaLite && !listaResultados.contains(e.target)) {
                     listaResultados.style.display = 'none';
                 }
             });
@@ -486,76 +484,95 @@
             const campoQuantidade = document.getElementById('quantidade');
             if (campoQuantidade) {
                 const q = parseInt(campoQuantidade.value) || 0;
-                exibirBotaoCusto(q > 0, q * venda_ValorUnitario);
+                exibirBotaoCusto(q > 0, q * Venda_ValorUnitario);
             }
         }
 
-        function updateTotalCostKit() {
-            const campoInicial = document.getElementById('numero_kit_inicial');
-            const campoFinal = document.getElementById('numero_kit_final');
-            const divInfo = document.getElementById('info_cartelas_kit');
+function updateTotalCostKit() {
+    const campoInicial = document.getElementById('numero_kit_inicial');
+    const campoFinal = document.getElementById('numero_kit_final');
+    const divInfo = document.getElementById('info_cartelas_kit');
 
-            const alertaDiv = document.getElementById('alerta-limite-kit');
-            const spanMaxKits = document.getElementById('span-max-kits');
-            const btnSubmit = document.querySelector('button[type="submit"]');
+    // Elementos do alerta de limite e botão de gravar
+    const alertaDiv = document.getElementById('alerta-limite-kit');
+    const spanMaxKits = document.getElementById('span-max-kits');
+    const btnSubmit = document.querySelector('button[type="submit"]');
 
-            const limiteMaximoCartelas = parseInt('{{ selected_event.numero_maximo | default(72000) }}', 10);
-            const unidadeDeVenda = parseInt('{{ selected_event.unidade_de_venda | default(6) }}', 10);
-            const divisorUnidade = unidadeDeVenda > 0 ? unidadeDeVenda : 1;
-            const limiteMaximoKits = Math.floor(limiteMaximoCartelas / divisorUnidade);
+    // Calcula o limite máximo de kits puxando os dados do evento
+    const limiteMaximoCartelas = parseInt('{{ selected_event.numero_maximo | default(72000) }}', 10);
+    const unidadeDeVenda = parseInt('{{ selected_event.unidade_de_venda | default(6) }}', 10);
+    const divisorUnidade = unidadeDeVenda > 0 ? unidadeDeVenda : 1;
+    const limiteMaximoKits = Math.floor(limiteMaximoCartelas / divisorUnidade);
 
-            if (campoInicial && campoInicial.value) {
-                const kIni = parseInt(campoInicial.value);
-                let kFim = campoFinal && campoFinal.value ? parseInt(campoFinal.value) : kIni;
-                if (kFim < kIni) kFim = kIni; 
+    if (campoInicial && campoInicial.value) {
+        const kIni = parseInt(campoInicial.value);
+        // Se o final estiver vazio, ele assume o valor do inicial (1 kit só)
+        let kFim = campoFinal && campoFinal.value ? parseInt(campoFinal.value) : kIni;
 
-                if (kIni > limiteMaximoKits || kFim > limiteMaximoKits) {
-                    if (spanMaxKits) spanMaxKits.textContent = limiteMaximoKits;
-                    if (alertaDiv) alertaDiv.classList.remove('hidden');
-                    if (btnSubmit) {
-                        btnSubmit.disabled = true;
-                        btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
-                    }
-                    exibirBotaoCusto(false, 0);
-                    if (divInfo) divInfo.style.display = 'none';
-                    return; 
-                } else {
-                    if (alertaDiv) alertaDiv.classList.add('hidden');
-                    if (btnSubmit) {
-                        btnSubmit.disabled = false;
-                        btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
-                    }
-                }
+        // Trava visual para não permitir que o final seja menor que o inicial
+        if (kFim < kIni) kFim = kIni; 
 
-                const qtdKits = (kFim - kIni) + 1;
-                const cartelaInicial = ((kIni - 1) * Venda_UnidadeCartelas) + 1;
-                const cartelaFinal = kFim * Venda_UnidadeCartelas;
-
-                exibirBotaoCusto(qtdKits > 0, qtdKits * venda_ValorUnitario);
-
-                if (divInfo && qtdKits > 0) {
-                    divInfo.style.display = 'block';
-                    divInfo.innerHTML = `Venda de <strong>${qtdKits}</strong> Kit(s) <br> Cartelas correspondentes: <strong>${cartelaInicial} à ${cartelaFinal}</strong>`;
-                }
-            } else {
-                exibirBotaoCusto(false, 0);
-                if (divInfo) divInfo.style.display = 'none';
-                if (alertaDiv) alertaDiv.classList.add('hidden');
-                if (btnSubmit) {
-                    btnSubmit.disabled = false;
-                    btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
-                }
+        // =================================================================
+        // 🛡️ TRAVA VISUAL E BLOQUEIO DE BOTÃO (EXCESSO DE LIMITE)
+        // =================================================================
+        if (kIni > limiteMaximoKits || kFim > limiteMaximoKits) {
+            if (spanMaxKits) spanMaxKits.textContent = limiteMaximoKits;
+            if (alertaDiv) alertaDiv.classList.remove('hidden');
+            if (btnSubmit) {
+                btnSubmit.disabled = true;
+                btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+            }
+            
+            // Oculta previsão e zera os custos (venda inválida)
+            exibirBotaoCusto(false, 0);
+            if (divInfo) divInfo.style.display = 'none';
+            return; // Interrompe a função aqui!
+        } else {
+            // Tudo certo: esconde o alerta e reativa o botão
+            if (alertaDiv) alertaDiv.classList.add('hidden');
+            if (btnSubmit) {
+                btnSubmit.disabled = false;
+                btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
             }
         }
+        // =================================================================
 
+        const qtdKits = (kFim - kIni) + 1;
+        
+        // Conversão matemática: Kit 301 x 6 = Cartelas 1801 a 1806
+        // Usamos a sua variável global Venda_UnidadeCartelas que já cuida disso
+        const cartelaInicial = ((kIni - 1) * Venda_UnidadeCartelas) + 1;
+        const cartelaFinal = kFim * Venda_UnidadeCartelas;
+
+        exibirBotaoCusto(qtdKits > 0, qtdKits * Venda_ValorUnitario);
+
+        if (divInfo && qtdKits > 0) {
+            divInfo.style.display = 'block';
+            divInfo.innerHTML = `Venda de <strong>${qtdKits}</strong> Kit(s) <br> Cartelas correspondentes: <strong>${cartelaInicial} à ${cartelaFinal}</strong>`;
+        }
+    } else {
+        // Se o operador apagou os campos numéricos, limpa a tela e garante o botão ativo
+        exibirBotaoCusto(false, 0);
+        if (divInfo) divInfo.style.display = 'none';
+        
+        if (alertaDiv) alertaDiv.classList.add('hidden');
+        if (btnSubmit) {
+            btnSubmit.disabled = false;
+            btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    }
+}
+
+        // --- FUNÇÃO DO SPINNER ---
         function ativarSpinner(mensagem) {
             const spinner = document.getElementById('loading-spinner');
             const text = document.getElementById('spinner-text');
             if (text && mensagem) text.innerText = mensagem;
             if (spinner) spinner.classList.add('spinner-visible');
-            document.body.style.pointerEvents = 'none';
+            document.body.style.pointerEvents = 'none'; // Bloqueia cliques
         }
 
+        // Remove o spinner se o usuário voltar na página
         window.onpageshow = function(event) {
             const spinner = document.getElementById('loading-spinner');
             if (spinner) spinner.classList.remove('spinner-visible');
@@ -564,7 +581,10 @@
         
         function updateCartelasDisplay() {
             const campoQuantidade = document.getElementById('quantidade');
+            
+            // Trava de segurança: Se o campo não existir na tela, aborta a função silenciosamente
             if (!campoQuantidade) return;
+            
             const q = parseInt(document.getElementById('quantidade').value) || 0;
             const display = document.getElementById('cartelas-display');
             if (display) display.textContent = (q * Venda_UnidadeCartelas);
@@ -575,57 +595,57 @@
         
         function selectEvent(cardElement) {
             document.getElementById('input_id_evento').value = cardElement.dataset.id;
-            ativarSpinner('A carregar evento e regras...');
+            ativarSpinner('A carregar evento e regras...'); // SPINNER AQUI
             document.getElementById('main-form').submit();
         }
         
-function syncAndConfirm(event) {
-    // 1. Validação inicial (mantemos como está)
-    const clienteInput = document.getElementById('busca_cliente_lite');
-    if (clienteInput && !clienteInput.value.trim()) {
-        alert("⚠️ O Nome do Cliente é obrigatório!");
-        clienteInput.focus();
-        return false;
-    }
+        function syncAndConfirm(event) {
+        // 👇 TRAVA OBRIGATÓRIA DO CLIENTE 👇
+            const clienteInput = document.getElementById('busca_cliente_lite');
+            if (clienteInput && !clienteInput.value.trim()) {
+                alert("⚠️ O Nome do Cliente é obrigatório!");
+               clienteInput.focus();
+               return false;
+            }
 
-    // 2. Previne o envio padrão do formulário
-    if (event) event.preventDefault();
-
-    // 3. Chama o modal assíncrono
-    bingoConfirm(
-        "Confirmar a gravação desta venda?", 
-        () => {
-            // --- AÇÃO AO CLICAR EM "SIM" ---
+            const confirmar = confirm("Confirmar a gravação desta venda?");                   
+            if (!confirmar) return false;
+            
             const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent); 
             const btn = document.getElementById('btn-confirmar-venda');
             const form = document.getElementById('confirm-form');
             
             btn.disabled = true;
-            btn.innerHTML = '⏳ Gravando...';           
-            
-            // Ativa o spinner com proteção de segurança (se existir)
-            if (typeof ativarSpinner === 'function') {
-                ativarSpinner('A processar venda e a gerar bilhetes...');
-            }
+            btn.innerHTML = '⏳ Gravando...';            
+            ativarSpinner('A processar venda e a gerar bilhetes...');
 
             if (isMobile) {
+                // NO CELULAR: Abre em aba nova para não imprimir a tela de venda
                 form.setAttribute('target', '_blank');
-                form.submit();        
+                form.submit();       
+                // Recarrega a tela de venda original após 1.5s
                 setTimeout(() => { window.location.reload(); }, 1500);
             } else {
+                // NO PC: Mantém na mesma aba (Simplicidade total)
                 form.removeAttribute('target'); 
                 form.submit();
             }
-        },
-        () => {
-            // --- AÇÃO AO CLICAR EM "CANCELAR" ---
-            console.log("Venda cancelada.");
-            return false;
+            return false; 
         }
-    );
-    
-    return false; // Sempre retorna false para não submeter o form antes do clique no modal
-}
+
+        function syncAndConfirm2(event) {
+            const confirmar = confirm("Confirmar a gravação desta venda?");                   
+            if (!confirmar) return false;
+           
+            const btn = document.getElementById('btn-confirmar-venda');
+            btn.disabled = true;
+            btn.innerHTML = '⏳ Gravando...';
+            
+            ativarSpinner('A processar venda e a gerar bilhetes...'); // SPINNER AQUI
+            
+            document.getElementById('confirm-form').submit();
+            return false; // Previne comportamento nativo enquanto o form submete
+        }
 
         function copyReceiptText() {
             const content = document.getElementById('receipt-content');
@@ -658,6 +678,7 @@ function syncAndConfirm(event) {
             });
         }
 
+        // Variável para guardar o tempo do sumiço automático
         let autoHideTimeout;
 
         function toggleReceipt() {
@@ -666,8 +687,10 @@ function syncAndConfirm(event) {
             const inputBusca = document.getElementById('busca_cliente_lite');
             const successBlock = document.getElementById('success-block');
             
+            // Se o usuário interagiu com o botão, cancelamos o cronômetro de auto-ocultar
             if (autoHideTimeout) clearTimeout(autoHideTimeout);
             
+            // Garante que o bloco fique 100% visível caso estivesse no meio da animação de sumir
             if (successBlock) {
                 successBlock.style.opacity = "1";
             }
@@ -683,137 +706,117 @@ function syncAndConfirm(event) {
         }
 
         function clearSearch() {
-            const inputBusca = document.getElementById('busca_cliente_lite'); 
+            const inputBusca = document.getElementById('busca_cliente_lite'); // ID Corrigido
             if (inputBusca) inputBusca.value = '';
-            const results = document.getElementById('lite-autocomplete-results'); 
+            const results = document.getElementById('lite-autocomplete-results'); // ID Corrigido
             if (results) results.style.display = 'none';
         }
 
-        function limparCliente() {
-            const campoClienteLite = document.getElementById('busca_cliente_lite');
-            if (campoClienteLite) {
-                campoClienteLite.value = '';
-                campoClienteLite.focus();
-            }
-            localStorage.removeItem('ultimo_cliente_lite');
-        }
-
-// Variável para travar a abertura enquanto estiver carregando
-let loadingUltimas = false;
-
-async function openUltimasVendas() {
-    // 1. Prevenção de cliques duplos (Debounce)
-    if (loadingUltimas) return;
-    loadingUltimas = true;
-
-    const modal = document.getElementById('ultimas-vendas-modal');
+// ==========================================
+// --- LÓGICA DA IMPRESSORA TÉRMICA 58MM --- xxx
+// ==========================================
+function initPrinterConfig() {
+    let printConfig = localStorage.getItem('imprimirCartelas');
     
-    // 2. Garante que qualquer requisição pendente não trave a interface
-    try {
-        modal.style.display = 'flex';
-        
-        // Se você tiver uma função que carrega os dados (ex: carregarDadosVendas)
-        // Certifique-se de que ela tem um 'await' e um tratamento de erro
-        if (typeof carregarDadosVendas === 'function') {
-            await carregarDadosVendas();
-        }
-    } catch (err) {
-        console.error("Erro ao abrir modal de vendas:", err);
-        // Se der erro, garante que o modal não fique preso num estado fantasma
-        modal.style.display = 'none';
-        alert("Erro ao carregar lista de vendas. Tente novamente.");
-    } finally {
-        loadingUltimas = false;
+    if (printConfig === null) {
+        // Como o bingoConfirm é assíncrono, gravamos 'false' por precaução 
+        // e atualizamos para 'true' apenas se ele clicar em SIM.
+        localStorage.setItem('imprimirCartelas', 'false');
+        updatePrinterUI(false);
+
+        bingoConfirm(
+            "🖨️ <b>CONFIGURAÇÃO DE IMPRESSORA</b><br><br>Deseja habilitar a IMPRESSÃO AUTOMÁTICA de cartelas via mini impressora térmica neste dispositivo?<br><br><small>Você pode ligar/desligar isso depois clicando no ícone da impressora no topo da tela.</small>", 
+            () => {
+                // Ação caso o operador clique em SIM
+                localStorage.setItem('imprimirCartelas', 'true');
+                updatePrinterUI(true);
+                verificarGatilhoImpressao('true'); 
+            }
+        );
+    } else {
+        // Já possui configuração salva, aplica direto
+        updatePrinterUI(printConfig === 'true');
+        verificarGatilhoImpressao(printConfig);
     }
 }
 
-        function closeUltimasVendas() {
-            document.getElementById('ultimas-vendas-modal').style.display = 'none';
-        }
-
-        // ==========================================
-        // 🚀 LÓGICA DA IMPRESSORA TÉRMICA 58MM HÍBRIDA
-        // ==========================================
-        function initPrinterConfig() {
-            let printConfig = localStorage.getItem('imprimirCartelas');
-            
-            if (printConfig === null) {
-                localStorage.setItem('imprimirCartelas', 'false');
-                updatePrinterUI(false);
-
-                bingoConfirm(
-                    "🖨️ <b>CONFIGURAÇÃO DE IMPRESSORA</b><br><br>Deseja habilitar a IMPRESSÃO AUTOMÁTICA de cartelas via mini impressora térmica neste dispositivo?<br><br><small>Você pode ligar/desligar isso depois clicando no ícone da impressora no topo da tela.</small>", 
-                    () => {
-                        localStorage.setItem('imprimirCartelas', 'true');
-                        updatePrinterUI(true);
-                        verificarGatilhoImpressao('true'); 
-                    }
-                );
-            } else {
-                updatePrinterUI(printConfig === 'true');
-                verificarGatilhoImpressao(printConfig);
-            }
-        }
-
-        function verificarGatilhoImpressao(printConfig) {
-            const successBlock = document.getElementById('success-block');
-            
-            if (successBlock && printConfig === 'true' && typeof dadosImpressao !== 'undefined' && dadosImpressao) {
-                const limiteImpressao = parseInt("{{ limite_impressao_auto_vendas | default(18) }}");
-                const qtdComprada = (parseInt(dadosImpressao.numero_final) - parseInt(dadosImpressao.numero_inicial)) + 1;
-                
-                if (qtdComprada > limiteImpressao) {
-                    bingoConfirm(
-                        `⚠️ <b>ALERTA DE IMPRESSÃO EM LOTE!</b><br><br>Você está prestes a imprimir <b>${qtdComprada} cartelas</b>.<br><br>Deseja realmente gastar papel imprimindo todas elas agora?`, 
-                        () => {
-                            console.log("Impressão grande autorizada pelo operador.");
-                            imprimirCartelas58mm(dadosImpressao);
-                        }
-                    );
-                } else {
-                    console.log("Iniciando impressão automática 58mm...");
+// ==========================================
+// --- SEMÁFORO DE IMPRESSÃO (PÓS-VENDA) --- xxx
+// ==========================================
+function verificarGatilhoImpressao(printConfig) {
+    const successBlock = document.getElementById('success-block');
+    
+    // SE a venda for concluída E a impressora estiver ativa E existirem dados
+    if (successBlock && printConfig === 'true' && typeof dadosImpressao !== 'undefined' && dadosImpressao) {
+        
+        // Puxa o limite do banco de dados (se falhar, usa 18 como segurança)
+        const limiteImpressao = parseInt("{{ limite_impressao_auto_vendas | default(18) }}");
+        
+        // Calcula quantas cartelas estão sendo impressas nesta venda
+        const qtdComprada = (parseInt(dadosImpressao.numero_final) - parseInt(dadosImpressao.numero_inicial)) + 1;
+        
+        if (qtdComprada > limiteImpressao) {
+            // Aciona a trava de segurança (Semáforo) com a interface do sistema
+            bingoConfirm(
+                `⚠️ <b>ALERTA DE IMPRESSÃO EM LOTE!</b><br><br>Você está prestes a imprimir <b>${qtdComprada} cartelas</b>.<br><br>Deseja realmente gastar papel imprimindo todas elas agora?`, 
+                () => {
+                    console.log("Impressão grande autorizada pelo operador.");
                     imprimirCartelas58mm(dadosImpressao);
                 }
-            }
+            );
+        } else {
+            // Abaixo do limite: Imprime direto silenciosamente (Zero Clique)
+            console.log("Iniciando impressão automática 58mm...");
+            imprimirCartelas58mm(dadosImpressao);
         }
+    }
+}
 
-        function imprimirCartelas58mm(dados) {
-            const baseUrl = dados.tipo_cartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
-            
-            const params = new URLSearchParams({
-                numero_inicial: dados.numero_inicial,
-                numero_final: dados.numero_final,
-                id_evento: dados.id_evento,
-                nome_cliente: dados.nome_cliente
-            });
-            
-            const urlAbsoluta = window.location.origin + baseUrl + '?' + params.toString();
-            
-            fetch(urlAbsoluta)
-                .then(response => {
-                    if (!response.ok) throw new Error('Erro na resposta do servidor');
-                    return response.json(); 
-                })
-                .then(reciboJSON => {
-                    const pacoteJSON = JSON.stringify(reciboJSON);
-                    imprimirComprovanteUniversal(pacoteJSON);
-                })
-                .catch(error => {
-                    console.error("Erro ao processar impressão da cartela:", error);
-                    bingoAlert("Falha ao gerar o ticket de impressão.", 3000, '#e74c3c');
-                });
-        }
+// --- FUNÇÃO QUE MANDA IMPRIMIR (PADRÃO HÍBRIDO/JSON) ---xxx
+function imprimirCartelas58mm(dados) {
+    const baseUrl = dados.tipo_cartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
+    
+    const params = new URLSearchParams({
+        numero_inicial: dados.numero_inicial,
+        numero_final: dados.numero_final,
+        id_evento: dados.id_evento,
+        nome_cliente: dados.nome_cliente
+    });
+    
+    const urlAbsoluta = window.location.origin + baseUrl + '?' + params.toString();
+    
+    console.log("Buscando pacote de impressão da cartela silenciosamente...");
+
+    // 🚀 MUDANÇA ARQUITETURAL: Fetch silencioso em vez de redirecionamento
+    fetch(urlAbsoluta)
+        .then(response => {
+            if (!response.ok) throw new Error('Erro na resposta do servidor');
+            return response.json(); // Espera que o Python devolva o JSON estruturado
+        })
+        .then(reciboJSON => {
+            // Converte o objeto recebido em string e envia para a ponte universal
+            const pacoteJSON = JSON.stringify(reciboJSON);
+            imprimirComprovanteUniversal(pacoteJSON);
+        })
+        .catch(error => {
+            console.error("Erro ao processar impressão da cartela:", error);
+            bingoAlert("Falha ao gerar o ticket de impressão.", 3000, '#e74c3c');
+        });
+}
 
         function togglePrinter() {
             let currentState = localStorage.getItem('imprimirCartelas') === 'true';
-            let newState = !currentState; 
+            let newState = !currentState; // Inverte o valor
             
+            // Salva a nova escolha no celular do operador
             localStorage.setItem('imprimirCartelas', newState ? 'true' : 'false');
+            
+            // Atualiza o visual do botão
             updatePrinterUI(newState);
             
+            // Mostra um aviso rápido na tela
             const msg = newState ? "🖨️ Impressão Automática ATIVADA!" : "🚫 Impressão Automática DESATIVADA!";
-            if(typeof bingoAlert === 'function') bingoAlert(msg, 3000, newState ? '#27ae60' : '#e74c3c');
-            else alert(msg);
+            alert(msg); // Mais tarde podemos trocar pelo seu toast personalizado
         }
 
         function updatePrinterUI(isActive) {
@@ -821,84 +824,230 @@ async function openUltimasVendas() {
             if (!btn) return;
             
             if (isActive) {
+                // Estilo ATIVADO (Verde)
                 btn.classList.remove('bg-gray-200', 'text-gray-500');
                 btn.classList.add('bg-green-100', 'text-green-800', 'border', 'border-green-400');
             } else {
+                // Estilo DESATIVADO (Cinza)
                 btn.classList.remove('bg-green-100', 'text-green-800', 'border', 'border-green-400');
                 btn.classList.add('bg-gray-200', 'text-gray-500');
             }
         }
 
-        // ==========================================
-        // 🚀 NOVA FUNÇÃO DE REIMPRESSÃO (JSON/WhatsApp)
-        // ==========================================
-        async function executarReimpressao(idVenda, idCliente, acao) {
-             // ativarSpinner(acao === 'imprimir' ? "Enviando para impressora..." : "Preparando WhatsApp...");
-
-            const inputEvento = document.getElementById('input_id_evento');
-            const idEvento = inputEvento ? inputEvento.value : 0;
-
-            const data = {
-                tipo_reimpressao: 'unica', 
-                id_venda: idVenda,
-                id_cliente: idCliente,
-                id_evento: idEvento
-            };
-
-            try {
-                const rotaBackend = acao === 'imprimir' ? "/reimprimir_comprovante_json" : "/reimprimir_comprovante_txt";
-                const urlAbsoluta = window.location.origin + rotaBackend;  
-                
-                const response = await fetch(urlAbsoluta, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
-
-                const result = await response.json();
-
-                if (result.status === 'success') {
-                    if (acao === 'imprimir') {
-                        const pacoteJSON = JSON.stringify(result.recibo);
-                        imprimirComprovanteUniversal(pacoteJSON);
-                    } 
-                    else if (acao === 'whatsapp') {
-                        const textoRecibo = result.receipt_text;
-                        const shareData = { title: 'Comprovante de Venda', text: textoRecibo };
-
-                        const executarCopiaFallback = (texto) => {
-                            const tempTextArea = document.createElement('textarea');
-                            tempTextArea.value = texto;
-                            document.body.appendChild(tempTextArea);
-                            tempTextArea.select();
-                            document.execCommand('copy');
-                            document.body.removeChild(tempTextArea);
-                            bingoAlert("✅ Cupom copiado com sucesso!<br>Cole no WhatsApp do cliente.", 4000, '#27ae60');
-                        };
-
-                        if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
-                            try {
-                                await navigator.share(shareData);
-                            } catch (error) {
-                                if (error.name !== 'AbortError') executarCopiaFallback(textoRecibo);
-                            }
-                        } else {
-                            executarCopiaFallback(textoRecibo);
-                        }
-                    }
-                } else {
-                    bingoAlert(`❌ Erro: ${result.message}`, 4000, '#e74c3c');
-                }
-            } catch (err) {
-                console.error(err);
-                bingoAlert('Erro de conexão ao buscar o comprovante.', 3000, '#e74c3c');
-            } finally {
-                const spinner = document.getElementById('loading-spinner');
-                if (spinner) spinner.classList.remove('spinner-visible');
-            }
+        // ====================================================
+        // --- LÓGICA DE ÚLTIMAS VENDAS E REIMPRESSÃO (FALHA) ---
+        // ====================================================
+        function openUltimasVendas() {
+            document.getElementById('ultimas-vendas-modal').style.display = 'flex';
         }
 
+        function closeUltimasVendas() {
+            document.getElementById('ultimas-vendas-modal').style.display = 'none';
+        }
+
+        function dispararReimpressao58mm(nomeCliente, numInicial, numFinal, idEvento) {
+            let printConfig = localStorage.getItem('imprimirCartelas');
+            if (printConfig !== 'true') {
+                alert("A impressora 58mm está DESATIVADA neste celular.\n\nAtive clicando no ícone da impressora (🖨️) no topo da tela antes de reimprimir.");
+                return;
+            }
+            // Agora pegamos o ID do Evento direto do botão, limpo e perfeito (ex: 145)
+            const dadosReimpressao = {
+                id_evento: idEvento,
+                nome_cliente: nomeCliente,
+                numero_inicial: numInicial,
+                numero_final: numFinal,
+                tipo_cartela: parseInt('{{ selected_event.tipo_de_cartela | default(25) }}')
+            };
+            console.log("Reimprimindo recuperação em 58mm...", dadosReimpressao);
+            imprimirCartelas58mm(dadosReimpressao); 
+        }
+
+// --- FUNÇÃO DIRETA PARA IMPRESSÃO OU WHATSAPP (CONFORME ESCOLHA NO SEU HTML) ---xxx
+async function executarReimpressao(idVenda, idCliente, acao) {
+    ativarSpinner(acao === 'imprimir' ? "Enviando para impressora..." : "Preparando WhatsApp...");
+
+    const inputEvento = document.getElementById('input_id_evento');
+    const idEvento = inputEvento ? inputEvento.value : 0;
+
+    const data = {
+        tipo_reimpressao: 'unica', 
+        id_venda: idVenda,
+        id_cliente: idCliente,
+        id_evento: idEvento
+    };
+
+    try {
+        // Define a rota com base na ação disparada pelo botão do seu HTML
+        const rotaBackend = acao === 'imprimir' ? "/reimprimir_comprovante_json" : "/reimprimir_comprovante_txt";
+        const urlAbsoluta = window.location.origin + rotaBackend;  
+        
+        const response = await fetch(urlAbsoluta, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            
+            // ==========================================
+            // MODO 1: IMPRESSÃO TÉRMICA FÍSICA (JSON)
+            // ==========================================
+            if (acao === 'imprimir') {
+                const pacoteJSON = JSON.stringify(result.recibo);
+                imprimirComprovanteUniversal(pacoteJSON);
+            } 
+            
+            // ==========================================
+            // MODO 2: COMPARTILHAMENTO WHATSAPP (TXT)
+            // ==========================================
+            else if (acao === 'whatsapp') {
+                const textoRecibo = result.receipt_text;
+                const shareData = { title: 'Comprovante de Venda', text: textoRecibo };
+
+                const executarCopiaFallback = (texto) => {
+                    const tempTextArea = document.createElement('textarea');
+                    tempTextArea.value = texto;
+                    document.body.appendChild(tempTextArea);
+                    tempTextArea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(tempTextArea);
+                    
+                    bingoAlert("✅ Cupom copiado com sucesso!<br>Cole no WhatsApp do cliente.", 4000, '#27ae60');
+                };
+
+                if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
+                    try {
+                        await navigator.share(shareData);
+                    } catch (error) {
+                        if (error.name !== 'AbortError') executarCopiaFallback(textoRecibo);
+                    }
+                } else {
+                    executarCopiaFallback(textoRecibo);
+                }
+            }
+
+        } else {
+            bingoAlert(`❌ Erro: ${result.message}`, 4000, '#e74c3c');
+        }
+    } catch (err) {
+        console.error(err);
+        bingoAlert('Erro de conexão ao buscar o comprovante.', 3000, '#e74c3c');
+    } finally {
+        const spinner = document.getElementById('loading-spinner');
+        if (spinner) spinner.classList.remove('spinner-visible');
+    }
+}
+
+    // Ao digitar: formata e salva
+    inputBusca.addEventListener('input', function() {
+        this.value = formatarTitleCase(this.value);
+        localStorage.setItem('ultimo_cliente_lite', this.value);
+    });
+
+
+    // Função para formatar Nome (ex: 'rivaldo silva' -> 'Rivaldo Silva')
+        function formatarTitleCase(str) {
+            return str.toLowerCase().split(' ').map(word => {
+                return word.charAt(0).toUpperCase() + word.slice(1);
+            }).join(' ');
+        }
+
+        // Ao digitar: formata e salva o cliente dinamicamente
+        const campoClienteLite = document.getElementById('busca_cliente_lite');
+        if (campoClienteLite) {
+            campoClienteLite.addEventListener('input', function() {
+                this.value = formatarTitleCase(this.value);
+                localStorage.setItem('ultimo_cliente_lite', this.value);
+            });
+        }
+
+        // Limpa o armazenamento local quando o botão de limpar é usado
+        function limparCliente() {
+            if (campoClienteLite) {
+                campoClienteLite.value = '';
+                campoClienteLite.focus();
+            }
+            localStorage.removeItem('ultimo_cliente_lite');
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initPrinterConfig();
+
+            const inputId = document.getElementById('input_id_evento');
+            if (!inputId || !inputId.value) openEventSelector();
+
+            // Recupera o nome salvo ao abrir a página
+            const nomeSalvo = localStorage.getItem('ultimo_cliente_lite');
+            if (nomeSalvo && campoClienteLite) {
+                campoClienteLite.value = nomeSalvo;
+            }
+           
+            // Chama a função correta dependendo de qual campo existe na tela
+            if (document.getElementById('quantidade')) {
+                updateTotalCostLite();
+            } else if (document.getElementById('numero_kit')) {
+                updateTotalCostKit();
+            }
+            
+            updateCartelasDisplay();
+
+            // ====================================================
+            // DISPARO AUTOMÁTICO PARA APP BLUETOOTH PRINT        
+            // ====================================================
+            {% if session.get('url_bluetooth_print') %}
+                console.log("Detectado comando de impressão via App Bluetooth Print...");
+                window.location.href = "{{ session.get('url_bluetooth_print') }}";
+                console.log("Impressão enviada ao Spooler do App.");
+            {% endif %}
+
+            // --- LÓGICA: Auto-ocultar o bloco de sucesso após 6 segundos ---
+            const successBlock = document.getElementById('success-block');
+            if (successBlock) {
+                autoHideTimeout = setTimeout(() => {
+                    successBlock.style.transition = "opacity 0.5s ease";
+                    successBlock.style.opacity = "0";
+                    setTimeout(() => {
+                        successBlock.style.display = 'none';
+                    }, 500);
+                }, 6000); 
+                
+                // Trava de Segurança: Se o operador interagir com o bloco, cancela o sumiço
+                successBlock.addEventListener('click', () => {
+                    if (autoHideTimeout) {
+                        clearTimeout(autoHideTimeout);
+                        console.log("Temporizador cancelado: Operador interagiu com os botões.");
+                    }
+                });
+            }
+        });
+
+
+// Salva o nome no localStorage toda vez que o operador digita
+document.getElementById('busca_cliente_lite').addEventListener('input', function() {
+    localStorage.setItem('ultimo_cliente_lite', this.value);
+});
+
+// Ao carregar a página, recupera o nome se existir
+window.onload = function() {
+    const nomeSalvo = localStorage.getItem('ultimo_cliente_lite');
+    if (nomeSalvo) {
+        document.getElementById('busca_cliente_lite').value = nomeSalvo;
+    }
+};
+
+// Limpa também o armazenamento local quando o botão de limpar é usado
+function limparCliente() {
+        inputBuscaLite.value = '';
+         
+        localStorage.removeItem('ultimo_cliente_lite');
+        inputBuscaLite.focus();
+    }
+
         function copiarListagemVendas() {
+            // Pega o ID do evento atual
             const idEvento = '{{ evento.id_evento if evento else request.args.get("id_evento", "") }}';
             
             if (!idEvento) {
@@ -908,11 +1057,11 @@ async function openUltimasVendas() {
 
             const btn = document.getElementById('btn-copy-list');
             const originalIcon = btn.innerHTML;
-            btn.innerHTML = "⏳"; 
+            btn.innerHTML = "⏳"; // Feedback visual de carregamento
 
             fetch(`/api/copiar_listagem_vendas?id_evento=${idEvento}`)
                 .then(res => res.json())
-                .then(async (data) => { 
+                .then(async (data) => { // <-- Adicionado 'async' aqui para permitir o await do share
                     if (data.erro) {
                         alert(data.erro);
                         btn.innerHTML = originalIcon;
@@ -927,24 +1076,35 @@ async function openUltimasVendas() {
 
                     const textoRelatorio = data.texto;
 
+                    // =================================================================
+                    // 🚀 1. TENTA O COMPARTILHAMENTO NATIVO (Mobile / WhatsApp / etc)
+                    // =================================================================
                     if (navigator.share) {
                         try {
                             await navigator.share({
                                 title: 'Relatório de Vendas',
                                 text: textoRelatorio
                             });
-                            btn.innerHTML = originalIcon; 
-                            return; 
+                            console.log("Relatório enviado com sucesso via menu de compartilhamento.");
+                            btn.innerHTML = originalIcon; // Restaura o botão após o envio
+                            return; // Encerra a função aqui, pois já deu certo!
                         } catch (err) {
-                            console.log("Compartilhamento cancelado pelo usuário ou falhou.", err);
+                            console.log("Compartilhamento cancelado pelo usuário ou falhou. Tentando copiar...", err);
+                            // Se ele fechar o menu no celular sem enviar, o código ignora o erro
+                            // e desce para copiar o texto automaticamente como plano B.
                         }
                     }
 
+                    // =================================================================
+                    // 📋 2. PLANO B: COPIA PARA A ÁREA DE TRANSFERÊNCIA (Desktop / Fallback)
+                    // =================================================================
                     if (navigator.clipboard && window.isSecureContext) {
                         navigator.clipboard.writeText(textoRelatorio).then(() => {
+                            // Supondo que você já tenha essa função declarada em outro lugar do seu código
                             feedbackCopiaSucesso(btn, originalIcon); 
                         }).catch(() => fallbackCopiaTexto(textoRelatorio, btn, originalIcon));
                     } else {
+                        // Método Fallback final
                         fallbackCopiaTexto(textoRelatorio, btn, originalIcon);
                     }
                 })
@@ -955,6 +1115,7 @@ async function openUltimasVendas() {
                 });
         }
 
+        // Motor Fallback de cópia (Cria um textarea invisível, seleciona e copia)
         function fallbackCopiaTexto(texto, btn, originalIcon) {
             const textArea = document.createElement("textarea");
             textArea.value = texto;
@@ -981,6 +1142,7 @@ async function openUltimasVendas() {
             document.body.removeChild(textArea);
         }
 
+        // Animação de sucesso rápida no botão
         function feedbackCopiaSucesso(btn, originalIcon) {
             btn.innerHTML = "✅";
             setTimeout(() => {
@@ -1038,118 +1200,6 @@ async function openUltimasVendas() {
                 window.open(urlCompleta, '_blank');
             }
         }
-
-        // ==========================================
-        // 🚀 O CORAÇÃO DA PÁGINA (Executado ao carregar)
-        // ==========================================
-        document.addEventListener('DOMContentLoaded', () => {
-            initPrinterConfig();
-
-            const inputId = document.getElementById('input_id_evento');
-            if (!inputId || !inputId.value) openEventSelector();
-
-            const campoClienteLite = document.getElementById('busca_cliente_lite');
-            const nomeSalvo = localStorage.getItem('ultimo_cliente_lite');
-            if (nomeSalvo && campoClienteLite) {
-                campoClienteLite.value = nomeSalvo;
-            }
-           
-            if (document.getElementById('quantidade')) {
-                updateTotalCostLite();
-            } else if (document.getElementById('numero_kit')) {
-                updateTotalCostKit();
-            }
-            
-            updateCartelasDisplay();
-
-            // ====================================================
-            // 🚀 DISPARO EXTERNO CORRIGIDO (Evita travar o WebView)        
-            // ====================================================
-            {% set url_print = session.pop('url_bluetooth_print', None) %}
-            {% if url_print %}
-                // Só dispara a impressão externa se NÃO estivermos no App Android Nativo
-                if (typeof AndroidTerminal === 'undefined') {
-                    console.log("Detectado comando de impressão via App Externo...");
-                    window.location.href = "{{ url_print }}";
-                } else {
-                    console.log("Comando externo ignorado: O App Android Studio assumiu a impressão.");
-                }
-            {% endif %}
-
-            const successBlock = document.getElementById('success-block');
-            if (successBlock) {
-                autoHideTimeout = setTimeout(() => {
-                    successBlock.style.transition = "opacity 0.5s ease";
-                    successBlock.style.opacity = "0";
-                    setTimeout(() => {
-                        successBlock.style.display = 'none';
-                    }, 500);
-                }, 6000); 
-                
-                successBlock.addEventListener('click', () => {
-                    if (autoHideTimeout) {
-                        clearTimeout(autoHideTimeout);
-                        console.log("Temporizador cancelado: Operador interagiu com os botões.");
-                    }
-                });
-            }
-        });
-
-function abrirMenuAcao(idVenda, idCliente, tipo) {
-    document.getElementById('temp-id-venda').value = idVenda;
-    document.getElementById('temp-id-cliente').value = idCliente;
-    document.getElementById('temp-tipo-acao').value = tipo;
-    
-    document.getElementById('titulo-acao').innerText = (tipo === 'cupom' ? 'Cupom de Venda' : 'Cartelas do Cliente');
-    document.getElementById('acao-modal').style.display = 'flex';
-}
-
-
-async function executarAcao(formaEnvio) {
-    const idVenda = document.getElementById('temp-id-venda').value;
-    const idEvento = document.getElementById('input_id_evento').value;
-    const tipo = document.getElementById('temp-tipo-acao').value;
-    
-    document.getElementById('acao-modal').style.display = 'none';
-
-    if (tipo === 'cupom') {
-        const idCliente = document.getElementById('temp-id-cliente').value;
-        await executarReimpressao(idVenda, idCliente, formaEnvio);
-    } 
-    else if (tipo === 'cartelas') {
-        
-        // 1. BUSCA OS DADOS DA VENDA (Independente se vai imprimir ou enviar)
-        const response = await fetch('/api/buscar_dados_venda', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_venda: idVenda, id_evento: idEvento })
-        });
-        
-        const dados = await response.json();
-        
-        if (dados.status === 'error') {
-            bingoAlert(dados.message, 3000, '#e74c3c');
-            return;
-        }
-
-        // 2. DECIDE A AÇÃO
-        if (formaEnvio === 'imprimir') {
-            // Usa a função de impressão 58mm
-            imprimirCartelas58mm(dados);
-        } else {
-            // Usa a sua função handleGerarPdfLite pronta!
-            // Passamos os dados que acabamos de buscar no servidor
-            await handleGerarPdfLite(
-                dados.numero_inicial, 
-                dados.numero_final, 
-                dados.id_evento, 
-                dados.nome_cliente, 
-                dados.tipo_cartela
-            );
-        }
-    }
-}
-
 
     </script>
 </body>

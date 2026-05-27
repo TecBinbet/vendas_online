@@ -215,7 +215,7 @@ def inicializar_estrutura_db(db):
     """Agrega todas as configurações de índices e estrutura do banco."""
     print("      Iniciando verificação de estrutura do banco...")
     
-    # Chamamos apenas a função consolidada
+    # Chamamos apenas a função co	nsolidada
     configurar_indices_da_sala(db)
     
     print("✅ Estrutura de banco de dados verificada e pronta.")
@@ -2579,7 +2579,7 @@ def processar_venda():
         )
         
         session['success_message'] = success_msg 
-        session['print_data'] = {
+        session['print_data'] = { 
             'id_evento': id_evento_int_para_controle,
             'nome_cliente': cliente_doc.get('nick'),
             'numero_inicial': numero_inicial_atual,
@@ -4548,6 +4548,43 @@ def consulta_resultados():
                                g=g)
 
 
+@app.route('/api/buscar_dados_venda', methods=['POST'])
+@login_required
+def api_buscar_dados_venda():
+    db = get_vendas_db()
+    if db is None:
+        return jsonify({'status': 'error', 'message': 'DB Offline'}), 500
+
+    data = request.json
+    id_venda_str = data.get('id_venda')
+    valor_id_evento = str(data.get('id_evento'))
+
+    # Identificar coleção de vendas
+    if len(valor_id_evento) == 24:
+        evento = db.eventos.find_one({'$or': [{'_id': ObjectId(valor_id_evento)}, {'id_evento_ObjectId': ObjectId(valor_id_evento)}]})
+    else:
+        evento = db.eventos.find_one({'id_evento': int(valor_id_evento)})
+    
+    if not evento:
+        return jsonify({'status': 'error', 'message': 'Evento não encontrado'}), 404
+
+    id_evento_int = evento.get('id_evento')
+    nome_colecao_venda = f"vendas{id_evento_int}"
+    
+    venda = db[nome_colecao_venda].find_one({'id_venda': id_venda_str})
+    
+    if not venda:
+        return jsonify({'status': 'error', 'message': 'Venda não encontrada'}), 404
+
+    # Retorna o pacote exatamente como o imprimirCartelas58mm espera
+    return jsonify({
+        'id_evento': id_evento_int,
+        'nome_cliente': venda.get('nome_cliente'),
+        'numero_inicial': venda.get('numero_inicial'),
+        'numero_final': venda.get('numero_final'),
+        'tipo_cartela': venda.get('tipo_cartela', 25)
+    })
+
 # --- ROTA DE REIMPRESSÃO (TXT) ---
 @app.route('/reimprimir_comprovante_txt', methods=['POST'])
 @login_required
@@ -4716,6 +4753,195 @@ def reimprimir_comprovante_txt():
         print(f"Erro ao reimprimir comprovante: {e}")
         traceback.print_exc()
         return jsonify({'status': 'error', 'message': f'Erro interno: {e}'})
+
+@app.route('/reimprimir_comprovante_json', methods=['POST'])
+@login_required
+def reimprimir_comprovante_json():
+    """
+    Gera o pacote estruturado (JSON) de um comprovante para "Venda Única" ou "Vendas Cliente".
+    Este payload é lido pela ponte Android para imprimir na térmica 58mm.
+    """
+    db = get_vendas_db()
+    if db is None:
+        return jsonify({'status': 'error', 'message': 'DB Offline'})
+
+    try:
+        data = request.json
+        tipo_reimpressao = data.get('tipo_reimpressao') 
+        id_venda_str = data.get('id_venda')            
+        id_cliente_int = int(data.get('id_cliente'))
+        valor_id_evento = str(data.get('id_evento'))
+   
+        # --- BLINDAGEM DO EVENTO ---
+        if len(valor_id_evento) == 24: 
+            from bson.objectid import ObjectId
+            evento = db.eventos.find_one({
+                '$or': [
+                    {'_id': ObjectId(valor_id_evento)},
+                    {'id_evento_ObjectId': ObjectId(valor_id_evento)}
+                ]
+            })
+        else:
+            evento = db.eventos.find_one({'id_evento': int(valor_id_evento)})
+    
+        if not evento:
+            return jsonify({'status': 'error', 'message': 'Evento não encontrado'})
+        
+        id_evento_int = evento.get('id_evento')
+        http_apk = g.parametros_globais.get('http_apk', '')
+        url_canal_live = g.parametros_globais.get('url_canal_live', '')
+        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
+        
+        data_evento_str = evento.get('data_evento', 'N/A')
+        hora_evento_str = evento.get('hora_evento', 'N/A')
+        data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
+        
+        nome_colecao_venda = f"vendas{id_evento_int}"
+        
+        if id_cliente_int > 0:
+           link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
+        else:
+           link_final_limpo = f"{url_canal_live}" 
+
+        # 1. Estrutura Padrão do Contrato JSON
+        recibo = {
+            "config": { "avanco_linhas": 3, "cortar_papel": False },
+            "linhas": []
+        }
+
+        # Função auxiliar limpa para adicionar linhas ao JSON
+        def add_linha(texto, alinhamento="esquerda", tamanho="normal", negrito=False):
+            if not texto or str(texto).strip() == "": texto = " "
+            recibo["linhas"].append({
+                "texto": str(texto),
+                "alinhamento": alinhamento,
+                "tamanho": tamanho,
+                "negrito": negrito
+            })
+
+        # ==========================================
+        # MODO 1: REIMPRESSÃO DE VENDA ÚNICA
+        # ==========================================
+        if tipo_reimpressao == 'unica':
+            venda = db[nome_colecao_venda].find_one({'id_venda': id_venda_str})
+            if not venda:
+                return jsonify({'status': 'error', 'message': 'Venda não encontrada'})
+            
+            add_linha("== 2 VIA DE RECIBO ==", "centro", "normal", True)
+            add_linha("COMPROVANTE DE COMPRA", "centro", "normal", True)
+            add_linha(nome_sala, "centro", "normal", False)
+            add_linha(" ", "centro", "normal", False)
+            
+            add_linha(f"ID da Venda: {venda['id_venda']}", "centro", "normal", False)
+            add_linha("-------------------------------", "centro", "normal", False)
+            add_linha(f"Cliente: {venda['nome_cliente']}", "esquerda", "normal", True)
+            add_linha(f"Evento: {evento['descricao']}", "esquerda", "normal", False)
+            add_linha(f"Data: {data_evento_formatada} as {hora_evento_str}", "esquerda", "normal", False)
+            add_linha(f"Colab: {venda['id_colaborador']}-{venda['nick_colaborador']}", "esquerda", "normal", False)
+            add_linha("-------------------------------", "centro", "normal", False)
+            
+            #add_linha("UNIDADES COMPRADAS", "centro", "normal", False)
+            #add_linha(str(venda['quantidade_unidades']), "centro", "duplo", True)
+            add_linha(f"Unidades Compradas: {venda['quantidade_unidades']})", "centro", "normal", True)
+
+            #add_linha(f"(Cartelas: {venda['quantidade_cartelas']})", "centro", "normal", False)
+            add_linha("QTDE. CARTELAS", "centro", "normal", False)
+            add_linha(str(venda['quantidade_cartelas']), "centro", "duplo", False)
+
+            add_linha(" ", "centro", "normal", False)
+            
+            add_linha("> PERIODO DE CARTELAS <", "centro", "normal", True)
+            add_linha(f"{venda['numero_inicial']} a {venda['numero_final']}", "centro", "normal", False)
+            if venda.get('numero_inicial2', 0) > 0:
+                add_linha(f"{venda['numero_inicial2']} a {venda['numero_final2']}", "centro", "normal", False)
+            
+            add_linha("-------------------------------", "centro", "normal", False)
+            
+            # Formatação de Moeda segura no Python
+            valor_formatado = f"{safe_float(venda['valor_total']):.2f}".replace('.', ',')
+            
+            add_linha("VALOR PAGO", "centro", "normal", False)
+            add_linha(f"R$ {valor_formatado}", "centro", "duplo", False)
+            
+            add_linha("===============================", "centro", "normal", False)
+
+        # ==========================================
+        # MODO 2: REIMPRESSÃO DO CLIENTE (RESUMO)
+        # ==========================================
+        elif tipo_reimpressao == 'cliente':
+            vendas_cliente = list(db[nome_colecao_venda].find({'id_cliente': id_cliente_int}).sort('numero_inicial', 1))
+            if not vendas_cliente:
+                return jsonify({'status': 'error', 'message': 'Nenhuma venda encontrada para este cliente.'})
+
+            idColaborador = vendas_cliente[0]['id_colaborador']
+            chave_pix_colaborador = "Consulte o Colaborador"
+            try:
+                if idColaborador != 'N/A':
+                     colab_doc_pix = db.colaboradores.find_one({'id_colaborador': int(idColaborador)})
+                     if colab_doc_pix and colab_doc_pix.get('chave_pix'):
+                         chave_pix_colaborador = colab_doc_pix.get('chave_pix')
+            except: pass
+
+            nome_cliente = vendas_cliente[0]['nome_cliente']
+            total_unidades = 0
+            total_cartelas = 0
+            total_valor = 0.0
+            
+            add_linha("== 2 VIA DE RECIBO ==", "centro", "normal", True)
+            add_linha("RESUMO DO CLIENTE", "centro", "normal", True)
+            add_linha(nome_sala, "centro", "normal", False)
+            add_linha("-------------------------------", "centro", "normal", False)
+            add_linha(f"Cliente: {nome_cliente.upper()}", "esquerda", "normal", True)
+            add_linha(f"ID Cliente: {id_cliente_int}", "esquerda", "normal", False)
+            add_linha(f"Evento: {evento['descricao']}", "esquerda", "normal", False)
+            add_linha(f"Gerado por: {session.get('nick', 'N/A')}", "esquerda", "normal", False)
+            add_linha("-------------------------------", "centro", "normal", False)
+
+            for venda in vendas_cliente:
+                total_unidades += venda['quantidade_unidades']
+                total_cartelas += venda['quantidade_cartelas']
+                total_valor += safe_float(venda['valor_total'])
+                
+            add_linha("TOTAL DE UNIDADES", "centro", "normal", False)
+            add_linha(str(total_unidades), "centro", "duplo", False)
+            add_linha(f"(Total Cartelas: {total_cartelas})", "centro", "normal", False)
+            add_linha(" ", "centro", "normal", False)
+            
+            add_linha("> PERIODOS ADQUIRIDOS <", "centro", "normal", True)
+            for venda in vendas_cliente:
+                add_linha(f"{venda['numero_inicial']} a {venda['numero_final']}", "centro", "normal", False)
+                if venda.get('numero_inicial2', 0) > 0:
+                    add_linha(f"{venda['numero_inicial2']} a {venda['numero_final2']}", "centro", "normal", False)
+            
+            add_linha("-------------------------------", "centro", "normal", False)
+            
+            valor_total_formatado = f"{total_valor:.2f}".replace('.', ',')
+            add_linha("VALOR TOTAL", "centro", "normal", False)
+            add_linha(f"R$ {valor_total_formatado}", "centro", "duplo", False)
+            add_linha(" ", "centro", "normal", False)
+            
+            add_linha("CHAVE PIX", "centro", "normal", True)
+            add_linha(chave_pix_colaborador, "centro", "normal", False)
+            add_linha("===============================", "centro", "normal", False)
+
+        else:
+            return jsonify({'status': 'error', 'message': 'Tipo de reimpressão inválido.'})
+        
+        # --- RODAPÉ COMUM PARA AMBOS OS MODOS ---
+        add_linha("Acessar Canal do Sorteio:", "centro", "normal", False)
+        add_linha(link_final_limpo, "centro", "normal", False)
+        add_linha(" ", "centro", "normal", False)
+
+        return jsonify({
+            'status': 'success',
+            'recibo': recibo # Retorna o objeto completo { config, linhas }
+        })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': f'Erro interno: {e}'})
+
 
 # --- EXCLUIR VENDA
 @app.route('/excluir_venda', methods=['POST'])
@@ -5138,66 +5364,104 @@ def gerar_cartelas_pdf_15():
         traceback.print_exc()
         return f"Erro interno: {e}"
 
-
 @app.route('/imprimir_cartelas_58mm_15')
 @login_required
 def imprimir_cartelas_58mm_15():
-    """ Rota exclusiva para impressão térmica 58mm de Cartelas 3x5 (15 dezenas) """
+    """ Rota exclusiva para impressão térmica 58mm de Cartelas 3x5 (15 dezenas) via JSON """
     db = get_vendas_db()
-    if db is None: return "Erro de Conexão: DB Offline.", 500
+    if db is None: return jsonify({"erro": "Banco de dados offline"}), 500
 
     try:
         numero_inicial = int(request.args.get('numero_inicial', 0))
         numero_final = int(request.args.get('numero_final', 0))
-
         id_evento_raw = request.args.get('id_evento', 0)
+        nome_cliente = request.args.get('nome_cliente', 'Cliente')
+
+        if numero_inicial > numero_final or numero_inicial == 0:
+            return jsonify({"erro": "Numeração inválida"}), 400
+
         try:
-            # Tenta converter para número (se vier da impressão automática)
             id_evento = int(id_evento_raw)
             query_evento = {'id_evento': id_evento}
         except (ValueError, TypeError):
-            # Se for texto (veio da reimpressão via HTML), usa o ObjectId do Mongo
             from bson.objectid import ObjectId
             id_evento = str(id_evento_raw)
             query_evento = {'_id': ObjectId(id_evento)} if len(id_evento) == 24 else {'id_evento': id_evento}
 
-        nome_cliente = request.args.get('nome_cliente', 'Cliente')
-
-        if numero_inicial > numero_final or numero_inicial == 0:
-            return "Erro: Numeração inválida."
-
-        evento = db.eventos.find_one({'id_evento': id_evento})
-        if not evento: return "Erro: Evento não encontrado."
+        evento = db.eventos.find_one(query_evento)
+        if not evento: return jsonify({"erro": "Evento não encontrado"}), 404
 
         imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True)
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
         http_apk = g.parametros_globais.get('http_apk', '')
-
-        # Garante que vai buscar no TXT correto de 15 dezenas
         tipo_cartela = 15 
 
         data_str = evento.get('data_evento', '')
         if '-' in str(data_str):
             try: data_str = datetime.strptime(str(data_str), '%Y-%m-%d').strftime('%d/%m/%Y')
             except: pass
+            
+        data_hora_formatada = f"{data_str} as {evento.get('hora_evento', '')}"
 
-        lista_cartelas = []
+        # 1. Cria a estrutura do pacote (Contrato JSON)
+        recibo = {
+            "config": { "avanco_linhas": 2, "cortar_papel": False },
+            "linhas": []
+        }
+
+        # ==========================================
+        # 1. CABEÇALHO GERAL (Uma única vez no topo)
+        # ==========================================
+        recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        recibo["linhas"].append({"texto": f"Cliente: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+
+        # ==========================================
+        # 2. LAÇO GERADOR (Cartelas 15 números)
+        # ==========================================
         for num_cartela in range(numero_inicial, numero_final + 1):
             dados_matriz = buscar_dados_cartela_2d(num_cartela, tipo_cartela)
-            if dados_matriz:
-                lista_cartelas.append({'numero': num_cartela, 'matriz': dados_matriz})
+            if not dados_matriz:
+                continue
+                
+            # --- IDENTIFICAÇÃO DA CARTELA ---
+            recibo["linhas"].append({"texto": f"CARTELA {num_cartela}", "alinhamento": "centro", "tamanho": "duplo", "negrito": True})
+            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
-        return render_template('cartelas_58mm_15.html',
-                               cartelas=lista_cartelas,
-                               nome_sala=nome_sala,
-                               descricao_evento=evento.get('descricao', ''),
-                               data_hora=f"{data_str} as {evento.get('hora_evento', '')}",
-                               nome_cliente=nome_cliente,
-                               http_apk=http_apk,
-                               imprimir_qrcode_na_venda=imprime_qr)
+            # --- DEZENAS (Matriz da cartela de 15) ---
+            for linha_matriz in dados_matriz:
+                # Formata cada número com 2 dígitos
+                linha_formatada = " ".join([f"{str(n).zfill(2)}" for n in linha_matriz])
+                
+                # Imprime as dezenas
+                recibo["linhas"].append({"texto": linha_formatada, "alinhamento": "centro", "tamanho": "duplo", "negrito": False})
+
+            # Espaçamento e linha de corte suave entre cartelas
+            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            recibo["linhas"].append({"texto": "- - - - - - - - - - - - - - - -", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+
+        # ==========================================
+        # 3. RODAPÉ GERAL (Uma única vez no final)
+        # ==========================================
+        recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        if imprime_qr and http_apk:
+            recibo["linhas"].append({"texto": "Acompanhe o Sorteio no Link::", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            recibo["linhas"].append({"texto": http_apk, "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            
+        recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+
+        # Retorna o JSON limpo para o front-end processar e mandar para o Android/PC
+        return jsonify(recibo)
 
     except Exception as e:
-        return f"Erro interno: {e}"
+        import traceback
+        traceback.print_exc()
+        return jsonify({"erro": f"Erro interno: {e}"}), 500
 
 # vendas 
 @app.route('/api/venda_bluetooth_json')
@@ -5282,66 +5546,104 @@ def api_venda_bluetooth_json():
         return jsonify({"error": str(e)}), 500
 
 
+from flask import jsonify # Certifique-se de que o jsonify está importado no topo do arquivo
 
 @app.route('/imprimir_cartelas_58mm_25')
 @login_required
 def imprimir_cartelas_58mm_25():
-    """ Rota exclusiva para impressão térmica 58mm de Cartelas 5x5 (25 dezenas) """
+    """ Rota exclusiva para impressão térmica 58mm de Cartelas 5x5 (25 dezenas) via JSON """
     db = get_vendas_db()
-    if db is None: return "Erro de Conexão: DB Offline.", 500
+    if db is None: return jsonify({"erro": "Banco de dados offline"}), 500
 
     try:
         numero_inicial = int(request.args.get('numero_inicial', 0))
         numero_final = int(request.args.get('numero_final', 0))
-
         id_evento_raw = request.args.get('id_evento', 0)
+        nome_cliente = request.args.get('nome_cliente', 'Cliente')
+
+        if numero_inicial > numero_final or numero_inicial == 0:
+            return jsonify({"erro": "Numeração inválida"}), 400
+
         try:
-            # Tenta converter para número (se vier da impressão automática)
             id_evento = int(id_evento_raw)
             query_evento = {'id_evento': id_evento}
         except (ValueError, TypeError):
-            # Se for texto (veio da reimpressão via HTML), usa o ObjectId do Mongo
             from bson.objectid import ObjectId
             id_evento = str(id_evento_raw)
             query_evento = {'_id': ObjectId(id_evento)} if len(id_evento) == 24 else {'id_evento': id_evento}
 
-        nome_cliente = request.args.get('nome_cliente', 'Cliente')
+        evento = db.eventos.find_one(query_evento)
+        if not evento: return jsonify({"erro": "Evento não encontrado"}), 404
 
-        if numero_inicial > numero_final or numero_inicial == 0:
-            return "Erro: Numeração inválida."
-
-        evento = db.eventos.find_one({'id_evento': id_evento})
-        if not evento: return "Erro: Evento não encontrado."
-
-        imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True) 
+        imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True)
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
         http_apk = g.parametros_globais.get('http_apk', '')
-
-        # Garante que vai buscar no TXT correto de 25 dezenas
-        tipo_cartela = 25 
+        tipo_cartela = 25 # Define a busca estrita para dezenas da matriz 5x5
 
         data_str = evento.get('data_evento', '')
         if '-' in str(data_str):
             try: data_str = datetime.strptime(str(data_str), '%Y-%m-%d').strftime('%d/%m/%Y')
             except: pass
+            
+        data_hora_formatada = f"{data_str} as {evento.get('hora_evento', '')}"
 
-        lista_cartelas = []
+        # 1. Cria a estrutura do pacote (Contrato JSON)
+        recibo = {
+            "config": { "avanco_linhas": 2, "cortar_papel": False },
+            "linhas": []
+        }
+
+        # ==========================================
+        # 1. CABEÇALHO GERAL (Uma única vez no topo)
+        # ==========================================
+        recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        recibo["linhas"].append({"texto": f"Cliente: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+
+        # ==========================================
+        # 2. LAÇO GERADOR (Apenas Cartela e Dezenas)
+        # ==========================================
         for num_cartela in range(numero_inicial, numero_final + 1):
             dados_matriz = buscar_dados_cartela_2d(num_cartela, tipo_cartela)
-            if dados_matriz:
-                lista_cartelas.append({'numero': num_cartela, 'matriz': dados_matriz})
+            if not dados_matriz:
+                continue
+                
+            # --- IDENTIFICAÇÃO EM DESTAQUE ---
+            recibo["linhas"].append({"texto": f"CARTELA {num_cartela}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
-        return render_template('cartelas_58mm_25.html',
-                               cartelas=lista_cartelas,
-                               nome_sala=nome_sala,
-                               descricao_evento=evento.get('descricao', ''),
-                               data_hora=f"{data_str} as {evento.get('hora_evento', '')}",
-                               nome_cliente=nome_cliente,
-                               http_apk=http_apk,
-                               imprimir_qrcode_na_venda=imprime_qr)
+            # --- DEZENAS DO BINGO (Matriz 5x5) ---
+            for linha_matriz in dados_matriz:
+                # Formata cada número para ter sempre 2 dígitos preenchidos com zero à esquerda
+                linha_formatada = " ".join([f"{str(n).zfill(2)}" for n in linha_matriz])
+                
+                # Imprime a linha de dezenas centralizada e com tamanho de fonte ampliado (duplo)
+                recibo["linhas"].append({"texto": linha_formatada, "alinhamento": "centro", "tamanho": "duplo", "negrito": False})
+
+            # Espaçamento e linha de corte suave entre uma cartela e a próxima
+            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            recibo["linhas"].append({"texto": "- - - - - - - - - - - - - - - -", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+
+        # ==========================================
+        # 3. RODAPÉ GERAL (Uma única vez no final)
+        # ==========================================
+        recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        if imprime_qr and http_apk:
+            recibo["linhas"].append({"texto": "Acompanhe o Sorteio no Link:", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            recibo["linhas"].append({"texto": http_apk, "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            
+        recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        # Retorna o payload estruturado para consumo da função assíncrona do front-end
+        return jsonify(recibo)
 
     except Exception as e:
-        return f"Erro interno: {e}"
+        import traceback
+        traceback.print_exc()
+        return jsonify({"erro": f"Erro interno: {e}"}), 500
 
 
 def registrar_transacao_cliente(db, id_cliente, valor, tipo, descricao, id_evento=None, id_venda=None, id_colaborador=None):

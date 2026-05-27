@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Menu de Operações</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* --- CSS DO SPINNER --- */
         .spinner-overlay {
@@ -83,6 +84,15 @@
     </div>
 
     <div class="container">
+        
+        {% if nivel >= 3 %}
+            <button type="button" id="btn-config-nativa" onclick="abrirConfiguracoesNativas()" 
+                    class="hidden bg-gray-700 hover:bg-gray-900 text-white text-xs font-bold py-2 px-3 rounded shadow"
+                    style="position: absolute; top: 15px; right: 15px; transition: background-color 0.3s; z-index: 10;">
+                ⚙️ Configurar App (IP/Sala)
+            </button>
+        {% endif %}
+
         <h4 class="text-sm mt-2">
             Olá, {{ logado }} 
             {% if g.parametros_globais.get('nome_sala') %}
@@ -102,44 +112,44 @@
             
             <div class="coluna-menu">
                 {% if g.parametros_globais.get('venda_lite') == True %}
-                    <a href="{{ url_for('venda_lite.nova_venda_lite') }}" onclick="ativarSpinner('Abrindo Caixa Rápido...')" class="menu-item menu-item-venda" style="background-color: #059669; margin:0;">⚡ Nova Venda (Lite)</a>
+                    <a href="{{ url_for('venda_lite.nova_venda_lite') }}" onclick="activarSpinner('Abrindo Caixa Rápido...')" class="menu-item menu-item-venda" style="background-color: #059669; margin:0;">⚡ Nova Venda (Lite)</a>
                 {% else %}
-                    <a href="{{ url_for('nova_venda') }}" onclick="ativarSpinner('Abrindo Terminal de Venda...')" class="menu-item menu-item-venda" style="margin:0;">⭐ Nova Venda</a>
+                    <a href="{{ url_for('nova_venda') }}" onclick="activarSpinner('Abrindo Terminal de Venda...')" class="menu-item menu-item-venda" style="margin:0;">⭐ Nova Venda</a>
                 {% endif %}
                 
-                <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" onclick="ativarSpinner('Consultando Eventos...')" class="menu-item" style="margin:0;">🗓️ Consulta de Eventos Ativos</a>
+                <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" onclick="activarSpinner('Consultando Eventos...')" class="menu-item" style="margin:0;">🗓️ Consulta de Eventos Ativos</a>
                 
-                <a href="{{ url_for('consulta_vendas') }}" onclick="ativarSpinner('Carregando Relatório...')" class="menu-item" style="margin:0;">
+                <a href="{{ url_for('consulta_vendas') }}" onclick="activarSpinner('Carregando Relatório...')" class="menu-item" style="margin:0;">
                      <span class="emoji">📊</span>
                      <span class="menu-text">Consultar Vendas</span>
                 </a>
                 
-                <a href="{{ url_for('consulta_resultados') }}" onclick="ativarSpinner('Buscando Resultados...')" class="menu-item" style="margin:0;">🏆 Consulta de Resultados</a>
+                <a href="{{ url_for('consulta_resultados') }}" onclick="activarSpinner('Buscando Resultados...')" class="menu-item" style="margin:0;">🏆 Consulta de Resultados</a>
                 
-                <a href="{{ url_for('cadastro_cliente', view='novo', next='menu_operacoes') }}" onclick="ativarSpinner('Módulo de Clientes...')" class="menu-item" style="margin:0;">👥 Cadastro de Clientes</a>
+                <a href="{{ url_for('cadastro_cliente', view='novo', next='menu_operacoes') }}" onclick="activarSpinner('Módulo de Clientes...')" class="menu-item" style="margin:0;">👥 Cadastro de Clientes</a>
                 
-                <a href="{{ url_for('minha_conta', view='novo', next='menu_operacoes') }}" onclick="ativarSpinner('Acessando sua Conta...')" class="menu-item" style="margin:0;">🛠️ Minha Conta</a>
+                <a href="{{ url_for('minha_conta', view='novo', next='menu_operacoes') }}" onclick="activarSpinner('Acessando sua Conta...')" class="menu-item" style="margin:0;">🛠️ Minha Conta</a>
             </div>
 
             {% if nivel >= 3 %} 
             <div class="coluna-menu">
                 <div class="titulo-coluna">💼 Painel Administrativo</div>
 
-                <a href="{{ url_for('submenu_financeiro') }}" onclick="ativarSpinner('Acessando Módulo Financeiro...')" class="menu-item gerencial-item" style="margin:0;">
+                <a href="{{ url_for('submenu_financeiro') }}" onclick="activarSpinner('Acessando Módulo Financeiro...')" class="menu-item gerencial-item" style="margin:0;">
                       <span class="emoji">🏦</span>
                       <span class="menu-text">Menu Financeiro</span>
                  </a>
                  
-                 <a href="{{ url_for('submenu_eventos') }}" onclick="ativarSpinner('Gestão de Eventos...')" class="menu-item gerencial-item" style="margin:0;">
+                 <a href="{{ url_for('submenu_eventos') }}" onclick="activarSpinner('Gestão de Eventos...')" class="menu-item gerencial-item" style="margin:0;">
                      🎉 Menu Eventos
                 </a>
                 
-                <a href="{{ url_for('cadastro_colaborador', view='listar') }}" onclick="ativarSpinner('Gestão de Equipe...')" class="menu-item gerencial-item" style="margin:0;">
+                <a href="{{ url_for('cadastro_colaborador', view='listar') }}" onclick="activarSpinner('Gestão de Equipe...')" class="menu-item gerencial-item" style="margin:0;">
                      🛠️ Cadastro de Colaboradores
                 </a>
 
                 {% if nivel >= 4 %}
-                    <a href="{{ url_for('gerenciar_regionais') }}" onclick="ativarSpinner('Acessando Painel Master...')" class="menu-item" style="background-color: #1e293b; color: #f8fafc; border-left: 5px solid #3b82f6; margin:0;">
+                    <a href="{{ url_for('gerenciar_regionais') }}" onclick="activarSpinner('Acessando Painel Master...')" class="menu-item" style="background-color: #1e293b; color: #f8fafc; border-left: 5px solid #3b82f6; margin:0;">
                         🌎 Master: Gestão de Regionais
                     </a>
                 {% endif %}
@@ -151,6 +161,35 @@
     </div>
 
     <script>
+        // ========================================================
+        // --- 1. LÓGICA DE EXIBIÇÃO DO BOTÃO NATIVO (IP/SALA) ---
+        // ========================================================
+        document.addEventListener('DOMContentLoaded', () => {
+            // Verifica se está a correr dentro da Webview do Android e se a ponte existe
+            if (window.AndroidTerminal && typeof AndroidTerminal.chamarTelaDeIP === 'function') {
+                const btnConfig = document.getElementById('btn-config-nativa');
+                if (btnConfig) {
+                    btnConfig.classList.remove('hidden'); 
+                    // Fallback extra de display caso a classe 'hidden' dependesse de algo externo
+                    btnConfig.style.display = 'inline-block'; 
+                }
+            }
+        });
+
+        // Função chamada ao clicar no botão
+        function abrirConfiguracoesNativas() {
+            if (window.AndroidTerminal && typeof AndroidTerminal.chamarTelaDeIP === 'function') {
+                console.log("Solicitando abertura da tela de configuração nativa...");
+                AndroidTerminal.chamarTelaDeIP(); // Aciona a janela cinza do Kotlin
+            } else {
+                console.log("Função nativa indisponível neste navegador (Ambiente Desktop/iOS).");
+                alert("Esta configuração só está disponível através da aplicação Android.");
+            }
+        }
+
+        // ========================================================
+        // --- 2. LÓGICA EXISTENTE DO MENU (SPINNER E ATALHOS) ---
+        // ========================================================
         function activarSpinner(mensagem) {
             const spinner = document.getElementById('loading-spinner');
             const text = document.getElementById('spinner-text');
