@@ -861,13 +861,13 @@ async function openUltimasVendas() {
                 if (result.status === 'success') {
                     if (acao === 'imprimir') {
                         const pacoteJSON = JSON.stringify(result.recibo);
-                        console.log("JSON QUE VAI PARA O ANDROID:", pacoteJsonStr);
+                        console.log("JSON QUE VAI PARA O ANDROID (impressao):", pacoteJsonStr);
                         imprimirComprovanteUniversal(pacoteJSON);
                     } 
                     else if (acao === 'whatsapp') {
                         const textoRecibo = result.receipt_text;
                         const shareData = { title: 'Comprovante de Venda', text: textoRecibo };
-
+                        console.log("JSON QUE VAI PARA O ANDROID (envio):", textoRecibo); 
                         const executarCopiaFallback = (texto) => {
                             const tempTextArea = document.createElement('textarea');
                             tempTextArea.value = texto;
