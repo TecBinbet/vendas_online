@@ -979,24 +979,38 @@ async function openUltimasVendas() {
         }
 
 async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, tipoCartela) {
-    // ... (sua montagem da URL continua igual)
-    const urlCompleta = `${baseUrl}?${params.toString()}`;
+    if (!numInicial || !numFinal || !idEvento) {
+        bingoAlert("Erro: Dados incompletos.", 3000, '#e74c3c');
+        return;
+    }
 
-    // 1. O texto que você quer enviar no WhatsApp
-    const mensagem = `Olá ${nomeCliente}, suas cartelas do Sorteio estão prontas! Acesse aqui para visualizar: ${urlCompleta}`;
+    // 1. Caminho absoluto (sem erro de referência)
+    const baseUrl = `/gerar_cartelas_pdf_${tipoCartela}`;
+    const params = new URLSearchParams({
+        numero_inicial_pdf: numInicial,
+        numero_final_pdf: numFinal,
+        id_evento: idEvento,
+        id_cliente: 0,
+        nome_cliente: nomeCliente
+    });
     
-    // 2. Copia para a área de transferência do Android
+    // A URL completa e real (o navegador sabe onde está)
+    const urlCompleta = window.location.origin + baseUrl + '?' + params.toString();
+
+    // 2. Método ÚNICO: Copia o link e abre o WhatsApp, ponto final.
     try {
+        const mensagem = `Olá ${nomeCliente}, acesse suas cartelas aqui: ${urlCompleta}`;
+        
         await navigator.clipboard.writeText(mensagem);
         
-        // 3. Abre o WhatsApp já pronto para o usuário apenas "Colar"
-        // Como já ajustamos o shouldOverrideUrlLoading, isso vai abrir o App nativo
         const urlWhatsApp = `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
         window.open(urlWhatsApp, '_blank');
         
-        bingoAlert("✅ Link copiado! Agora é só colar no WhatsApp do cliente.", 3000, '#27ae60');
+        bingoAlert("✅ Link copiado e WhatsApp aberto!", 3000, '#27ae60');
     } catch (err) {
-        console.error("Erro na cópia:", err);
+        console.error("Erro:", err);
+        // Fallback extremamente simples
+        prompt("Copie este link:", urlCompleta);
     }
 }
 
