@@ -861,32 +861,20 @@ async function openUltimasVendas() {
                 if (result.status === 'success') {
                     if (acao === 'imprimir') {
                         const pacoteJSON = JSON.stringify(result.recibo);
-                        console.log("JSON QUE VAI PARA O ANDROID (impressao):", pacoteJSON);       
+                        //console.log("JSON QUE VAI PARA O ANDROID (impressao):", pacoteJSON);       
                         imprimirComprovanteUniversal(pacoteJSON);
                     } 
                     else if (acao === 'whatsapp') {
                         const textoRecibo = result.receipt_text;
-                        const shareData = { title: 'Comprovante de Venda', text: textoRecibo };
-                        console.log("JSON QUE VAI PARA O ANDROID (envio):", textoRecibo); 
-                        const executarCopiaFallback = (texto) => {
-                            const tempTextArea = document.createElement('textarea');
-                            tempTextArea.value = texto;
-                            document.body.appendChild(tempTextArea);
-                            tempTextArea.select();
-                            document.execCommand('copy');
-                            document.body.removeChild(tempTextArea);
-                            bingoAlert("✅ Cupom copiado com sucesso!<br>Cole no WhatsApp do cliente.", 4000, '#27ae60');
-                        };
-
-                        if (navigator.share && (!navigator.canShare || navigator.canShare(shareData))) {
-                            try {
-                                await navigator.share(shareData);
-                            } catch (error) {
-                                if (error.name !== 'AbortError') executarCopiaFallback(textoRecibo);
-                            }
-                        } else {
-                            executarCopiaFallback(textoRecibo);
-                        }
+    
+                        // Codifica o texto para ser enviado numa URL
+                        const mensagemCodificada = encodeURIComponent(textoRecibo);
+                        const urlWhatsApp = `https://wa.me/?text=${mensagemCodificada}`;
+    
+                        // Abre o WhatsApp diretamente
+                        window.open(urlWhatsApp, '_blank');
+    
+                        bingoAlert("✅ Abrindo WhatsApp para envio...", 3000, '#27ae60');
                     }
                 } else {
                     bingoAlert(`❌ Erro: ${result.message}`, 4000, '#e74c3c');
