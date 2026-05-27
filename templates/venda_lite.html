@@ -832,7 +832,41 @@ async function openUltimasVendas() {
         // ==========================================
         // 🚀 NOVA FUNÇÃO DE REIMPRESSÃO (JSON/WhatsApp)
         // ==========================================
-        async function executarReimpressao(idVenda, idCliente, acao) {
+
+async function executarReimpressao(idVenda, idCliente, acao) {
+    // 1. O Fetch é igual para ambos, isso não é o problema
+    const data = { tipo_reimpressao: 'unica', id_venda: idVenda, id_cliente: idCliente, id_evento: 0 };
+
+    try {
+        const rotaBackend = acao === 'imprimir' ? "/reimprimir_comprovante_json" : "/reimprimir_comprovante_txt";
+        const response = await fetch(rotaBackend, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        });
+
+        const result = await response.json();
+
+        if (result.status === 'success') {
+            if (acao === 'imprimir') {
+                // O PROBLEMA ESTÁ AQUI: Esta função está a travar o Android.
+                // Vamos garantir que ela não tente acessar o DOM indevidamente.
+                const pacoteJSON = JSON.stringify(result.recibo);
+                imprimirComprovanteUniversal(pacoteJSON); 
+            } else {
+                // WhatsApp (Isso funciona, logo o caminho está correto)
+                const textoRecibo = result.receipt_text;
+                navigator.clipboard.writeText(textoRecibo);
+                bingoAlert("✅ Copiado para o WhatsApp!", 3000, '#27ae60');
+            }
+        }
+    } catch (err) {
+        console.error("Erro na reimpressão:", err);
+    }
+}
+
+
+        async function executarReimpressao2(idVenda, idCliente, acao) {
              // ativarSpinner(acao === 'imprimir' ? "Enviando para impressora..." : "Preparando WhatsApp...");
 
             const inputEvento = document.getElementById('input_id_evento');
@@ -847,8 +881,7 @@ async function openUltimasVendas() {
 
             try {
                 const rotaBackend = acao === 'imprimir' ? "/reimprimir_comprovante_json" : "/reimprimir_comprovante_txt";
-                //const urlAbsoluta = window.location.origin + rotaBackend;  
-                const urlAbsoluta = rotaBackend;
+                const urlAbsoluta = window.location.origin + rotaBackend;  
                     
                 const response = await fetch(urlAbsoluta, {
                     method: 'POST',

@@ -230,7 +230,33 @@ function formatarMoedaBRL(valor) {
 // Força o navegador a rodar a checagem automaticamente assim que a estrutura da página estiver pronta
 window.addEventListener('DOMContentLoaded', verificarImpressoraAoCarregar);
 
-function imprimirComprovanteUniversal(conteudoRecibo) {
+function testarImpressaoSimples() {
+    console.log("--- [TESTE] Iniciando teste de impressão ---");
+    
+    // Texto simples, sem JSON, sem formatação complexa
+    const textoTeste = "TESTE DE IMPRESSAO COM SUCESSO!\nDATA: " + new Date().toLocaleString() + "\n\n\n";
+
+    if (window.AndroidTerminal) {
+        console.log("Modo: Android detectado.");
+        
+        // Verifica impressora (simulando a sua lógica)
+        if (typeof impressoraAtiva !== 'undefined' && impressoraAtiva) {
+            console.log("Enviando para:", impressoraAtiva);
+            window.AndroidTerminal.imprimirRecibo(textoTeste, impressoraAtiva);
+        } else {
+            console.error("Erro: 'impressoraAtiva' não está definida.");
+            bingoAlert("Erro: Impressora não selecionada!", 3000, '#e74c3c');
+        }
+    } else {
+        console.log("Modo: PC (USB)");
+        const printWindow = window.open('', '_blank', 'width=300,height=500');
+        printWindow.document.write(`<pre>${textoTeste}</pre>`);
+        printWindow.document.close();
+        printWindow.print();
+    }
+}
+
+function imprimirComprovanteUniversal2(conteudoRecibo) {
     console.log("--- [IMPRESSAO] Iniciando processo ---");
     
     // Verifica se o conteúdo é o nosso novo pacote JSON estruturado
