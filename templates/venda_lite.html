@@ -847,8 +847,9 @@ async function openUltimasVendas() {
 
             try {
                 const rotaBackend = acao === 'imprimir' ? "/reimprimir_comprovante_json" : "/reimprimir_comprovante_txt";
-                const urlAbsoluta = window.location.origin + rotaBackend;  
-                
+                //const urlAbsoluta = window.location.origin + rotaBackend;  
+                const urlAbsoluta = rotaBackend;
+                    
                 const response = await fetch(urlAbsoluta, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
