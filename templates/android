@@ -1,0 +1,674 @@
+package com.ltb.vendasinterna
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.AlertDialog
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.net.http.SslError
+import android.os.Build
+import android.os.Bundle
+import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import java.util.UUID
+
+class MainActivity : AppCompatActivity() {
+
+    private val PERMISSION_CODE = 101
+
+    private lateinit var prefs: SharedPreferences
+    private lateinit var myWebView: WebView
+
+    inner class PonteImpressora(private val mContext: Context) {
+
+        @JavascriptInterface
+        fun obterDispositivosBluetooth(): String {
+            val bluetoothManager = mContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val bluetoothAdapter = bluetoothManager.adapter
+
+            if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+                return "DESLIGADO"
+            }
+
+            @SuppressLint("MissingPermission")
+            val pairedDevices = bluetoothAdapter.bondedDevices
+            val listaJson = JSONArray()
+
+            pairedDevices.forEach { device ->
+                @SuppressLint("MissingPermission")
+                val nome = device.name
+                if (nome != null) {
+                    listaJson.put(nome)
+                }
+            }
+            return listaJson.toString()
+        }
+
+        @JavascriptInterface
+        fun imprimirRecibo(conteudoRecibo: String, nomeImpressora: String) {
+            Thread {
+                try {
+                    val bluetoothManager = mContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                    val bluetoothAdapter = bluetoothManager.adapter
+
+                    if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+                        runOnUiThread { Toast.makeText(mContext, "Bluetooth desligado!", Toast.LENGTH_SHORT).show() }
+                        return@Thread
+                    }
+
+                    @SuppressLint("MissingPermission")
+                    val pairedDevices = bluetoothAdapter.bondedDevices
+                    val printerDevice = pairedDevices.find { it.name == nomeImpressora }
+
+                    if (printerDevice != null) {
+                        val uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+                        @SuppressLint("MissingPermission")
+                        val socket = printerDevice.createRfcommSocketToServiceRecord(uuid)
+
+                        socket.connect()
+                        val outputStream = socket.outputStream
+
+                        outputStream.write(byteArrayOf(0x1B, 0x40))
+                        outputStream.write(conteudoRecibo.toByteArray(Charsets.ISO_8859_1))
+                        outputStream.write(byteArrayOf(0x0A, 0x0A, 0x0A))
+
+                        outputStream.flush()
+                        socket.close()
+
+                    } else {
+                        runOnUiThread { Toast.makeText(mContext, "Impressora $nomeImpressora não encontrada.", Toast.LENGTH_LONG).show() }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    runOnUiThread { Toast.makeText(mContext, "Erro ao imprimir: ${e.message}", Toast.LENGTH_LONG).show() }
+                }
+            }.start()
+        }
+
+        @JavascriptInterface
+        fun imprimirReciboJson(pacoteJsonStr: String, nomeImpressora: String) {
+            Thread {
+                try {
+                    val bluetoothManager = mContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                    val bluetoothAdapter = bluetoothManager.adapter
+
+                    if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+                        runOnUiThread { Toast.makeText(mContext, "Bluetooth desligado!", Toast.LENGTH_SHORT).show() }
+                        return@Thread
+                    }
+
+                    @SuppressLint("MissingPermission")
+                    val pairedDevices = bluetoothAdapter.bondedDevices
+                    val printerDevice = pairedDevices.find { it.name == nomeImpressora }
+
+                    if (printerDevice != null) {
+                        val uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+                        @SuppressLint("MissingPermission")
+                        val socket = printerDevice.createRfcommSocketToServiceRecord(uuid)
+                        socket.connect()
+                        val outputStream = socket.outputStream
+
+                        outputStream.write(byteArrayOf(0x1B, 0x40))
+
+                        val pacote = org.json.JSONObject(pacoteJsonStr)
+                        var avancoLinhas = 3
+                        if (pacote.has("config")) {
+                            val config = pacote.getJSONObject("config")
+                            avancoLinhas = config.optInt("avanco_linhas", 3)
+                        }
+
+                        if (pacote.has("linhas")) {
+                            val linhasArray = pacote.getJSONArray("linhas")
+
+                            for (i in 0 until linhasArray.length()) {
+                                val linhaObj = linhasArray.getJSONObject(i)
+                                val texto = linhaObj.optString("texto", "")
+                                val alinhamento = linhaObj.optString("alinhamento", "esquerda")
+                                val tamanho = linhaObj.optString("tamanho", "normal")
+                                val negrito = linhaObj.optBoolean("negrito", false)
+
+                                when (alinhamento) {
+                                    "centro" -> outputStream.write(byteArrayOf(0x1B, 0x61, 0x01))
+                                    "direita" -> outputStream.write(byteArrayOf(0x1B, 0x61, 0x02))
+                                    else -> outputStream.write(byteArrayOf(0x1B, 0x61, 0x00))
+                                }
+
+                                if (negrito) outputStream.write(byteArrayOf(0x1B, 0x45, 0x01))
+                                else outputStream.write(byteArrayOf(0x1B, 0x45, 0x00))
+
+                                when (tamanho) {
+                                    "duplo" -> outputStream.write(byteArrayOf(0x1D, 0x21, 0x11))
+                                    "altura" -> outputStream.write(byteArrayOf(0x1D, 0x21, 0x01))
+                                    "largura" -> outputStream.write(byteArrayOf(0x1D, 0x21, 0x10))
+                                    "medio" -> outputStream.write(byteArrayOf(0x1D, 0x21, 0x01))
+                                    else -> outputStream.write(byteArrayOf(0x1D, 0x21, 0x00))
+                                }
+
+                                outputStream.write(texto.toByteArray(Charsets.ISO_8859_1))
+                                outputStream.write(byteArrayOf(0x0A))
+                            }
+                        }
+
+                        for (i in 0 until avancoLinhas) outputStream.write(byteArrayOf(0x0A))
+
+                        outputStream.flush()
+                        socket.close()
+
+                    } else {
+                        runOnUiThread { Toast.makeText(mContext, "Impressora $nomeImpressora não encontrada.", Toast.LENGTH_LONG).show() }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    runOnUiThread { Toast.makeText(mContext, "Erro JSON: ${e.message}", Toast.LENGTH_LONG).show() }
+                }
+            }.start()
+        }
+
+        @JavascriptInterface
+        fun chamarTelaDeIP() {
+            runOnUiThread { mostrarDialogoDeIP() }
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        private lateinit var webView: WebView // Declara a variável aqui
+
+        override fun onCreate(savedInstanceState: Bundle?) {
+            super.onCreate(savedInstanceState)
+            setContentView(R.layout.activity_main)
+
+            webView = findViewById(R.id.webView)
+
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        prefs = getSharedPreferences("ConfigApp", Context.MODE_PRIVATE)
+        myWebView = findViewById(R.id.webview)
+
+        val permissionsNeeded = mutableListOf(Manifest.permission.CAMERA)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissionsNeeded.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+
+        val missingPermissions = permissionsNeeded.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missingPermissions.toTypedArray(), PERMISSION_CODE)
+        }
+
+        WebView.setWebContentsDebuggingEnabled(true)
+        myWebView.addJavascriptInterface(PonteImpressora(this), "AndroidTerminal")
+
+        myWebView.webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                request?.grant(request.resources)
+            }
+        }
+
+        myWebView.webViewClient = object : WebViewClient() {
+            @SuppressLint("WebViewClientOnReceivedSslError")
+            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                handler?.proceed()
+            }
+
+            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                val errorMessage = "<html><body style='background-color:#1e1e1e;color:white;padding:30px;font-family:sans-serif;text-align:center;'>" +
+                        "<h2>Servidor Não Encontrado</h2>" +
+                        "<p>O aplicativo não conseguiu conectar. Verifique o IP e a Sala.</p>" +
+                        "<p style='color:#e74c3c;font-size:12px;'>Erro: ${error?.errorCode} - ${error?.description}</p>" +
+                        "<br><br><br>" +
+                        "<button style='background-color:#3498db;color:white;padding:20px;font-size:16px;border:none;border-radius:8px;width:100%;font-weight:bold;' onclick='AndroidTerminal.chamarTelaDeIP()'>CONFIGURAR REDE E SALA</button>" +
+                        "</body></html>"
+
+                view?.loadDataWithBaseURL(null, errorMessage, "text/html", "utf-8", null)
+            }
+        }
+
+        myWebView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            loadsImagesAutomatically = true
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            mediaPlaybackRequiresUserGesture = false
+        }
+
+        // 🚀 VERIFICAÇÃO DUPLA: Só carrega direto se tiver o IP E a Sala salvos
+        val ipSalvo = prefs.getString("IP_SERVIDOR", "")
+        val salaSalva = prefs.getString("ID_SALA", "")
+
+        if (ipSalvo.isNullOrEmpty() || salaSalva.isNullOrEmpty()) {
+            mostrarDialogoDeIP()
+        } else {
+            carregarAppComIP(ipSalvo)
+        }
+    }
+
+    private fun mostrarDialogoDeIP() {
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("Configuração do Sistema")
+        builder.setMessage("Preencha o endereço do servidor e o ID da Sala:")
+
+        // Criando uma "caixa" (Layout) para colocar os dois campos de texto
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        params.setMargins(50, 0, 50, 0)
+        layout.layoutParams = params
+
+        // Campo 1: IP ou Domínio
+        val inputIp = EditText(this)
+        inputIp.hint = "IP/Site (ex: 192.168.1.35)"
+        inputIp.inputType = android.text.InputType.TYPE_CLASS_TEXT
+        inputIp.setText(prefs.getString("IP_SERVIDOR", ""))
+        layout.addView(inputIp)
+
+        // Campo 2: ID da Sala
+        val inputSala = EditText(this)
+        inputSala.hint = "ID da Sala (ex: 001)"
+        inputSala.inputType = android.text.InputType.TYPE_CLASS_TEXT
+        inputSala.setText(prefs.getString("ID_SALA", "001"))
+        layout.addView(inputSala)
+
+        builder.setView(layout)
+
+        builder.setPositiveButton("Salvar e Conectar") { dialog, _ ->
+            val novoIp = inputIp.text.toString().trim()
+            val novaSala = inputSala.text.toString().trim()
+
+            if (novoIp.isNotEmpty() && novaSala.isNotEmpty()) {
+                // Guarda os dois no caderninho
+                prefs.edit()
+                    .putString("IP_SERVIDOR", novoIp)
+                    .putString("ID_SALA", novaSala)
+                    .apply()
+                carregarAppComIP(novoIp)
+                dialog.dismiss()
+            } else {
+                Toast.makeText(this, "Por favor, preencha ambos os campos!", Toast.LENGTH_SHORT).show()
+                mostrarDialogoDeIP() // Chama a tela de novo se deixou em branco
+            }
+        }
+
+        builder.setCancelable(false)
+        builder.show()
+    }
+
+    // 🚀 URL INTELIGENTE: Junta IP/Site + Rota Principal + Parâmetro da Sala
+    //private fun carregarAppComIP(endereco: String) {
+    //    val idSala = prefs.getString("ID_SALA", "001")
+
+        // Define o início do link (Local vs Nuvem)
+    //    val urlBase = when {
+    //        endereco.startsWith("http://") || endereco.startsWith("https://") -> endereco
+    //        endereco.any { it.isLetter() } -> "https://$endereco"
+    //        else -> "http://$endereco:5001" // Mantido 5001 para o seu teste local
+    //    }
+
+        // Monta o link final. Exemplo: http://192.168.1.35:5001/?id_sala=001
+    //    val urlFinal = if (urlBase.endsWith("/")) {
+    //        "${urlBase}?id_sala=$idSala"
+    //    } else {
+    //        "${urlBase}/?id_sala=$idSala"
+    //    }
+    //
+    //    myWebView.loadUrl(urlFinal)
+    //}
+    private fun carregarAppComIP(endereco: String) {
+        val idSala = prefs.getString("ID_SALA", "001")
+        val cleanEndereco = endereco.trim()
+        // Se o campo estiver vazio, usa o seu link padrão da DigitalOcean
+        val urlBase = when {
+            cleanEndereco.isEmpty() -> "https://vendasonline-jpqa8.ondigitalocean.app"
+            cleanEndereco.startsWith("http") -> cleanEndereco
+            cleanEndereco.contains(".") -> "https://$cleanEndereco"
+            else -> "http://$cleanEndereco:5001"
+        }
+
+        val urlFinal = "$urlBase/?id_sala=$idSala"
+
+        Log.d("URL_CONFIG", "Carregando: $urlFinal")
+        webView.loadUrl(urlFinal)
+    }
+}
+
+====================================
+package com.ltb.vendasinterna
+
+import android.Manifest
+import android.annotation.SuppressLint
+import android.app.AlertDialog
+import android.bluetooth.BluetoothManager
+import android.content.Context
+import android.content.SharedPreferences
+import android.content.pm.PackageManager
+import android.net.http.SslError
+import android.os.Build
+import android.os.Bundle
+import android.util.Log
+import android.webkit.JavascriptInterface
+import android.webkit.PermissionRequest
+import android.webkit.SslErrorHandler
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
+import android.webkit.WebResourceRequest
+import android.webkit.WebSettings
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.EditText
+import android.widget.LinearLayout
+import android.widget.Toast
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.app.ActivityCompat
+import androidx.core.content.ContextCompat
+import org.json.JSONArray
+import java.util.UUID
+
+class MainActivity : AppCompatActivity() {
+
+    private val PERMISSION_CODE = 101
+    private lateinit var prefs: SharedPreferences
+    private lateinit var myWebView: WebView
+
+    inner class PonteImpressora(private val mContext: Context) {
+
+        @JavascriptInterface
+        fun obterDispositivosBluetooth(): String {
+            val bluetoothManager = mContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+            val bluetoothAdapter = bluetoothManager.adapter
+
+            if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+                return "DESLIGADO"
+            }
+
+            @SuppressLint("MissingPermission")
+            val pairedDevices = bluetoothAdapter.bondedDevices
+            val listaJson = JSONArray()
+
+            pairedDevices.forEach { device ->
+                @SuppressLint("MissingPermission")
+                val nome = device.name
+                if (nome != null) {
+                    listaJson.put(nome)
+                }
+            }
+            return listaJson.toString()
+        }
+
+        @JavascriptInterface
+        fun imprimirRecibo(conteudoRecibo: String, nomeImpressora: String) {
+            Thread {
+                try {
+                    val bluetoothManager = mContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                    val bluetoothAdapter = bluetoothManager.adapter
+
+                    if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+                        runOnUiThread { Toast.makeText(mContext, "Bluetooth desligado!", Toast.LENGTH_SHORT).show() }
+                        return@Thread
+                    }
+
+                    @SuppressLint("MissingPermission")
+                    val pairedDevices = bluetoothAdapter.bondedDevices
+                    val printerDevice = pairedDevices.find { it.name == nomeImpressora }
+
+                    if (printerDevice != null) {
+                        val uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+                        @SuppressLint("MissingPermission")
+                        val socket = printerDevice.createRfcommSocketToServiceRecord(uuid)
+
+                        socket.connect()
+                        val outputStream = socket.outputStream
+
+                        outputStream.write(byteArrayOf(0x1B, 0x40))
+                        outputStream.write(conteudoRecibo.toByteArray(Charsets.ISO_8859_1))
+                        outputStream.write(byteArrayOf(0x0A, 0x0A, 0x0A))
+
+                        outputStream.flush()
+                        socket.close()
+
+                    } else {
+                        runOnUiThread { Toast.makeText(mContext, "Impressora $nomeImpressora não encontrada.", Toast.LENGTH_LONG).show() }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    runOnUiThread { Toast.makeText(mContext, "Erro ao imprimir: ${e.message}", Toast.LENGTH_LONG).show() }
+                }
+            }.start()
+        }
+
+        @JavascriptInterface
+        fun imprimirReciboJson(pacoteJsonStr: String, nomeImpressora: String) {
+            Thread {
+                try {
+                    val bluetoothManager = mContext.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager
+                    val bluetoothAdapter = bluetoothManager.adapter
+
+                    if (bluetoothAdapter == null || !bluetoothAdapter.isEnabled) {
+                        runOnUiThread { Toast.makeText(mContext, "Bluetooth desligado!", Toast.LENGTH_SHORT).show() }
+                        return@Thread
+                    }
+
+                    @SuppressLint("MissingPermission")
+                    val pairedDevices = bluetoothAdapter.bondedDevices
+                    val printerDevice = pairedDevices.find { it.name == nomeImpressora }
+
+                    if (printerDevice != null) {
+                        val uuid = UUID.fromString("00001101-0000-1000-8000-00805F9B34FB")
+
+                        @SuppressLint("MissingPermission")
+                        val socket = printerDevice.createRfcommSocketToServiceRecord(uuid)
+                        socket.connect()
+                        val outputStream = socket.outputStream
+
+                        outputStream.write(byteArrayOf(0x1B, 0x40))
+
+                        val pacote = org.json.JSONObject(pacoteJsonStr)
+                        var avancoLinhas = 3
+                        if (pacote.has("config")) {
+                            val config = pacote.getJSONObject("config")
+                            avancoLinhas = config.optInt("avanco_linhas", 3)
+                        }
+
+                        if (pacote.has("linhas")) {
+                            val linhasArray = pacote.getJSONArray("linhas")
+
+                            for (i in 0 until linhasArray.length()) {
+                                val linhaObj = linhasArray.getJSONObject(i)
+                                val texto = linhaObj.optString("texto", "")
+                                val alinhamento = linhaObj.optString("alinhamento", "esquerda")
+                                val tamanho = linhaObj.optString("tamanho", "normal")
+                                val negrito = linhaObj.optBoolean("negrito", false)
+
+                                when (alinhamento) {
+                                    "centro" -> outputStream.write(byteArrayOf(0x1B, 0x61, 0x01))
+                                    "direita" -> outputStream.write(byteArrayOf(0x1B, 0x61, 0x02))
+                                    else -> outputStream.write(byteArrayOf(0x1B, 0x61, 0x00))
+                                }
+
+                                if (negrito) outputStream.write(byteArrayOf(0x1B, 0x45, 0x01))
+                                else outputStream.write(byteArrayOf(0x1B, 0x45, 0x00))
+
+                                when (tamanho) {
+                                    "duplo" -> outputStream.write(byteArrayOf(0x1D, 0x21, 0x11))
+                                    "altura" -> outputStream.write(byteArrayOf(0x1D, 0x21, 0x01))
+                                    "largura" -> outputStream.write(byteArrayOf(0x1D, 0x21, 0x10))
+                                    "medio" -> outputStream.write(byteArrayOf(0x1D, 0x21, 0x01))
+                                    else -> outputStream.write(byteArrayOf(0x1D, 0x21, 0x00))
+                                }
+
+                                outputStream.write(texto.toByteArray(Charsets.ISO_8859_1))
+                                outputStream.write(byteArrayOf(0x0A))
+                            }
+                        }
+
+                        for (i in 0 until avancoLinhas) outputStream.write(byteArrayOf(0x0A))
+
+                        outputStream.flush()
+                        socket.close()
+
+                    } else {
+                        runOnUiThread { Toast.makeText(mContext, "Impressora $nomeImpressora não encontrada.", Toast.LENGTH_LONG).show() }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                    runOnUiThread { Toast.makeText(mContext, "Erro JSON: ${e.message}", Toast.LENGTH_LONG).show() }
+                }
+            }.start()
+        }
+
+        @JavascriptInterface
+        fun chamarTelaDeIP() {
+            runOnUiThread { mostrarDialogoDeIP() }
+        }
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+        prefs = getSharedPreferences("ConfigApp", Context.MODE_PRIVATE)
+        myWebView = findViewById(R.id.webview)
+
+        val permissionsNeeded = mutableListOf(Manifest.permission.CAMERA)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissionsNeeded.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+
+        val missingPermissions = permissionsNeeded.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missingPermissions.isNotEmpty()) {
+            ActivityCompat.requestPermissions(this, missingPermissions.toTypedArray(), PERMISSION_CODE)
+        }
+
+        WebView.setWebContentsDebuggingEnabled(true)
+        myWebView.addJavascriptInterface(PonteImpressora(this), "AndroidTerminal")
+
+        myWebView.webChromeClient = object : WebChromeClient() {
+            override fun onPermissionRequest(request: PermissionRequest?) {
+                request?.grant(request.resources)
+            }
+        }
+
+        myWebView.webViewClient = object : WebViewClient() {
+            @SuppressLint("WebViewClientOnReceivedSslError")
+            override fun onReceivedSslError(view: WebView?, handler: SslErrorHandler?, error: SslError?) {
+                handler?.proceed()
+            }
+
+            override fun onReceivedError(view: WebView?, request: WebResourceRequest?, error: WebResourceError?) {
+                val errorMessage = "<html><body style='background-color:#1e1e1e;color:white;padding:30px;font-family:sans-serif;text-align:center;'>" +
+                        "<h2>Servidor Não Encontrado</h2>" +
+                        "<p>O aplicativo não conseguiu conectar. Verifique o IP e a Sala.</p>" +
+                        "<p style='color:#e74c3c;font-size:12px;'>Erro: ${error?.errorCode} - ${error?.description}</p>" +
+                        "<br><br><br>" +
+                        "<button style='background-color:#3498db;color:white;padding:20px;font-size:16px;border:none;border-radius:8px;width:100%;font-weight:bold;' onclick='AndroidTerminal.chamarTelaDeIP()'>CONFIGURAR REDE E SALA</button>" +
+                        "</body></html>"
+
+                view?.loadDataWithBaseURL(null, errorMessage, "text/html", "utf-8", null)
+            }
+        }
+
+        myWebView.settings.apply {
+            javaScriptEnabled = true
+            domStorageEnabled = true
+            loadsImagesAutomatically = true
+            mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
+            mediaPlaybackRequiresUserGesture = false
+        }
+
+        val ipSalvo = prefs.getString("IP_SERVIDOR", "")
+        val salaSalva = prefs.getString("ID_SALA", "")
+
+        if (ipSalvo.isNullOrEmpty() || salaSalva.isNullOrEmpty()) {
+            mostrarDialogoDeIP()
+        } else {
+            carregarAppComIP(ipSalvo)
+        }
+    }
+
+    private fun mostrarDialogoDeIP() {
+        val builder = AlertDialog.Builder(this)
+        builder.setTitle("Configuração do Sistema")
+        builder.setMessage("Preencha o endereço do servidor e o ID da Sala:")
+
+        val layout = LinearLayout(this)
+        layout.orientation = LinearLayout.VERTICAL
+        val params = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT)
+        params.setMargins(50, 0, 50, 0)
+        layout.layoutParams = params
+
+        val inputIp = EditText(this)
+        inputIp.hint = "IP/Site (ex: 192.168.1.35)"
+        inputIp.inputType = android.text.InputType.TYPE_CLASS_TEXT
+        inputIp.setText(prefs.getString("IP_SERVIDOR", ""))
+        layout.addView(inputIp)
+
+        val inputSala = EditText(this)
+        inputSala.hint = "ID da Sala (ex: 001)"
+        inputSala.inputType = android.text.InputType.TYPE_CLASS_TEXT
+        inputSala.setText(prefs.getString("ID_SALA", "001"))
+        layout.addView(inputSala)
+
+        builder.setView(layout)
+
+        builder.setPositiveButton("Salvar e Conectar") { dialog, _ ->
+            val novoIp = inputIp.text.toString().trim()
+            val novaSala = inputSala.text.toString().trim()
+
+            if (novoIp.isNotEmpty() && novaSala.isNotEmpty()) {
+                prefs.edit()
+                    .putString("IP_SERVIDOR", novoIp)
+                    .putString("ID_SALA", novaSala)
+                    .apply()
+                carregarAppComIP(novoIp)
+                dialog.dismiss()
+            } else {
+                Toast.makeText(this, "Por favor, preencha ambos os campos!", Toast.LENGTH_SHORT).show()
+                mostrarDialogoDeIP()
+            }
+        }
+        builder.setCancelable(false)
+        builder.show()
+    }
+
+    private fun carregarAppComIP(endereco: String) {
+        val idSala = prefs.getString("ID_SALA", "001")
+        val cleanEndereco = endereco.trim()
+        val urlBase = when {
+            cleanEndereco.isEmpty() -> "https://vendasonline-jpqa8.ondigitalocean.app"
+            cleanEndereco.startsWith("http") -> cleanEndereco
+            cleanEndereco.contains(".") -> "https://$cleanEndereco"
+            else -> "http://$cleanEndereco:5001"
+        }
+
+        val urlFinal = "$urlBase/?id_sala=$idSala"
+
+        Log.d("URL_CONFIG", "Carregando: $urlFinal")
+        
+        myWebView.loadUrl(urlFinal)
+    }
+}

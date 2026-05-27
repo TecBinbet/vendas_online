@@ -4805,7 +4805,7 @@ def reimprimir_comprovante_json():
 
         # 1. Estrutura Padrão do Contrato JSON
         recibo = {
-            "config": { "avanco_linhas": 3, "cortar_papel": False },
+            "config": { "avanco_linhas": 2, "cortar_papel": False },
             "linhas": []
         }
 

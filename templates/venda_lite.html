@@ -978,56 +978,27 @@ async function openUltimasVendas() {
             }, 2000);
         }
 
-       async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, tipoCartela) {
-            if (!numInicial || !numFinal || !idEvento) {
-                alert("Erro: Dados incompletos para gerar PDF.");
-                return;
-            }
-            
-            // Monta a URL baseada no tipo de cartela do evento
-            const baseUrl = `/gerar_cartelas_pdf_${tipoCartela}`;            
-            
-            const params = new URLSearchParams({
-                numero_inicial_pdf: numInicial,
-                numero_final_pdf: numFinal,
-                id_evento: idEvento,
-                id_cliente: 0, // Na Venda Lite o ID é sempre 0 (Balcão)
-                nome_cliente: nomeCliente
-            });
-            
-            const urlCompleta = `${baseUrl}?${params.toString()}`;
-            
-            // Altera o cursor para "carregando" para o operador saber que o sistema está trabalhando
-            document.body.style.cursor = 'wait';
+async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, tipoCartela) {
+    // ... (sua montagem da URL continua igual)
+    const urlCompleta = `${baseUrl}?${params.toString()}`;
 
-            try {
-                // 1. Verifica se o celular/navegador suporta compartilhamento direto
-                if (navigator.canShare && navigator.share) {
-                    
-                    const response = await fetch(urlCompleta);
-                    const blob = await response.blob();
-                    const file = new File([blob], `cartelas_${idEvento}.pdf`, { type: "application/pdf" });
-                    
-                    if (navigator.canShare({ files: [file] })) {
-                        document.body.style.cursor = 'default';
-                        await navigator.share({
-                            files: [file],
-                            title: 'Cartelas de Bingo',
-                            text: `Olá ${nomeCliente}, aqui estão suas cartelas!`
-                        });
-                    } else {
-                        throw new Error("Compartilhamento de arquivos não suportado.");
-                    }
-                } else {
-                    throw new Error("API de compartilhamento não suportada (Desktop Antigo).");
-                }
-            } catch (err) {
-                console.log("Fallback para download/abertura normal:", err);
-                // Se der erro no compartilhamento ou for pelo PC, abre a janela/faz o download
-                document.body.style.cursor = 'default';
-                window.open(urlCompleta, '_blank');
-            }
-        }
+    // 1. O texto que você quer enviar no WhatsApp
+    const mensagem = `Olá ${nomeCliente}, suas cartelas do Sorteio estão prontas! Acesse aqui para visualizar: ${urlCompleta}`;
+    
+    // 2. Copia para a área de transferência do Android
+    try {
+        await navigator.clipboard.writeText(mensagem);
+        
+        // 3. Abre o WhatsApp já pronto para o usuário apenas "Colar"
+        // Como já ajustamos o shouldOverrideUrlLoading, isso vai abrir o App nativo
+        const urlWhatsApp = `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
+        window.open(urlWhatsApp, '_blank');
+        
+        bingoAlert("✅ Link copiado! Agora é só colar no WhatsApp do cliente.", 3000, '#27ae60');
+    } catch (err) {
+        console.error("Erro na cópia:", err);
+    }
+}
 
         // ==========================================
         // 🚀 O CORAÇÃO DA PÁGINA (Executado ao carregar)
