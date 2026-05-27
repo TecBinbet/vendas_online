@@ -230,7 +230,7 @@ function formatarMoedaBRL(valor) {
 // Força o navegador a rodar a checagem automaticamente assim que a estrutura da página estiver pronta
 window.addEventListener('DOMContentLoaded', verificarImpressoraAoCarregar);
 
-function testarImpressaoSimples() {
+function imprimirComprovanteUniversa() {
     console.log("--- [TESTE] Iniciando teste de impressão ---");
     
     // Texto simples, sem JSON, sem formatação complexa
