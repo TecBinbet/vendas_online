@@ -148,6 +148,8 @@ def processar_venda_lite():
         return redirect(url_for('login_page'))
 
     """
+    print("REQUISIÇÃO CHEGOU NO SERVIDOR! (lite)")
+
     Processo de Venda Lite (Balcão Rápido).
     Mantém travas atômicas e coleções dinâmicas, ignora saldo de cliente.
     """
@@ -184,6 +186,7 @@ def processar_venda_lite():
     padrao_venda = parametros.get('padrao_registro_vendas', 'quantidade')
     #cartelas_por_kit = parametros.get('unidade_de_venda', 6)
 
+    tipo_cartela = int(selected_event.get('tipo_de_cartela', 15))
     id_evento_int_para_controle = selected_event.get('id_evento')
     limite_maximo_cartelas = int(selected_event.get('numero_maximo', 72000))
     valor_unitario = safe_float(selected_event.get('valor_de_venda', 0.00))
@@ -300,6 +303,7 @@ def processar_venda_lite():
             "nick_colaborador": nick_colaborador_sessao,  # 🛠️ CORREÇÃO: Grava o operador logado diretamente
             "id_vendedor": colaborador_id,
             "data_venda": hora_brasil(),
+            "tipo_cartela": tipo_cartela,
             "quantidade_unidades": quantidade,
             "quantidade_cartelas": quantidade_cartelas_atual,
             "numero_inicial": numero_inicial_atual,

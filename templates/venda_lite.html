@@ -608,15 +608,16 @@ function syncAndConfirm(event) {
                 ativarSpinner('A processar venda e a gerar bilhetes...');
             }
 
-            if (isMobile) {
-                form.setAttribute('target', '_blank');
-                form.submit();        
-                setTimeout(() => { window.location.reload(); }, 1500);
-            } else {
-                form.removeAttribute('target'); 
-                form.submit();
-            }
+            form.removeAttribute('target');
+            form.submit();
+            //if (isMobile) {
+            //    setTimeout(() => { 
+            //        btn.disabled = false;
+            //       btn.innerHTML = 'Confirmar Venda'; 
+            //    }, 3000);
+            //}
         },
+
         () => {
             // --- AÇÃO AO CLICAR EM "CANCELAR" ---
             console.log("Venda cancelada.");
@@ -779,7 +780,6 @@ async function openUltimasVendas() {
 
         function imprimirCartelas58mm(dados) {
             const baseUrl = dados.tipo_cartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
-            
             const params = new URLSearchParams({
                 numero_inicial: dados.numero_inicial,
                 numero_final: dados.numero_final,
@@ -872,7 +872,8 @@ async function openUltimasVendas() {
                         const urlWhatsApp = `https://wa.me/?text=${mensagemCodificada}`;
     
                         // Abre o WhatsApp diretamente
-                        window.open(urlWhatsApp, '_blank');
+                        // window.open(urlWhatsApp, '_blank');
+                        window.location.href = urlWhatsApp; 
     
                         bingoAlert("✅ Abrindo WhatsApp para envio...", 3000, '#27ae60');
                     }
@@ -979,12 +980,6 @@ async function openUltimasVendas() {
         }
 
 async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, tipoCartela) {
-    if (!numInicial || !numFinal || !idEvento) {
-        bingoAlert("Erro: Dados incompletos.", 3000, '#e74c3c');
-        return;
-    }
-
-    // 1. Caminho absoluto (sem erro de referência)
     const baseUrl = `/gerar_cartelas_pdf_${tipoCartela}`;
     const params = new URLSearchParams({
         numero_inicial_pdf: numInicial,
@@ -994,23 +989,29 @@ async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, t
         nome_cliente: nomeCliente
     });
     
-    // A URL completa e real (o navegador sabe onde está)
     const urlCompleta = window.location.origin + baseUrl + '?' + params.toString();
 
-    // 2. Método ÚNICO: Copia o link e abre o WhatsApp, ponto final.
-    try {
-        const mensagem = `Olá ${nomeCliente}, acesse suas cartelas aqui: ${urlCompleta}`;
+    // VERIFICA ONDE O SISTEMA ESTÁ RODANDO
+    if (typeof window.AndroidTerminal !== 'undefined') {
+        // --- 1. ESTÁ NO APP ANDROID ---
+        bingoAlert("⏳ Abrindo WhatsApp...", 2000, '#0047AB');
+        const urlPdfCodificada = encodeURIComponent(urlCompleta);
+        const nomeCodificado = encodeURIComponent(`Cartelas_${nomeCliente}.pdf`);
         
-        await navigator.clipboard.writeText(mensagem);
+        window.location.href = `meuapp://enviarpdf?url=${urlPdfCodificada}&nome=${nomeCodificado}`;
+    
+    } else {
+        // --- 2. ESTÁ NO COMPUTADOR (Navegador normal) ---
+        bingoAlert("⏳ Gerando PDF no navegador...", 2000, '#0047AB');
         
-        const urlWhatsApp = `https://wa.me/?text=${encodeURIComponent(mensagem)}`;
-        window.open(urlWhatsApp, '_blank');
+        // No PC, o mais seguro é abrir o PDF em uma nova aba.
+        // Assim, o caixa pode imprimir, salvar ou arrastar direto para o WhatsApp Web.
+        window.open(urlCompleta, '_blank');
         
-        bingoAlert("✅ Link copiado e WhatsApp aberto!", 3000, '#27ae60');
-    } catch (err) {
-        console.error("Erro:", err);
-        // Fallback extremamente simples
-        prompt("Copie este link:", urlCompleta);
+        // OPÇÃO EXTRA: Se quiser que o PC abra o WhatsApp Web com o link do PDF preenchido,
+        // comente a linha window.open acima e descomente as linhas abaixo:
+        // const msgWeb = encodeURIComponent(`Aqui estão as suas cartelas: ${urlCompleta}`);
+        // window.open(`https://web.whatsapp.com/send?text=${msgWeb}`, '_blank');
     }
 }
 

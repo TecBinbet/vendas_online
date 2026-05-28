@@ -2316,6 +2316,7 @@ def processar_venda():
         return redirect(url_for('nova_venda', **error_redirect_kwargs))
     # --------------------------------------------------
         
+    tipo_cartela = int(selected_event.get('tipo_de_cartela', 15))
     id_evento_int_para_controle = selected_event.get('id_evento') 
     limite_maximo_cartelas = int(selected_event.get('numero_maximo', 72000))
     if not isinstance(id_evento_int_para_controle, int):
@@ -2403,6 +2404,7 @@ def processar_venda():
             "nick_colaborador": nick_colaborador,
             "id_vendedor": colaborador_id,
             "data_venda": hora_brasil(),
+            "tipo_cartela": tipo_cartela,  
             "quantidade_unidades": quantidade,
             "quantidade_cartelas": quantidade_cartelas_atual,
             "numero_inicial": numero_inicial_atual,
@@ -5405,7 +5407,7 @@ def imprimir_cartelas_58mm_15():
 
         # 1. Cria a estrutura do pacote (Contrato JSON)
         recibo = {
-            "config": { "avanco_linhas": 2, "cortar_papel": False },
+            "config": { "avanco_linhas": 0, "cortar_papel": False },
             "linhas": []
         }
 
@@ -5413,7 +5415,7 @@ def imprimir_cartelas_58mm_15():
         # 1. CABEÇALHO GERAL (Uma única vez no topo)
         # ==========================================
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
@@ -5429,7 +5431,7 @@ def imprimir_cartelas_58mm_15():
                 continue
                 
             # --- IDENTIFICAÇÃO DA CARTELA ---
-            recibo["linhas"].append({"texto": f"CARTELA {num_cartela}", "alinhamento": "centro", "tamanho": "duplo", "negrito": True})
+            recibo["linhas"].append({"texto": f"Ctla. {num_cartela}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
             recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
             # --- DEZENAS (Matriz da cartela de 15) ---
@@ -5450,10 +5452,10 @@ def imprimir_cartelas_58mm_15():
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         if imprime_qr and http_apk:
             recibo["linhas"].append({"texto": "Acompanhe o Sorteio no Link::", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-            recibo["linhas"].append({"texto": http_apk, "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+            recibo["linhas"].append({"texto": http_apk, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
-        recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
 
         # Retorna o JSON limpo para o front-end processar e mandar para o Android/PC
         return jsonify(recibo)
@@ -5589,7 +5591,7 @@ def imprimir_cartelas_58mm_25():
 
         # 1. Cria a estrutura do pacote (Contrato JSON)
         recibo = {
-            "config": { "avanco_linhas": 2, "cortar_papel": False },
+            "config": { "avanco_linhas": 0, "cortar_papel": False },
             "linhas": []
         }
 
@@ -5597,7 +5599,7 @@ def imprimir_cartelas_58mm_25():
         # 1. CABEÇALHO GERAL (Uma única vez no topo)
         # ==========================================
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": f"Cliente: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
@@ -5612,7 +5614,8 @@ def imprimir_cartelas_58mm_25():
                 continue
                 
             # --- IDENTIFICAÇÃO EM DESTAQUE ---
-            recibo["linhas"].append({"texto": f"CARTELA {num_cartela}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+            recibo["linhas"].append({"texto": f"Ctla.  {num_cartela}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+  
             recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
             # --- DEZENAS DO BINGO (Matriz 5x5) ---
@@ -5636,7 +5639,7 @@ def imprimir_cartelas_58mm_25():
             recibo["linhas"].append({"texto": http_apk, "alinhamento": "centro", "tamanho": "normal", "negrito": True})
             recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
-        recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
         # Retorna o payload estruturado para consumo da função assíncrona do front-end
         return jsonify(recibo)
 
