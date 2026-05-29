@@ -352,6 +352,13 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="distribuir_cortesia">Cortesias (Qtd. por Cliente):</label>
+                        <input type="number" id="distribuir_cortesia" name="distribuir_cortesia" min="0" step="1" class="form-control"
+                               value="{{ evento.get('distribuir_cortesia', 0) }}">
+                        <p class="text-[10px] text-blue-600 font-bold italic -mt-2">Deixe 0 se não houver distribuição gratuita</p>
+                    </div>
+
+                    <div class="form-group">
                          <label for="status">Status (Automático):</label>
                         <input type="text" id="status" name="status" disabled class="form-control bg-gray-100 font-semibold text-green-500"
                                value="{% if active_view == 'alterar' %}{{ evento.get('status', 'Ativo') }}{% else %}Ativo (Padrão){% endif %}">

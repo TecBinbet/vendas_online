@@ -55,17 +55,26 @@
             <!-- Os cards permanecem os mesmos, mas os valores agora são filtrados pelo backend -->
             <div class="bg-white py-2 px-4 rounded-lg shadow border-l-4 border-blue-500">
                 <h3 class="text-gray-500 text-sm font-bold uppercase mb-2">Faturamento Bruto</h3>
-                <div class="flex justify-between items-center border-b pb-2 mb-2">
+                <div class="flex justify-between items-center mt-3 pt-3 border-t">
                     <div class="text-left">
-                        <span class="text-xs text-gray-500 block">📋Cartelas (Bingo)</span>
-                        <span class="text-lg font-bold text-blue-600">R$ {{ painel.total_vendas_bingo | format_moeda }}</span>
+                        <span class="text-xs text-gray-500 block">📋 Pagas</span>
+                        <span class="text-lg font-bold text-blue-600">{{ totais.qtd }}</span>
                     </div>
+                    
                     <div class="text-gray-300 text-2xl font-light">|</div>
-                    <div class="text-right">
-                        <span class="text-xs text-gray-500 block">🍀Sorte Extra</span>
-                        <span class="text-lg font-bold text-purple-600">R$ {{ painel.total_vendas_cupons | format_moeda }}</span>
+                    
+                    <div class="text-center">
+                        <span class="text-xs text-gray-500 block">🎁 Cortesias</span>
+                        <span class="text-lg font-bold text-emerald-600">{{ totais.qtd_cortesia }}</span>
                     </div>
-                </div>
+                    
+                    <div class="text-gray-300 text-2xl font-light">|</div>
+                    
+                    <div class="text-right">
+                        <span class="text-xs text-gray-500 block">🍀 Sorte Extra</span>
+                        <span class="text-lg font-bold text-accent">{{ totais.qtd_cupons }}</span>
+                    </div>
+                </div> 
                 <div class="flex justify-between items-center pt-1">
                     <span class="text-sm font-bold text-gray-700">TOTAL GERAL:</span>
                     <span class="text-xl font-extrabold text-green-600">R$ {{ painel.receita_bruta_total | format_moeda }}</span>
@@ -151,7 +160,8 @@
                     <thead>
                         <tr class="bg-gray-100 border-b border-gray-200 text-gray-600 uppercase">
                             <th class="py-1 px-4 text-left">Colaborador</th>
-                            <th class="py-1 px-4 text-center">Qtd</th>
+                            <th class="py-1 px-4 text-center">Qtd Vendidas</th>
+                            <th class="px-1 py-4 text-emerald-600">Cortesias</th>
                             <th class="py-1 px-4 text-right bg-blue-50">Vendas</th>
                             <th class="py-1 px-4 text-right text-purple-600 border-b">Sorte Extra</th>                          
                             <th class="py-1 px-4 text-right">Comissão</th>
@@ -168,6 +178,13 @@
                                 <span class="block text-xs text-gray-400 font-normal">ID: {{ item.id }}</span>
                             </td>
                             <td class="py-1 px-4 text-center">{{ item.qtd }}</td>
+                            <td class="px-1 py-4 font-semibold text-emerald-600">
+                                {% if item.qtd_cortesia > 0 %}
+                                    {{ item.qtd_cortesia }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
                             <td class="py-1 px-4 text-right font-bold bg-blue-50">R$ {{ "{:,.2f}".format(item.vendas) }}</td>
                             <td class="py-1 px-4 text-right text-purple-600 font-semibold border-b">
                                 R$ {{ item.vendas_cupons | format_moeda }}
@@ -190,6 +207,7 @@
                         <tr>
                             <td class="py-1 px-4">TOTAIS</td>
                             <td class="py-1 px-4 text-center">{{ totais.qtd }}</td>
+                            <td class="py-1 px-4 text-right text-blue-800"> - </td> 
                             <td class="py-1 px-4 text-right text-blue-800">R$ {{ "{:,.2f}".format(totais.vendas) }}</td>
                             <td class="py-1 px-4 text-right text-purple-800">R$ {{ "{:,.2f}".format(totais.vendas_cupons) }}</td>
                             <td class="py-1 px-4 text-right text-yellow-800">R$ {{ "{:,.2f}".format(totais.comissao) }}</td>

@@ -216,7 +216,7 @@
                             <p>ID: {{ evento.id_evento }}</p>
                             <!-- DATA CORRIGIDA AQUI: Usando o campo exato agora -->
                             <p>🗓️ Data: <span class="text-md font-bold text-gray-800">**{{ evento.data_evento }} às {{ evento.hora_evento }}**</span></p>
-                            <p>💰 Unidade: <span class="font-bold text-gray-800">{{ evento.valor_venda_unit }}</span></p>
+                            <p>💰 Unid. Venda: <span class="font-bold text-gray-800">{{ evento.valor_venda_unit }}</span></p>
                             <p>⏳ Início Vendas: <span class=" font-bold text-gray-800">{{ evento.data_ativacao }}</span></p>
                         </div>
                         
@@ -225,11 +225,18 @@
                                 <p class="text-md font-semibold text-gray-700">Detalhes das Vendas:</p>
 
                                 <div class="flex justify-between">
-                                    <span class="text-gray-600">Qtd. Vendida:</span>
+                                    <span class="text-gray-600">Qtd. Vendida (Pagas):</span>
                                     <span class="font-medium text-primary">{{ evento.total_vendido }} unidades</span>
                                 </div>
 
-                                <div class="flex justify-between">
+                                {% if evento.qtd_cortesias and evento.qtd_cortesias > 0 %}
+                                <div class="flex justify-between -mt-0.5">
+                                    <span class="text-emerald-600 font-medium flex items-center gap-1"><span>🎁</span> Cortesias Dadas:</span>
+                                    <span class="font-bold text-emerald-600">{{ evento.qtd_cortesias }} unidades</span>
+                                </div>
+                                {% endif %}
+
+                                <div class="flex justify-between mt-0.5">
                                     <span class="text-gray-600">Valor Total:</span>
                                     <span class="font-bold text-lg text-primary">{{ evento.valor_total_vendido | format_moeda }}</span>
                                 </div>

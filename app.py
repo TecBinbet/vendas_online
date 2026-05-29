@@ -1417,19 +1417,27 @@ def consulta_status_eventos():
                 # NOVO: Montagem do Match Regional
                 match_regional = {}
                 if not is_master and regional_usuario:
-                    match_regional['id_regional'] = int(regional_usuario)[cite: 1]
+                    match_regional['id_regional'] = int(regional_usuario)
 
                 vendas_data_list = list(db[colecao_vendas].aggregate([
                     {'$match': match_regional}, # Garante que a soma é apenas da regional do gestor
                     {'$group': {
                         '_id': None, 
-                        'total_unidades': {'$sum': '$quantidade_unidades'}, 
+                        # Total de unidades pagas (exclui cortesias)
+                        'total_unidades': {
+                            '$sum': { '$cond': [{'$ne': ['$origem', 'cortesia_diaria']}, '$quantidade_unidades', 0] }
+                        },
+                        # NOVO: Total de cortesias (em unidades/kits)
+                        'total_cortesias': {
+                            '$sum': { '$cond': [{'$eq': ['$origem', 'cortesia_diaria']}, '$quantidade_unidades', 0] }
+                        },
                         'total_valor': {'$sum': '$valor_total'}
                     }}
                 ]))
                 vendas_data = vendas_data_list[0] if vendas_data_list else None
             
             total_unidades = vendas_data.get('total_unidades', 0) if vendas_data else 0
+            total_cortesias = vendas_data.get('total_cortesias', 0) if vendas_data else 0 # A NOVA VARIÁVEL
             valor_vendas_float = safe_float(vendas_data.get('total_valor', 0) if vendas_data else 0)
 
             # --- 2. MOTOR MATEMÁTICO (Já regionalizado na etapa anterior) ---
@@ -1469,6 +1477,7 @@ def consulta_status_eventos():
                 'valor_venda_unit': format_currency(evento.get('valor_de_venda')),
                 'data_ativacao': data_ativado_formatada,
                 'total_vendido': total_unidades,
+                'qtd_cortesias': total_cortesias,
                 'valor_total_vendido': format_currency(valor_vendas_float),
                 'premio_total': format_currency(premio_total_float),
                 'saldo': format_currency(saldo_float),
@@ -1490,7 +1499,6 @@ def consulta_status_eventos():
                            nivel=nivel_usuario, 
                            filtro_atual=filtro_str,
                            limit_atual=limit_atual)
-
 
 @app.route('/evento/mudar_status', methods=['POST'])
 @login_required
@@ -2015,7 +2023,6 @@ def alternar_status_colaborador(id_colaborador):
     except Exception as e:
         print(f"Erro ao alternar status: {e}")
         return redirect(url_for('cadastro_colaborador', view='listar', error="Erro interno ao alterar status."))
-
 
 
 # --- ROTAS DE VENDA ---
@@ -3331,7 +3338,7 @@ def cadastro_evento():
 
     # 2. Definições de Campos
     numeric_float_fields = ['valor_de_venda', 'premio_quadra', 'premio_linha', 'premio_bingo', 'premio_segundobingo', 'premio_acumulado', 'minimo_de_venda', 'premio_total', 'premio_faltaum', 'premiacao_fixa']
-    numeric_int_fields = ['unidade_de_venda', 'numero_inicial', 'numero_maximo', 'tipo_de_cartela', 'quantidade_de_linhas', 'bola_tope_acumulado']
+    numeric_int_fields = ['unidade_de_venda', 'numero_inicial', 'numero_maximo', 'tipo_de_cartela', 'quantidade_de_linhas', 'bola_tope_acumulado', 'distribuir_cortesia']
     all_numeric_fields = numeric_float_fields + numeric_int_fields
 
     # Função auxiliar interna para garantir que o Jinja não receba Decimal128
@@ -3581,7 +3588,6 @@ def excluir_evento(id_evento):
         traceback.print_exc()
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento: {e}", view='listar'))
 
-
 @app.route('/gravar_evento', methods=['POST'])
 @login_required
 def gravar_evento():
@@ -3643,6 +3649,15 @@ def gravar_evento():
 
         bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
 
+        # --- ADIÇÃO: CAPTURA DO NOVO CAMPO DE CORTESIAS ---
+        try:
+            distribuir_cortesia = int(request.form.get('distribuir_cortesia', 0))
+            if distribuir_cortesia < 0: 
+                distribuir_cortesia = 0
+        except ValueError:
+            distribuir_cortesia = 0
+        # ---------------------------------------------------
+
         if not all([data_evento_str, hora_evento, descricao, unidade_de_venda]):
              raise ValueError("Preencha todos os campos obrigatórios (*).")
 
@@ -3678,6 +3693,7 @@ def gravar_evento():
             "bola_tope_acumulado": bola_tope_acumulado,
             "minimo_de_venda": int(minimo_de_venda),
             "id_colaborador": session.get('id_colaborador', 'N/A'),
+            "distribuir_cortesia": distribuir_cortesia # --- ADIÇÃO NO DICIONÁRIO ---
         }
         
         if id_evento_edicao:
@@ -3696,16 +3712,9 @@ def gravar_evento():
             # --- FASE 3: AUTOMAÇÃO DE ÍNDICES REGIONAIS COMPOSTOS ---
             nome_colecao_vendas = f"vendas{novo_id}"
             try:
-                # 1. Índice para Relatórios e Status de Eventos (Regional + Data)
                 db[nome_colecao_vendas].create_index([("id_regional", 1), ("data_venda", -1)])
-                
-                # 2. Índice Composto para Comissões e Caixas (Regional + Vendedor)[cite: 1]
                 db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_vendedor", 1)])
-                
-                # 3. Índice Composto para Indicações e Carteira (Regional + Colaborador)[cite: 1]
                 db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_colaborador", 1)])
-                
-                # 4. Índice para Histórico do Jogador na Regional[cite: 1]
                 db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_cliente", 1)])
 
                 if MODO_DEBUG:
@@ -3723,7 +3732,6 @@ def gravar_evento():
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
         return redirect(url_for('cadastro_evento', error=f"Erro ao salvar: {e}", view=view_redirect, id_evento=id_evento_edicao))
-
 
 @app.route('/consulta_vendas', methods=['GET'])
 @login_required
@@ -4829,9 +4837,9 @@ def reimprimir_comprovante_json():
             if not venda:
                 return jsonify({'status': 'error', 'message': 'Venda não encontrada'})
             
-            add_linha("== 2 VIA DE RECIBO ==", "centro", "normal", True)
+            #add_linha("== 2 VIA DE RECIBO ==", "centro", "normal", True)
             add_linha("COMPROVANTE DE COMPRA", "centro", "normal", True)
-            add_linha(nome_sala, "centro", "normal", False)
+            #add_linha(nome_sala, "centro", "normal", False)
             add_linha(" ", "centro", "normal", False)
             
             add_linha(f"ID da Venda: {venda['id_venda']}", "centro", "normal", False)
@@ -4842,16 +4850,10 @@ def reimprimir_comprovante_json():
             add_linha(f"Colab: {venda['id_colaborador']}-{venda['nick_colaborador']}", "esquerda", "normal", False)
             add_linha("-------------------------------", "centro", "normal", False)
             
-            #add_linha("UNIDADES COMPRADAS", "centro", "normal", False)
-            #add_linha(str(venda['quantidade_unidades']), "centro", "duplo", True)
-            add_linha(f"Unidades Compradas: {venda['quantidade_unidades']})", "centro", "normal", True)
-
-            #add_linha(f"(Cartelas: {venda['quantidade_cartelas']})", "centro", "normal", False)
+            add_linha(f"Unidades Compradas: > {venda['quantidade_unidades']} <", "centro", "normal", False)
             add_linha("QTDE. CARTELAS", "centro", "normal", False)
             add_linha(str(venda['quantidade_cartelas']), "centro", "duplo", False)
 
-            add_linha(" ", "centro", "normal", False)
-            
             add_linha("> PERIODO DE CARTELAS <", "centro", "normal", True)
             add_linha(f"{venda['numero_inicial']} a {venda['numero_final']}", "centro", "normal", False)
             if venda.get('numero_inicial2', 0) > 0:
@@ -4889,9 +4891,9 @@ def reimprimir_comprovante_json():
             total_cartelas = 0
             total_valor = 0.0
             
-            add_linha("== 2 VIA DE RECIBO ==", "centro", "normal", True)
+            #add_linha("== 2 VIA DE RECIBO ==", "centro", "normal", True)
             add_linha("RESUMO DO CLIENTE", "centro", "normal", True)
-            add_linha(nome_sala, "centro", "normal", False)
+            #add_linha(nome_sala, "centro", "normal", False)
             add_linha("-------------------------------", "centro", "normal", False)
             add_linha(f"Cliente: {nome_cliente.upper()}", "esquerda", "normal", True)
             add_linha(f"ID Cliente: {id_cliente_int}", "esquerda", "normal", False)
@@ -4930,7 +4932,7 @@ def reimprimir_comprovante_json():
             return jsonify({'status': 'error', 'message': 'Tipo de reimpressão inválido.'})
         
         # --- RODAPÉ COMUM PARA AMBOS OS MODOS ---
-        add_linha("Acessar Canal do Sorteio:", "centro", "normal", False)
+        add_linha("Acesse o Canal do Sorteio", "centro", "normal", False)
         add_linha(link_final_limpo, "centro", "normal", False)
         add_linha(" ", "centro", "normal", False)
 
@@ -6170,7 +6172,7 @@ def financeiro_evento():
         elif not is_master and id_regional_sessao:
             match_regional['id_regional'] = int(id_regional_sessao)
 
-        # 3. Agregação de VENDAS
+        # 3. Agregação de VENDAS (COM FILTRO DE CORTESIAS)
         vendas_agg = []
         if nome_col_vendas in db.list_collection_names():
             pipeline = [
@@ -6178,7 +6180,15 @@ def financeiro_evento():
                 {
                     '$group': {
                         '_id': '$id_vendedor',
-                        'total_qtd': {'$sum': '$quantidade_unidades'},
+                        # Cartelas normais (exclui cortesias)
+                        'total_qtd': {
+                            '$sum': { '$cond': [{'$ne': ['$origem', 'cortesia_diaria']}, '$quantidade_unidades', 0] }
+                        },
+                        # Novidade: Conta apenas cortesias
+                        'total_qtd_cortesia': {
+                            '$sum': { '$cond': [{'$eq': ['$origem', 'cortesia_diaria']}, '$quantidade_cartelas', 0] }
+                        },
+                        # Valor financeiro real (as cortesias já estão gravadas como 0, então a soma do valor não é afetada)
                         'total_val': {'$sum': {'$toDouble': '$valor_total'}},
                         'vol_direto': {
                             '$sum': { '$cond': [{'$eq': ['$id_vendedor', '$id_colaborador']}, {'$toDouble': '$valor_total'}, 0] }
@@ -6233,7 +6243,9 @@ def financeiro_evento():
             
             relatorio[id_vend] = {
                 'id': id_vend, 'nick': mapa_nicks.get(id_vend, f'ID {id_vend}'), 
-                'qtd': v['total_qtd'], 'vendas': valor, 'comissao': comissao_merecida, 
+                'qtd': v.get('total_qtd', 0), 
+                'qtd_cortesia': v.get('total_qtd_cortesia', 0), # A NOVA VARIÁVEL
+                'vendas': valor, 'comissao': comissao_merecida, 
                 'qtd_cupons': 0, 'vendas_cupons': 0.0, 'pago_central': 0.0
             }
 
@@ -6303,7 +6315,6 @@ def financeiro_evento():
         import traceback
         traceback.print_exc()
         return redirect(url_for('financeiro_evento', error=f"Erro interno: {e}"))
-
 
 @app.route('/financeiro_periodo', methods=['GET'])
 @login_required
@@ -6429,7 +6440,14 @@ def financeiro_periodo():
                     {
                         '$group': {
                             '_id': '$id_vendedor',
-                            'total_qtd': {'$sum': '$quantidade_unidades'},
+                            # Conta apenas vendas NORMAIS
+                            'total_qtd': {
+                                '$sum': { '$cond': [{'$ne': ['$origem', 'cortesia_diaria']}, '$quantidade_unidades', 0] }
+                            },
+                            # Conta apenas CORTESIAS
+                            'total_qtd_cortesia': {
+                                '$sum': { '$cond': [{'$eq': ['$origem', 'cortesia_diaria']}, '$quantidade_cartelas', 0] }
+                            },
                             'total_val': {'$sum': {'$toDouble': '$valor_total'}},
                             'vol_direto': {
                                 '$sum': { '$cond': [{'$eq': ['$id_vendedor', '$id_colaborador']}, {'$toDouble': '$valor_total'}, 0] }
@@ -6443,8 +6461,10 @@ def financeiro_periodo():
                 for v in db[nome_col_vendas].aggregate(pipeline):
                     id_v = v['_id']
                     if id_v not in acumulado_vendas:
-                        acumulado_vendas[id_v] = {'total_qtd': 0, 'total_val': 0.0, 'vol_direto': 0.0, 'vol_ind_b': 0.0}
-                    acumulado_vendas[id_v]['total_qtd'] += v['total_qtd']
+                        # Adicionado 'total_qtd_cortesia' no dicionário inicial
+                        acumulado_vendas[id_v] = {'total_qtd': 0, 'total_qtd_cortesia': 0, 'total_val': 0.0, 'vol_direto': 0.0, 'vol_ind_b': 0.0}
+                    acumulado_vendas[id_v]['total_qtd'] += v.get('total_qtd', 0)
+                    acumulado_vendas[id_v]['total_qtd_cortesia'] += v.get('total_qtd_cortesia', 0) # NOVO ACUMULADOR
                     acumulado_vendas[id_v]['total_val'] += safe_float(v['total_val'])
                     acumulado_vendas[id_v]['vol_direto'] += safe_float(v['vol_direto'])
                     acumulado_vendas[id_v]['vol_ind_b'] += safe_float(v['vol_ind_b'])
@@ -6491,7 +6511,9 @@ def financeiro_periodo():
                 
             relatorio[id_vend] = {
                 'id': id_vend, 'nick': mapa_nicks.get(id_vend, f'ID {id_vend}'),
-                'qtd': v['total_qtd'], 'vendas': valor, 'comissao': comissao_merecida,
+                'qtd': v['total_qtd'],
+                'qtd_cortesia': v['total_qtd_cortesia'], # INJETA AQUI PARA O JINJA
+                'vendas': valor, 'comissao': comissao_merecida,
                 'qtd_cupons': 0, 'vendas_cupons': 0.0, 'pago_central': 0.0
             }
 
@@ -6499,7 +6521,7 @@ def financeiro_periodo():
             if id_vend_cupom not in relatorio:
                 relatorio[id_vend_cupom] = {
                     'id': id_vend_cupom, 'nick': mapa_nicks.get(id_vend_cupom, f'ID {id_vend_cupom}'),
-                    'qtd': 0, 'vendas': 0.0, 'comissao': 0.0, 'qtd_cupons': 0, 'vendas_cupons': 0.0, 'pago_central': 0.0
+                    'qtd': 0, 'qtd_cortesia': 0, 'vendas': 0.0, 'comissao': 0.0, 'qtd_cupons': 0, 'vendas_cupons': 0.0, 'pago_central': 0.0
                 }
             relatorio[id_vend_cupom]['qtd_cupons'] += c['total_qtd_cupons']
             relatorio[id_vend_cupom]['vendas_cupons'] += c['total_val_cupons']
@@ -6509,7 +6531,8 @@ def financeiro_periodo():
                 relatorio[id_pag]['pago_central'] += valor_pago
 
         lista_final = []
-        totais = {'vendas': 0.0, 'qtd': 0, 'comissao': 0.0, 'vendas_cupons': 0.0, 'qtd_cupons': 0, 'pago_central': 0.0, 'pendente_central': 0.0}
+        # Adicionado 'qtd_cortesia' nos totais
+        totais = {'vendas': 0.0, 'qtd': 0, 'qtd_cortesia': 0, 'comissao': 0.0, 'vendas_cupons': 0.0, 'qtd_cupons': 0, 'pago_central': 0.0, 'pendente_central': 0.0}
 
         for dados in relatorio.values():
             liquido_total_devido = (dados['vendas'] - dados['comissao']) + dados['vendas_cupons']
@@ -6522,6 +6545,7 @@ def financeiro_periodo():
             
             totais['vendas'] += dados['vendas']
             totais['qtd'] += dados['qtd']
+            totais['qtd_cortesia'] += dados['qtd_cortesia'] # SOMA AQUI!
             totais['comissao'] += dados['comissao']
             totais['vendas_cupons'] += dados['vendas_cupons']
             totais['qtd_cupons'] += dados['qtd_cupons']

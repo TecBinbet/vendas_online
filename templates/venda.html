@@ -346,9 +346,8 @@
     </div>
 
     <script>
-        let Venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}");
-        let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
-        let searchTimeout = null;
+        window.Venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}"); 
+        window.Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");        let searchTimeout = null;
         const dadosImpressaoStr = '{{ print_data | tojson | safe if print_data else "null" }}';
         const dadosImpressao = dadosImpressaoStr !== "null" ? JSON.parse(dadosImpressaoStr) : null;
 
@@ -445,56 +444,45 @@
         }
         
 function syncAndConfirm(event) {
-    // 1. Validação do cliente (mantida do seu código original)
-    const clienteInput = document.getElementById('busca_cliente_lite');
-    if (clienteInput && !clienteInput.value.trim()) {
-        bingoAlert("⚠️ O Nome do Cliente é obrigatório!", 3000, '#e74c3c');
-        clienteInput.focus();
+    const clienteInput = document.getElementById('id_cliente_busca');
+    const inputHiddenId = document.getElementById('id_cliente_final_hidden');
+    
+    // Valida se há cliente selecionado
+    if (!inputHiddenId || !inputHiddenId.value) {
+        bingoAlert("⚠️ Selecione um cliente na busca antes de confirmar!", 3000, '#e74c3c');
+        if (clienteInput) clienteInput.focus();
+        if (event) event.preventDefault();
         return false;
     }
 
-    // 2. Previne o envio padrão do formulário
     if (event) event.preventDefault();
 
-    // 3. Chama o modal assíncrono (não trava a UI)
     bingoConfirm(
         "Confirmar a gravação desta venda?", 
         () => {
-            // --- AÇÃO AO CLICAR EM "SIM" ---
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent); 
             const btn = document.getElementById('btn-confirmar-venda');
             const form = document.getElementById('confirm-form');
             
-            // UI Feedback
             if (btn) {
                 btn.disabled = true;
                 btn.innerHTML = '⏳ Gravando...';
             }
             
-            // Ativa o spinner com proteção de segurança (se existir)
             if (typeof ativarSpinner === 'function') {
                 ativarSpinner('A processar venda e a gerar bilhetes...');
             }
 
-            if (isMobile) {
-                // NO CELULAR: Abre em aba nova
-                form.setAttribute('target', '_blank');
-                form.submit();        
-                setTimeout(() => { window.location.reload(); }, 1500);
-            } else {
-                // NO PC: Mantém na mesma aba
-                form.removeAttribute('target'); 
-                form.submit();
-            }
+            // Removemos o "_blank" para não conflitar com o Android WebView
+            form.removeAttribute('target'); 
+            form.submit();
         },
         () => {
-            // --- AÇÃO AO CLICAR EM "CANCELAR" ---
             console.log("Venda cancelada pelo operador.");
             return false;
         }
     );
     
-    return false; // Garante que o formulário não submeta antes do clique
+    return false;
 }
 
         function copyReceiptText() {
@@ -815,7 +803,8 @@ async function executarAcao(formaEnvio) {
             } else if (formaEnvio === 'imprimir') {
                 imprimirCartelas58mm(dados);
             } else {
-                await handleGerarPdfLite(
+                // AGORA CHAMA A FUNÇÃO NOVA
+                await handleGerarPdf(
                     dados.numero_inicial, 
                     dados.numero_final, 
                     dados.id_evento, 
@@ -826,9 +815,41 @@ async function executarAcao(formaEnvio) {
         }
     } catch (err) {
         console.error("Erro na execução da ação:", err);
-        // Garante que o cursor volte ao normal se ocorrer erro
         document.body.style.pointerEvents = 'auto';
         bingoAlert("Falha ao processar comando.", 3000, '#e74c3c');
+    }
+}
+
+// ====================================================
+// --- GERAÇÃO DE PDF E ENVIO WHATSAPP (UNIVERSAL) ---
+// ====================================================
+async function handleGerarPdf(numInicial, numFinal, idEvento, nomeCliente, tipoCartela) {
+    const baseUrl = `/gerar_cartelas_pdf_${tipoCartela}`;
+    const params = new URLSearchParams({
+        numero_inicial_pdf: numInicial,
+        numero_final_pdf: numFinal,
+        id_evento: idEvento,
+        id_cliente: 0,
+        nome_cliente: nomeCliente
+    });
+    
+    const urlCompleta = window.location.origin + baseUrl + '?' + params.toString();
+
+    // VERIFICA ONDE O SISTEMA ESTÁ RODANDO (App Android vs PC)
+    if (typeof window.AndroidTerminal !== 'undefined') {
+        // --- 1. ESTÁ NO APP ANDROID ---
+        bingoAlert("⏳ Preparando arquivo para o WhatsApp...", 2000, '#0047AB');
+        
+        // Mágica da Interceptação Nativa (O Kotlin vai assumir daqui)
+        const urlPdfCodificada = encodeURIComponent(urlCompleta);
+        const nomeCodificado = encodeURIComponent(`Cartelas_${nomeCliente}.pdf`);
+        window.location.href = `meuapp://enviarpdf?url=${urlPdfCodificada}&nome=${nomeCodificado}`;
+    
+    } else {
+        // --- 2. ESTÁ NO COMPUTADOR (Navegador) ---
+        bingoAlert("⏳ Gerando PDF no navegador...", 2000, '#0047AB');
+        // Abre o PDF numa aba nova para o caixa imprimir ou enviar pelo WhatsApp Web
+        window.open(urlCompleta, '_blank');
     }
 }
 
