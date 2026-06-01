@@ -221,7 +221,9 @@
                         <span id="cartelas-display">{{ (quantidade * selected_event.unidade_de_venda) if quantidade > 0 and selected_event else 0 }}</span>.
                     </small>
                 </div>
-                <div id="total-custo" class="mt-1">Custo Total: R$ {{ "%.2f" | format(custo) }}</div>
+                <div id="total-custo" class="mt-2 shadow-sm" style="display: {% if quantidade and quantidade > 0 %}block{% else %}none{% endif %};">
+                    Custo Total: <strong>R$ {{ "%.2f" | format(custo | default(0.0)) }}</strong>
+                </div>
             {% endif %}
         </form>
 
@@ -346,8 +348,14 @@
     </div>
 
     <script>
-        window.Venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}"); 
-        window.Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");        let searchTimeout = null;
+        // 1. Definição Global (Mantendo o que você já tinha)
+        var searchTimeout = null;
+    
+        // Garantir que os valores unitários são tratados como número logo no início
+        const rawValor = "{{ selected_event.valor_de_venda_float | default(0) }}".toString().replace(',', '.');
+        window.Venda_ValorUnitario = parseFloat(rawValor) || 0; 
+        window.Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default(0) }}") || 0;
+
         const dadosImpressaoStr = '{{ print_data | tojson | safe if print_data else "null" }}';
         const dadosImpressao = dadosImpressaoStr !== "null" ? JSON.parse(dadosImpressaoStr) : null;
 
@@ -405,34 +413,44 @@
             document.getElementById('main-form').submit();
         }
 
-        function updateTotalCost() {
-            const campoQuantidade = document.getElementById('quantidade');
-            const totalCustoDiv = document.getElementById('total-custo');
-            const spanBotaoCusto = document.getElementById('btn-custo-text');
-            const inputPostQuantidade = document.getElementById('post_quantidade');
-            const containerConfirmacao = document.getElementById('confirm-sales-container');
+// --- FUNÇÃO DE CÁLCULO (BLINDADA) ---
+    function updateTotalCost() {
+        const campoQuantidade = document.getElementById('quantidade');
+        const divTotalCusto = document.getElementById('total-custo');
+        const spanBotaoCusto = document.getElementById('btn-custo-text');
+        const inputPostQuantidade = document.getElementById('post_quantidade');
+        const containerConfirmacao = document.getElementById('confirm-sales-container');
 
-            if (campoQuantidade) {
-                const quantidade = parseInt(campoQuantidade.value) || 0;
-                const total = quantidade * Venda_ValorUnitario;
-                const formatado = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-                if (totalCustoDiv) totalCustoDiv.textContent = `Custo Total: ${formatado}`;
-                if (spanBotaoCusto) spanBotaoCusto.textContent = formatado;
-                if (inputPostQuantidade) inputPostQuantidade.value = quantidade;
-                if (containerConfirmacao) containerConfirmacao.style.display = (quantidade > 0) ? 'block' : 'none';
-            }
+        if (!campoQuantidade) {
+            console.error("Campo 'quantidade' não encontrado no DOM!");
+            return;
         }
+
+        const qtd = parseFloat(campoQuantidade.value) || 0;
+        const total = qtd * window.Venda_ValorUnitario;
+
+        console.log(`Debug: Qtd=${qtd}, Unitário=${window.Venda_ValorUnitario}, Total=${total}`);
+
+        if (divTotalCusto) {
+            const formatado = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+            divTotalCusto.innerHTML = `Custo Total: <strong>${formatado}</strong>`;
+            divTotalCusto.style.display = (qtd > 0) ? 'block' : 'none';
+        }
+
+        if (spanBotaoCusto) spanBotaoCusto.textContent = total > 0 ? total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '';
+        if (inputPostQuantidade) inputPostQuantidade.value = qtd;
+        if (containerConfirmacao) containerConfirmacao.style.display = (qtd > 0) ? 'block' : 'none';
         
-        function updateCartelasDisplay() {
-            const campoQuantidade = document.getElementById('quantidade');
-            
-            // Trava de segurança: Se o campo não existir na tela, aborta a função silenciosamente
-            if (!campoQuantidade) return;
-            
-            const q = parseInt(document.getElementById('quantidade').value) || 0;
-            const display = document.getElementById('cartelas-display');
-            if (display) display.textContent = (q * Venda_UnidadeCartelas);
+        updateCartelasDisplay();
+    }	
+        
+   function updateCartelasDisplay() {
+        const q = parseInt(document.getElementById('quantidade')?.value) || 0;
+        const display = document.getElementById('cartelas-display');
+        if (display) {
+            display.textContent = (q * window.Venda_UnidadeCartelas);
         }
+    }
 
         function openEventSelector() { document.getElementById('event-selector-modal').style.display = 'flex'; }
         function closeEventSelector() { document.getElementById('event-selector-modal').style.display = 'none'; }
@@ -729,6 +747,14 @@ function syncAndConfirm(event) {
         }
 
         document.addEventListener('DOMContentLoaded', () => {
+  
+        const campo = document.getElementById('quantidade');
+        if (campo) {
+            campo.addEventListener('input', updateTotalCost);
+            // Executa imediatamente para garantir o cálculo se já houver valor no input
+            updateTotalCost();
+        }
+
             initPrinterConfig();
 
             const inputId = document.getElementById('input_id_evento');

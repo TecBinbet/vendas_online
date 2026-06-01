@@ -7446,9 +7446,12 @@ def financeiro_clientes():
     # 2. Construção da Query Base (Regionalizada)
     query = {}
     
-    # Trava Regional: Essencial para isolamento e performance
+    # 🚀 CORREÇÃO: Trava Regional Blindada contra Valores Nulos ou Inválidos
     if not is_master and id_regional_sessao:
-        query['id_regional'] = int(id_regional_sessao)[cite: 1]
+        try:
+            query['id_regional'] = int(id_regional_sessao)
+        except (ValueError, TypeError):
+            pass # Ignora silenciosamente se houver lixo na variável da sessão
 
     # Tratamento de Datas
     try:
@@ -8167,6 +8170,97 @@ def criar_indices_regionais(db):
             # Índice Composto: Filtra por regional e ordena por data (mais recente primeiro)
             db[col_name].create_index([("id_regional", 1), ("data_venda", -1)])
     return "Índices criados com sucesso!"
+
+
+
+# ROTA 1: Carrega a página HTML
+@app.route('/admin/clonar_banco', methods=['GET'])
+@login_required
+def view_clonar_banco():
+    # Segurança: Apenas Master deve acessar esta ferramenta
+    if session.get('nivel', 0) < 4:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado. Área Master."))
+    
+    # Obtém o cliente raiz do MongoDB para listar todos os bancos
+    # Adapte 'mongo.cx' para a variável do seu MongoClient (ex: client)
+    cliente_mongo = get_vendas_db().client 
+    
+    bancos_ocultos = ['admin', 'config', 'local']
+    bancos_disponiveis = [db for db in cliente_mongo.list_database_names() if db not in bancos_ocultos]
+    
+    return render_template('clonar_banco.html', bancos=bancos_disponiveis)
+
+
+# ROTA 2: API que devolve as tabelas (coleções) de um banco escolhido
+@app.route('/api/colecoes_banco/<nome_banco>', methods=['GET'])
+@login_required
+def api_colecoes_banco(nome_banco):
+    if session.get('nivel', 0) < 4:
+        return jsonify({'status': 'error', 'message': 'Acesso negado'})
+        
+    try:
+        cliente_mongo = get_vendas_db().client
+        db_origem = cliente_mongo[nome_banco]
+        colecoes = db_origem.list_collection_names()
+        # Ordena alfabeticamente para facilitar a visualização
+        return jsonify({'status': 'success', 'colecoes': sorted(colecoes)})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
+# ROTA 3: API que faz a cópia (Clone) das tabelas e dados
+@app.route('/api/executar_clone', methods=['POST'])
+@login_required
+def api_executar_clone():
+    if session.get('nivel', 0) < 4:
+        return jsonify({'status': 'error', 'message': 'Acesso negado'})
+
+    dados = request.json
+    db_origem_nome = dados.get('db_origem')
+    db_destino_nome = dados.get('db_destino')
+    colecoes_selecionadas = dados.get('colecoes', [])
+
+    if not db_origem_nome or not db_destino_nome or not colecoes_selecionadas:
+        return jsonify({'status': 'error', 'message': 'Dados incompletos. Preencha todos os campos.'})
+
+    try:
+        cliente_mongo = get_vendas_db().client
+        db_origem = cliente_mongo[db_origem_nome]
+        db_destino = cliente_mongo[db_destino_nome]
+
+        estatisticas = []
+
+        for nome_col in colecoes_selecionadas:
+            col_origem = db_origem[nome_col]
+            col_destino = db_destino[nome_col]
+
+            # Copiamos em lotes de 1000 documentos para proteger a memória do servidor
+            lote = []
+            total_copiado = 0
+            
+            # Limpa a coleção de destino caso ela já exista para evitar duplicação (Opcional, mas seguro)
+            col_destino.delete_many({})
+
+            for documento in col_origem.find():
+                lote.append(documento)
+                if len(lote) >= 1000:
+                    col_destino.insert_many(lote)
+                    total_copiado += len(lote)
+                    lote = []
+            
+            if lote:
+                col_destino.insert_many(lote)
+                total_copiado += len(lote)
+                
+            estatisticas.append(f"{nome_col} ({total_copiado} docs)")
+
+        msg_sucesso = f"Banco '{db_destino_nome}' gerado com sucesso! Tabelas clonadas: " + ", ".join(estatisticas)
+        return jsonify({'status': 'success', 'message': msg_sucesso})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': f"Erro interno: {str(e)}"})
 
 #########################################################
 if __name__ == '__main__':
