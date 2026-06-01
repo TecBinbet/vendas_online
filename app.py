@@ -5982,9 +5982,17 @@ def reset_senhas_global_temp():
 def monitor_saques():
     db = get_vendas_db()
     if db is None: return redirect(url_for('login'))
+    # 1. Primeiro capturamos o nível do usuário
+    nivel_usuario = session.get('nivel', 0)
     
-    if session.get('nivel', 0) < 3:
+    # 2. Depois fazemos a verificação de acesso
+    if nivel_usuario < 3:
         return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+
+    # --- 🚀 ADICIONE ESTAS LINHAS AQUI ---
+    id_regional_sessao = session.get('id_regional')
+    is_master = (nivel_usuario >= 4)
+    # ------------------------------------
 
     filtro_status = request.args.get('status', 'pendente')
     
