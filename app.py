@@ -3873,7 +3873,7 @@ def consulta_vendas():
             
             # Trava Regional: Essencial para usar o ÍNDICE COMPOSTO da Fase 3[cite: 1]
             if not is_master and id_regional_sessao:
-                match_stage['id_regional'] = int(id_regional_sessao)[cite: 1]
+                match_stage['id_regional'] = int(id_regional_sessao)
 
             # Filtro por Colaborador Específico
             if nivel_usuario < 3:
@@ -5995,6 +5995,11 @@ def monitor_saques():
         limit_param = 30 # Fallback se digitarem texto
         
     query = {}
+
+    if not is_master and id_regional_sessao:
+        # AQUI FOI REMOVIDO O QUE CAUSAVA O ERRO
+        query['id_regional'] = int(id_regional_sessao)
+
     if filtro_status != 'todos':
         query['status'] = filtro_status
 
