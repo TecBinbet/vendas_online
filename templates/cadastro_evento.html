@@ -352,6 +352,13 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="combo_qtde" class="text-purple-700 font-bold">Venda p/ COMBO (Qtd Eventos):</label>
+                        <input type="number" id="combo_qtde" name="combo_qtde" min="1" max="20" class="form-control bg-purple-50 border-purple-300 text-purple-900 font-bold focus:ring-purple-500"
+                               value="{{ evento.get('combo_qtde', 1) }}">
+                        <p class="text-[10px] text-purple-600 font-bold italic -mt-2">1 = Normal | 3 = Evento Atual + 2 Próximos</p>
+                    </div>
+
+                    <div class="form-group">
                         <label for="distribuir_cortesia">Cortesias (Qtd. por Cliente):</label>
                         <input type="number" id="distribuir_cortesia" name="distribuir_cortesia" min="0" step="1" class="form-control"
                                value="{{ evento.get('distribuir_cortesia', 0) }}">
@@ -1055,6 +1062,24 @@
             const horaInput = document.getElementById('hora_evento');
             if(dataInput) dataInput.addEventListener('change', checkAvailability);
             if(horaInput) horaInput.addEventListener('input', checkAvailability);
+
+            // 🚀 LÓGICA DE AUTO-REPLICAÇÃO PARA COMBO
+            const urlParams = new URLSearchParams(window.location.search);
+            if (urlParams.has('auto_replicar')) {
+                const replicas = urlParams.get('auto_replicar');
+                abrirModalReplicar();
+                document.getElementById('rep_qtd').value = replicas;
+                
+                // Destaca o campo de intervalo para o operador não esquecer
+                const inputIntervalo = document.getElementById('rep_intervalo');
+                inputIntervalo.classList.add('border-2', 'border-red-500', 'animate-pulse');
+                setTimeout(() => inputIntervalo.focus(), 500);
+                
+                // Remove a classe de alerta quando o utilizador interagir
+                inputIntervalo.addEventListener('input', () => {
+                    inputIntervalo.classList.remove('border-2', 'border-red-500', 'animate-pulse');
+                }, { once: true });
+            }
         });
 
         async function sugerirNumeroInicial() {

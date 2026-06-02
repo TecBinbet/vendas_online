@@ -85,8 +85,15 @@ def nova_venda_lite():
     padrao_venda = parametros.get('padrao_registro_vendas', 'quantidade') 
     print(f"🛠️ [DEBUG TELA LITE] Padrão de formulário capturado: '{padrao_venda}'")
 
-    # Busca Lista de Eventos Ativos para o Modal
-    eventos_cursor = db.eventos.find({'status': 'ativo'}).sort('data_evento', 1)
+    # =================================================================
+    # 🚀 FILTRO ANTI-COMBO: Oculta as réplicas do dropdown de vendas
+    # =================================================================
+    query_eventos = {
+        'status': 'ativo',
+        'id_evento_principal_combo': {'$exists': False} # Traz apenas eventos normais ou "Pais"
+    }
+    
+    eventos_cursor = db.eventos.find(query_eventos).sort('data_evento', 1)
     
     # 👉 TRATAMENTO DOS DADOS PARA O JINJA (CRIANDO O FLOAT)
     eventos = []
@@ -141,6 +148,29 @@ def nova_venda_lite():
     )
 
 
+@venda_lite_bp.route('/api/buscar_cliente_whatsapp', methods=['POST'])
+def buscar_cliente_whatsapp():
+    """Busca silenciosa do cliente pelo WhatsApp na tela de Venda Lite"""
+    from app import get_vendas_db, clean_numeric_string
+    db = get_vendas_db()
+    
+    dados = request.json
+    telefone_raw = dados.get('telefone', '')
+    telefone_limpo = clean_numeric_string(telefone_raw)
+
+    if not telefone_limpo or len(telefone_limpo) < 10:
+        return jsonify({'status': 'not_found'})
+
+    cliente = db.clientes.find_one({'telefone': telefone_limpo})
+    if cliente:
+        return jsonify({
+            'status': 'success',
+            'id_cliente': cliente.get('id_cliente'),
+            'nick': cliente.get('nick', '')
+        })
+    return jsonify({'status': 'not_found'})
+
+
 # 3. Rota de Processamento Atômico (Grava no Banco)
 @venda_lite_bp.route('/processar_venda_lite', methods=['POST'])
 def processar_venda_lite():
@@ -148,24 +178,31 @@ def processar_venda_lite():
         return redirect(url_for('login_page'))
 
     """
-    print("REQUISIÇÃO CHEGOU NO SERVIDOR! (lite)")
-
     Processo de Venda Lite (Balcão Rápido).
     Mantém travas atômicas e coleções dinâmicas, ignora saldo de cliente.
+    INCLUI MOTOR V8 DE INJEÇÃO COMBO.
     """
     # IMPORTAÇÃO LOCAL PARA EVITAR CIRCULAR IMPORT
-    from app import get_vendas_db, hora_brasil, safe_float, try_object_id, get_next_bilhete_sequence, get_next_global_sequence, registrar_comissao_vendedor
+    from app import get_vendas_db, hora_brasil, safe_float, try_object_id, get_next_bilhete_sequence, get_next_global_sequence, registrar_comissao_vendedor, clean_numeric_string, get_next_cliente_sequence, formatar_nome_proprio
     
     db = get_vendas_db()
     if db is None: 
         return redirect(url_for('venda_lite.nova_venda_lite', error="DB Offline."))
 
     id_evento_string = request.form.get('id_evento')
+    # 🚀 NOVOS CAMPOS DO CLIENTE
+    telefone_cliente_lite_raw = request.form.get('telefone_cliente_lite', '').strip()
     nick_cliente_lite = request.form.get('nick_cliente_lite', '').strip() 
+    id_cliente_lite_str = request.form.get('id_cliente_lite', '0')
     
+    telefone_limpo = clean_numeric_string(telefone_cliente_lite_raw)
+
     error_redirect_kwargs = {'id_evento': id_evento_string}
 
-    # Trava Backend: Nome obrigatório
+    if not telefone_limpo or len(telefone_limpo) < 10:
+        error_redirect_kwargs['error'] = "O N° do WhatsApp é obrigatório e deve ser válido."
+        return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
+        
     if not nick_cliente_lite:
         error_redirect_kwargs['error'] = "O Nome do Cliente é obrigatório."
         return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
@@ -184,7 +221,6 @@ def processar_venda_lite():
     # Carregar Parâmetros Globais
     parametros = db.parametros.find_one({}) or {}
     padrao_venda = parametros.get('padrao_registro_vendas', 'quantidade')
-    #cartelas_por_kit = parametros.get('unidade_de_venda', 6)
 
     tipo_cartela = int(selected_event.get('tipo_de_cartela', 15))
     id_evento_int_para_controle = selected_event.get('id_evento')
@@ -192,6 +228,9 @@ def processar_venda_lite():
     valor_unitario = safe_float(selected_event.get('valor_de_venda', 0.00))
     unidade_de_venda = int(selected_event.get('unidade_de_venda', 1))
     
+    # 🚀 CAPTURA DA VARIÁVEL COMBO
+    combo_qtde = int(selected_event.get('combo_qtde', 1))
+
     colaborador_id = session.get('id_colaborador', 'N/A')
     nick_colaborador_sessao = session.get('nick', 'Operador') 
     regional_operador = session.get('id_regional', 1)
@@ -219,7 +258,6 @@ def processar_venda_lite():
             # =================================================================
             # 🛡️ VALIDAÇÃO CRÍTICA: LIMITE MÁXIMO DE KITS PERMITIDO
             # =================================================================
-            # Evita divisão por zero caso unidade_de_venda esteja nulo ou inválido
             divisor_unidade = unidade_de_venda if unidade_de_venda > 0 else 1
             limite_maximo_kits = limite_maximo_cartelas // divisor_unidade
 
@@ -234,9 +272,10 @@ def processar_venda_lite():
 
             quantidade_kits = (numero_kit_final - numero_kit_inicial) + 1
             quantidade = quantidade_kits # Unidades brutas (Kits)
+
             quantidade_cartelas_atual = quantidade_kits * unidade_de_venda
             
-            # Chama a nossa nova função matemática baseada no período
+            # Chama a nossa nova função matemática baseada no período original
             numero_inicial_atual, numero_final_atual = converter_intervalo_kits_para_cartelas(
                 numero_kit_inicial, numero_kit_final, unidade_de_venda
             )
@@ -247,11 +286,7 @@ def processar_venda_lite():
             if conflito:
                 v_ini = conflito.get('numero_inicial')
                 v_fim = conflito.get('numero_final')
-            
-                print(f"[DEBUG] Validando: Pedido ({numero_inicial_atual}-{numero_final_atual}) vs Conflito ({v_ini}-{v_fim})")
-                print(f"[DEBUG] Tipos: Pedido={type(numero_inicial_atual)}, Conflito={type(v_ini)}")
 
-                # Lógica de Diferenciação
                 if v_ini >= numero_inicial_atual and v_fim <= numero_final_atual:
                     if numero_inicial_atual == v_ini and numero_final_atual == v_fim:
                         msg_erro = "⛔ Venda Totalmente Bloqueada: Este período já foi vendido!"
@@ -290,17 +325,54 @@ def processar_venda_lite():
         novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
         id_venda_formatado = f"VL{novo_id_venda_int:05d}" 
 
+        id_transacao_combo = id_venda_formatado if combo_qtde > 1 else None
+
+        # ==============================================================================
+        # 🚀 MOTOR CRM: RESOLUÇÃO OU CRIAÇÃO DO CLIENTE AUTOMÁTICA
+        # ==============================================================================
+        id_cliente_final = int(id_cliente_lite_str) if id_cliente_lite_str.isdigit() else 0
+        nick_cliente_final = formatar_nome_proprio(nick_cliente_lite)
+
+        # 1. Tenta achar o cliente no DB (caso o JS tenha falhado)
+        cliente_existente = db.clientes.find_one({'telefone': telefone_limpo})
+        
+        if cliente_existente:
+            id_cliente_final = int(cliente_existente['id_cliente'])
+            nick_cliente_final = cliente_existente['nick']
+        elif id_cliente_final == 0:
+            # 2. CLIENTE NOVO! Vamos criar o cadastro automaticamente
+            id_cliente_final = get_next_cliente_sequence()
+            novo_cliente = {
+                "id_cliente": id_cliente_final,
+                "nome_cliente": nick_cliente_final,
+                "nick": nick_cliente_final,
+                "telefone": telefone_limpo,
+                "cpf": "",
+                "cidade": "",
+                "id_regional": regional_operador,
+                "id_colaborador": colaborador_id,
+                "data_cadastro": hora_brasil(),
+                "data_atualizacao": hora_brasil(),
+                "origem": "venda_lite_automatica",
+                "saldo_atual": Decimal128("0.00")
+            }
+            db.clientes.insert_one(novo_cliente)
+        # ==============================================================================
+
         registro_venda = {
             "id_venda": id_venda_formatado,
             "id_evento_ObjectId": selected_event['_id'], 
             "id_evento": id_evento_int_para_controle, 
             "descricao_evento": selected_event.get('descricao'),
             "id_regional": regional_operador,
-            "id_cliente": 0, 
-            "nome_cliente": nick_cliente_lite,
-            "telefone_cliente": "",
+            
+            # 🚀 AGORA A VENDA FICA AMARRADA AO CLIENTE CORRETO
+            "id_cliente": id_cliente_final, 
+            "nome_cliente": nick_cliente_final,
+            "telefone_cliente": telefone_limpo,
+            
             "id_colaborador": colaborador_id, 
-            "nick_colaborador": nick_colaborador_sessao,  # 🛠️ CORREÇÃO: Grava o operador logado diretamente
+            "nick_colaborador": nick_colaborador_sessao,
             "id_vendedor": colaborador_id,
             "data_venda": hora_brasil(),
             "tipo_cartela": tipo_cartela,
@@ -312,7 +384,8 @@ def processar_venda_lite():
             "numero_final2": 0,
             "valor_unitario": Decimal128(str(valor_unitario)), 
             "valor_total": Decimal128(str(valor_total_atual)),
-            "origem": "venda_lite"
+            "origem": "venda_lite",
+            "id_transacao_combo": id_transacao_combo
         }
 
         db[nome_colecao_venda].insert_one(registro_venda)
@@ -321,6 +394,66 @@ def processar_venda_lite():
             {"id_evento": id_evento_int_para_controle},
             {"$inc": {"valor_pendente_telemovel": float(valor_total_atual)}}
         )
+
+        # ==============================================================================
+        # 🚀 NOVO: MOTOR DE INJEÇÃO COMBO (V8) PARA VENDA LITE
+        # ==============================================================================
+        if combo_qtde > 1:
+            eventos_relacionados = selected_event.get('eventos_combo_relacionados', [])
+            
+            if eventos_relacionados:
+                # O Kit principal vendido (Ex: se quantidade = 1 e inicial = 1, kit_base = 1)
+                kit_base_inicial = ((numero_inicial_atual - 1) // unidade_de_venda) + 1
+                
+                for index, id_evento_irmao in enumerate(eventos_relacionados):
+                    if index >= (combo_qtde - 1): 
+                        break # Garante que não injeta além da quantidade definida
+                        
+                    nome_colecao_irmao = f"vendas{id_evento_irmao}"
+                    evento_irmao = db.eventos.find_one({'id_evento': id_evento_irmao})
+                    
+                    if evento_irmao:
+                        # 1. Calcula o novo kit correspondente a esta réplica
+                        novo_kit_inicial = kit_base_inicial + (index + 1)
+                        
+                        # 2. Converte o número do kit de volta para a cartela inicial e final correspondente
+                        novo_numero_inicial_replica = ((novo_kit_inicial - 1) * unidade_de_venda) + 1
+                        novo_numero_final_replica = novo_numero_inicial_replica + quantidade_cartelas_atual - 1
+                        
+                        # 3. Monta o registo clonado
+                        registro_venda_irmao = registro_venda.copy()
+                        del registro_venda_irmao['_id'] 
+                        
+                        novo_id_replica_int = get_next_global_sequence(db, 'id_vendas_global')
+                        
+                        registro_venda_irmao.update({
+                            "id_venda": f"VL{novo_id_replica_int:05d}",
+                            "id_evento_ObjectId": evento_irmao.get('_id'), 
+                            "id_evento": id_evento_irmao, 
+                            "descricao_evento": evento_irmao.get('descricao'),
+                            "numero_inicial": novo_numero_inicial_replica,
+                            "numero_final": novo_numero_final_replica,
+                            "numero_inicial2": 0,
+                            "numero_final2": 0,
+                            "valor_unitario": Decimal128("0.00"), 
+                            "valor_total": Decimal128("0.00"),
+                            "origem": "combo_replica_lite",
+                            "observacao": f"Kit pertencente ao COMBO pago na Venda Lite {id_venda_formatado}"
+                        })
+                        
+                        # Grava na coleção do evento futuro
+                        if nome_colecao_irmao in db.list_collection_names():
+                            db[nome_colecao_irmao].insert_one(registro_venda_irmao)
+                            
+                        # Atualiza o ponteiro de próxima venda no controle do irmão
+                        db.controle_venda.update_one(
+                            {'id_evento': id_evento_irmao},
+                            {'$set': {'inicial_proxima_venda': novo_numero_final_replica + 1}},
+                            upsert=True
+                        )
+        # ==============================================================================
+        # FIM DA INJEÇÃO DO COMBO
+        # ==============================================================================
 
         taxa_operador_bruta = parametros.get('perc_venda_direta', 15.0)
         taxa_operador = float(str(taxa_operador_bruta))

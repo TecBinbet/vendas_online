@@ -210,23 +210,37 @@
                     <p class="text-lg text-red-600 -mt-1.5 -mb-2.5 ">  Numeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
                 </div>
             </form> <hr class="my-4 border-gray-300">
+
             <form method="POST" action="{{ url_for('venda_lite.processar_venda_lite') }}" id="confirm-form">
                 <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
                 
-                <div class="form-group relative mt-2">
-                    <label for="busca_cliente_lite" class="font-bold">Cliente:</label>
-                    <div class="flex gap-2">
-                        <input type="text" id="busca_cliente_lite" name="nick_cliente_lite" class="form-control flex-grow" 
-                               placeholder="Digite apelido ou nome..." autocomplete="off" required>
-                        <button type="button" onclick="limparCliente()" class="bg-gray-200 hover:bg-gray-300 px-3 py-2 rounded text-sm font-bold border border-gray-400">
-                            Limpar
-                        </button>
+                <div class="form-group relative mt-2 bg-green-50/50 p-3 rounded-lg border border-green-200 shadow-sm">
+                    <h3 class="text-xs font-bold text-green-800 mb-2 border-b border-green-200 pb-1 uppercase tracking-wider">Identificação do Cliente</h3>
+                    
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+                        <div>
+                            <label for="telefone_cliente_lite" class="font-bold text-gray-700 text-sm">N° WhatsApp:</label>
+                            <input type="tel" id="telefone_cliente_lite" name="telefone_cliente_lite" 
+                                   class="form-control font-bold text-lg border-green-400 focus:ring-green-500 shadow-inner placeholder-gray-300" 
+                                   placeholder="(11) 99999-9999" required autocomplete="off"
+                                   oninput="formatarTelefone(this)" onblur="buscarClienteWhatsApp()">
+                        </div>
+                        
+                        <div class="relative">
+                            <label for="nick_cliente_lite" class="font-bold text-gray-700 text-sm">Nome / Apelido:</label>
+                            <div class="flex gap-2">
+                                <input type="text" id="nick_cliente_lite" name="nick_cliente_lite" 
+                                       class="form-control flex-grow transition-colors" placeholder="Nome do cliente..." required autocomplete="off">
+                                <button type="button" onclick="limparCliente()" class="bg-white hover:bg-gray-100 text-red-600 px-3 py-2 rounded text-sm font-bold border border-red-200 transition shadow-sm">
+                                    Limpar
+                                </button>
+                            </div>
+                            <span id="badge_cliente" class="absolute -top-1 right-0 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow hidden">Cadastrado!</span>
+                        </div>
                     </div>
                     
-                    <div id="lite-autocomplete-results" class="bg-white border border-gray-300 shadow absolute w-full z-50 rounded" style="display: none; max-height: 200px; overflow-y: auto;"></div>
-                    
-                    <input type="hidden" name="nick_cliente_lite" id="nick_cliente_lite">
-                    <input type="hidden" name="colaborador_cliente_lite" id="colaborador_cliente_lite">
+                    <input type="hidden" id="id_cliente_lite" name="id_cliente_lite" value="0">
+                    <input type="hidden" name="colaborador_cliente_lite" id="colaborador_cliente_lite" value="">
                 </div>
 
                 {% if padrao_venda == 'quantidade' %}
@@ -240,20 +254,37 @@
                             Total de cartelas: <span id="cartelas-display">0</span>
                         </small>
                     </div>
+
                 {% elif padrao_venda == 'numeracao' %}
+                    {% if selected_event.combo_qtde and selected_event.combo_qtde > 1 %}
+                    <div class="bg-orange-100 border-l-4 border-orange-500 p-1 -mt-1 mb-1 rounded shadow-sm">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="text-xl">🔥</span>
+                            <strong class="text-orange-800 text-sm uppercase tracking-tight">Venda COMBO Ativa ({{ selected_event.combo_qtde }} Eventos)</strong>
+                        </div>
+                        <p class="text-orange-700 text-xs font-medium">O sistema reservará automaticamente os próximos {{ selected_event.combo_qtde - 1 }} kits em sequência nos eventos futuros.</p>
+                        <p class="text-orange-800 font-bold mt-1 text-[11px] bg-orange-200/50 p-1 rounded inline-block">
+                            ⚠️ Inicie pelos múltiplos primários: 1, {{ 1 + selected_event.combo_qtde }}, {{ 1 + (selected_event.combo_qtde * 2) }}, {{ 1 + (selected_event.combo_qtde * 3) }}...
+                        </p>
+                    </div>
+                    {% endif %}
+
                     <div class="form-group mt-3 flex gap-2">
-                        <div class="w-1/2">
+                        <div class="{% if selected_event.combo_qtde and selected_event.combo_qtde > 1 %}w-full{% else %}w-1/2{% endif %}">
                             <label for="numero_kit_inicial">3. Kit/Rodapé Inicial:</label>
                             <input type="number" id="numero_kit_inicial" name="numero_kit_inicial" 
                                    min="1" required class="form-control text-xl px-2 py-1 border-yellow-500 bg-yellow-50" 
                                    oninput="updateTotalCostKit();">
                         </div>
+                        
+                        {% if not selected_event.combo_qtde or selected_event.combo_qtde <= 1 %}
                         <div class="w-1/2">
                             <label for="numero_kit_final">Kit/Rodapé Final (Opcional):</label>
                             <input type="number" id="numero_kit_final" name="numero_kit_final" 
                                    min="1" class="form-control text-xl px-2 py-1 border-yellow-500 bg-yellow-50" 
                                    oninput="updateTotalCostKit();" placeholder="Igual ao Inicial">
                         </div>
+                        {% endif %}
                     </div>
 
                     <div id="alerta-limite-kit" class="hidden -mt-1 mb-2 bg-red-100 border-l-4 border-red-500 text-red-700 p-2 text-sm rounded shadow-sm">
@@ -400,6 +431,7 @@
     <script>
         let venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}");
         let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
+        let Evento_ComboQtde = parseInt("{{ selected_event.combo_qtde | default('1') }}"); // 🚀 CARREGAMENTO DO COMBO
         let searchTimeout = null;
         const dadosImpressaoStr = '{{ print_data | tojson | safe if print_data else "null" }}';
         const dadosImpressao = dadosImpressaoStr !== "null" ? JSON.parse(dadosImpressaoStr) : null;
@@ -466,6 +498,116 @@
             });
         }
 
+// Variável global para evitar que o sistema faça a mesma busca 2 vezes seguidas
+        let ultimoWhatsAppBuscado = ''; 
+
+        function formatarTelefone(input) {
+            let v = input.value.replace(/\D/g, '');
+            if (v.length > 11) v = v.slice(0, 11);
+            if (v.length >= 3) {
+                input.value = `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7)}`;
+            } else {
+                input.value = v;
+            }
+
+            // 🚀 AUTO-BUSCA: Ao atingir 11 números, dispara a pesquisa sozinho!
+            if (v.length === 11) {
+                buscarClienteWhatsApp();
+            } else {
+                // Se o utilizador apagar um número, reseta a trava
+                ultimoWhatsAppBuscado = ''; 
+            }
+        }
+
+        async function buscarClienteWhatsApp() {
+            const telInput = document.getElementById('telefone_cliente_lite');
+            const nickInput = document.getElementById('nick_cliente_lite');
+            const idInput = document.getElementById('id_cliente_lite');
+            const colabInput = document.getElementById('colaborador_cliente_lite');
+            const badge = document.getElementById('badge_cliente');
+            
+            const telefoneLimpo = telInput.value.replace(/\D/g, '');
+            if (telefoneLimpo.length < 10) return;
+            
+            // Evita requisição duplicada se o número não mudou
+            if (telefoneLimpo === ultimoWhatsAppBuscado) return; 
+            ultimoWhatsAppBuscado = telefoneLimpo;
+
+            try {
+                telInput.classList.add('opacity-70');
+                
+                const res = await fetch('/api/buscar_cliente_whatsapp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telefone: telefoneLimpo })
+                });
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    // ✅ CLIENTE ENCONTRADO
+                    nickInput.value = data.nick;
+                    idInput.value = data.id_cliente;
+                    if(data.id_colaborador) colabInput.value = data.id_colaborador; 
+                    
+                    nickInput.readOnly = true;
+                    nickInput.classList.add('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+                    badge.classList.remove('hidden');
+
+                    // 🚀 DIRECIONA O FOCO PARA A VENDA (Kit Inicial ou Quantidade)
+                    const kitInput = document.getElementById('numero_kit_inicial');
+                    const qtdInput = document.getElementById('quantidade') || document.querySelector('input[name="quantidade"]');
+                    
+                    if (kitInput && !kitInput.disabled) {
+                        setTimeout(() => kitInput.focus(), 100);
+                    } else if (qtdInput && !qtdInput.disabled) {
+                        setTimeout(() => qtdInput.focus(), 100);
+                    } else {
+                        telInput.blur(); // Apenas esconde o teclado se não achar o próximo campo
+                    }
+
+                } else {
+                    // 🆕 NOVO CLIENTE
+                    idInput.value = '0';
+                    nickInput.readOnly = false;
+                    nickInput.value = ''; 
+                    nickInput.classList.remove('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+                    badge.classList.add('hidden');
+                    
+                    // 🚀 DIRECIONA O FOCO PARA O NOME
+                    setTimeout(() => nickInput.focus(), 100);
+                }
+            } catch (e) { 
+                console.error("Erro ao buscar WhatsApp", e); 
+                ultimoWhatsAppBuscado = ''; // Libera a busca em caso de erro
+            } finally {
+                telInput.classList.remove('opacity-70');
+            }
+        }
+
+        function limparCliente() {
+            const telInput = document.getElementById('telefone_cliente_lite');
+            const nickInput = document.getElementById('nick_cliente_lite');
+            
+            telInput.value = '';
+            nickInput.value = '';
+            nickInput.readOnly = false;
+            nickInput.classList.remove('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+            
+            document.getElementById('id_cliente_lite').value = '0';
+            document.getElementById('colaborador_cliente_lite').value = '';
+            document.getElementById('badge_cliente').classList.add('hidden');
+            
+            ultimoWhatsAppBuscado = ''; 
+            
+            // 🚀 Limpa a memória do navegador
+            localStorage.removeItem('lite_telefone');
+            localStorage.removeItem('lite_nick');
+            localStorage.removeItem('lite_id');
+            localStorage.removeItem('lite_colab');
+
+            telInput.focus();
+        }
+
         // Cálculos de Custo
         function exibirBotaoCusto(mostrar, valorTotal) {
             const totalCustoDiv = document.getElementById('total-custo');
@@ -492,12 +634,16 @@
 
         function updateTotalCostKit() {
             const campoInicial = document.getElementById('numero_kit_inicial');
-            const campoFinal = document.getElementById('numero_kit_final');
+            const campoFinal = document.getElementById('numero_kit_final'); // Pode ser nulo no COMBO
             const divInfo = document.getElementById('info_cartelas_kit');
 
             const alertaDiv = document.getElementById('alerta-limite-kit');
             const spanMaxKits = document.getElementById('span-max-kits');
             const btnSubmit = document.querySelector('button[type="submit"]');
+
+            // Limpa o alerta de erro de combo se existir
+            const divErroCombo = document.getElementById('alerta-erro-combo');
+            if (divErroCombo) divErroCombo.remove();
 
             const limiteMaximoCartelas = parseInt('{{ selected_event.numero_maximo | default(72000) }}', 10);
             const unidadeDeVenda = parseInt('{{ selected_event.unidade_de_venda | default(6) }}', 10);
@@ -506,8 +652,29 @@
 
             if (campoInicial && campoInicial.value) {
                 const kIni = parseInt(campoInicial.value);
+                
+                // Se for Combo, forçamos o Final a ser igual ao Inicial na tela de cobrança
                 let kFim = campoFinal && campoFinal.value ? parseInt(campoFinal.value) : kIni;
                 if (kFim < kIni) kFim = kIni; 
+
+                // 🚀 TRAVA MATEMÁTICA DO COMBO
+                if (Evento_ComboQtde > 1) {
+                    if ((kIni - 1) % Evento_ComboQtde !== 0) {
+                        const erroDiv = document.createElement('div');
+                        erroDiv.id = 'alerta-erro-combo';
+                        erroDiv.className = 'bg-red-100 border-l-4 border-red-500 text-red-700 p-2 text-sm rounded shadow-sm mt-2 font-bold animate-pulse';
+                        erroDiv.innerHTML = `⚠️ Bloqueio COMBO: O kit ${kIni} é secundário. <br>Inicie pelos blocos primários corretos (1, ${1 + Evento_ComboQtde}, ${1 + (Evento_ComboQtde*2)}...).`;
+                        campoInicial.parentNode.appendChild(erroDiv);
+                        
+                        if (btnSubmit) {
+                            btnSubmit.disabled = true;
+                            btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+                        }
+                        exibirBotaoCusto(false, 0);
+                        if (divInfo) divInfo.style.display = 'none';
+                        return; // Aborta e mantém o botão bloqueado
+                    }
+                }
 
                 if (kIni > limiteMaximoKits || kFim > limiteMaximoKits) {
                     if (spanMaxKits) spanMaxKits.textContent = limiteMaximoKits;
@@ -531,11 +698,16 @@
                 const cartelaInicial = ((kIni - 1) * Venda_UnidadeCartelas) + 1;
                 const cartelaFinal = kFim * Venda_UnidadeCartelas;
 
+                // O valor da cobrança é o valor unitário normal da tela (a mágica de injetar R$ 0,00 nos próximos eventos acontece no backend)
                 exibirBotaoCusto(qtdKits > 0, qtdKits * venda_ValorUnitario);
 
                 if (divInfo && qtdKits > 0) {
                     divInfo.style.display = 'block';
-                    divInfo.innerHTML = `Venda de <strong>${qtdKits}</strong> Kit(s) <br> Cartelas correspondentes: <strong>${cartelaInicial} à ${cartelaFinal}</strong>`;
+                    if (Evento_ComboQtde > 1) {
+                        divInfo.innerHTML = `Venda <strong>COMBO</strong> (Abrange os kits <strong>${kIni}</strong> ao <strong>${kIni + Evento_ComboQtde - 1}</strong> nos eventos amarrados).<br> <span class="text-xs text-gray-600">O pagamento integral entrará no caixa atual.</span>`;
+                    } else {
+                        divInfo.innerHTML = `Venda de <strong>${qtdKits}</strong> Kit(s) <br> Cartelas correspondentes: <strong>${cartelaInicial} à ${cartelaFinal}</strong>`;
+                    }
                 }
             } else {
                 exibirBotaoCusto(false, 0);
@@ -579,54 +751,81 @@
             document.getElementById('main-form').submit();
         }
         
-function syncAndConfirm(event) {
-    // 1. Validação inicial (mantemos como está)
-    const clienteInput = document.getElementById('busca_cliente_lite');
-    if (clienteInput && !clienteInput.value.trim()) {
-        alert("⚠️ O Nome do Cliente é obrigatório!");
-        clienteInput.focus();
-        return false;
-    }
+        function salvarClienteNoLocalStorage() {
+            const telInput = document.getElementById('telefone_cliente_lite');
+            if (telInput && telInput.value) {
+                localStorage.setItem('lite_telefone', telInput.value);
+                localStorage.setItem('lite_nick', document.getElementById('nick_cliente_lite').value);
+                localStorage.setItem('lite_id', document.getElementById('id_cliente_lite').value);
+                localStorage.setItem('lite_colab', document.getElementById('colaborador_cliente_lite').value);
+            }
+        }
 
-    // 2. Previne o envio padrão do formulário
-    if (event) event.preventDefault();
+        function syncAndConfirm(event) {
+            // 1. Previne que o "Enter" envie o formulário ou abra o modal prematuramente
+            if (event) event.preventDefault();
 
-    // 3. Chama o modal assíncrono
-    bingoConfirm(
-        "Confirmar a gravação desta venda?", 
-        () => {
-            // --- AÇÃO AO CLICAR EM "SIM" ---
-            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry/i.test(navigator.userAgent); 
-            const btn = document.getElementById('btn-confirmar-venda');
-            const form = document.getElementById('confirm-form');
+            // 2. Validação de Cliente (WhatsApp e Nome)
+            const telInput = document.getElementById('telefone_cliente_lite');
+            const nickInput = document.getElementById('nick_cliente_lite');
             
-            btn.disabled = true;
-            btn.innerHTML = '⏳ Gravando...';           
-            
-            // Ativa o spinner com proteção de segurança (se existir)
-            if (typeof ativarSpinner === 'function') {
-                ativarSpinner('A processar venda e a gerar bilhetes...');
+            if (telInput && !telInput.value.trim()) {
+                alert("⚠️ O N° do WhatsApp é obrigatório!");
+                telInput.focus();
+                return false;
             }
 
-            form.removeAttribute('target');
-            form.submit();
-            //if (isMobile) {
-            //    setTimeout(() => { 
-            //        btn.disabled = false;
-            //       btn.innerHTML = 'Confirmar Venda'; 
-            //    }, 3000);
-            //}
-        },
+            if (nickInput && !nickInput.value.trim()) {
+                alert("⚠️ O Nome do Cliente é obrigatório!");
+                nickInput.focus();
+                return false;
+            }
 
-        () => {
-            // --- AÇÃO AO CLICAR EM "CANCELAR" ---
-            console.log("Venda cancelada.");
-            return false;
+            // 3. Validação de Valores (Kit Inicial ou Quantidade)
+            const campoQuantidade = document.getElementById('quantidade');
+            const campoKit = document.getElementById('numero_kit_inicial');
+            
+            if (campoQuantidade && (!campoQuantidade.value || parseInt(campoQuantidade.value) <= 0)) {
+                // Só avisa se o campo existir e estiver vazio/zerado
+                alert("⚠️ Informe a Quantidade de kits antes de confirmar!");
+                campoQuantidade.focus();
+                return false;
+            }
+
+            if (campoKit && (!campoKit.value || parseInt(campoKit.value) <= 0)) {
+                alert("⚠️ Informe o Kit Inicial antes de confirmar!");
+                campoKit.focus();
+                return false;
+            }
+
+            // 🚀 Se passou em todas as validações, guarda o cliente no cache!
+            salvarClienteNoLocalStorage();
+
+            // 4. Chama o modal de confirmação
+            bingoConfirm(
+                "Confirmar a gravação desta venda?", 
+                () => {
+                    const btn = document.getElementById('btn-confirmar-venda');
+                    const form = document.getElementById('confirm-form');
+                    
+                    btn.disabled = true;
+                    btn.innerHTML = '⏳ Gravando...';           
+                    
+                    if (typeof ativarSpinner === 'function') {
+                        ativarSpinner('A processar venda e a gerar bilhetes...');
+                    }
+
+                    form.removeAttribute('target');
+                    form.submit();
+                },
+                () => {
+                    console.log("Venda cancelada.");
+                    return false;
+                }
+            );
+            
+            return false; 
         }
-    );
-    
-    return false; // Sempre retorna false para não submeter o form antes do clique no modal
-}
 
         function copyReceiptText() {
             const content = document.getElementById('receipt-content');
@@ -688,15 +887,6 @@ function syncAndConfirm(event) {
             if (inputBusca) inputBusca.value = '';
             const results = document.getElementById('lite-autocomplete-results'); 
             if (results) results.style.display = 'none';
-        }
-
-        function limparCliente() {
-            const campoClienteLite = document.getElementById('busca_cliente_lite');
-            if (campoClienteLite) {
-                campoClienteLite.value = '';
-                campoClienteLite.focus();
-            }
-            localStorage.removeItem('ultimo_cliente_lite');
         }
 
 // Variável para travar a abertura enquanto estiver carregando
@@ -1024,19 +1214,50 @@ async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, t
             const inputId = document.getElementById('input_id_evento');
             if (!inputId || !inputId.value) openEventSelector();
 
-            const campoClienteLite = document.getElementById('busca_cliente_lite');
-            const nomeSalvo = localStorage.getItem('ultimo_cliente_lite');
-            if (nomeSalvo && campoClienteLite) {
-                campoClienteLite.value = nomeSalvo;
+            // 🚀 RESTAURAR CLIENTE DA MEMÓRIA
+            const savedTel = localStorage.getItem('lite_telefone');
+            const savedNick = localStorage.getItem('lite_nick');
+            
+            if (savedTel && savedNick) {
+                const telInput = document.getElementById('telefone_cliente_lite');
+                const nickInput = document.getElementById('nick_cliente_lite');
+                const idInput = document.getElementById('id_cliente_lite');
+                const colabInput = document.getElementById('colaborador_cliente_lite');
+                const badge = document.getElementById('badge_cliente');
+
+                if (telInput) telInput.value = savedTel;
+                if (nickInput) {
+                    nickInput.value = savedNick;
+                    nickInput.readOnly = true;
+                    nickInput.classList.add('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+                }
+                
+                const savedId = localStorage.getItem('lite_id');
+                const savedColab = localStorage.getItem('lite_colab');
+                
+                if (idInput && savedId) idInput.value = savedId;
+                if (colabInput && savedColab) colabInput.value = savedColab;
+                
+                // Se o ID for > 0 significa que é um cliente cadastrado e mostramos a tag azul
+                if (badge && savedId !== '0') badge.classList.remove('hidden');
+                
+                // Trava a requisição automática para não consumir recursos atoa
+                ultimoWhatsAppBuscado = savedTel.replace(/\D/g, ''); 
+                
+                // Foca automaticamente no Kit para o operador já continuar vendendo
+                const kitInput = document.getElementById('numero_kit_inicial');
+                if (kitInput) setTimeout(() => kitInput.focus(), 100);
             }
-           
+
             if (document.getElementById('quantidade')) {
                 updateTotalCostLite();
-            } else if (document.getElementById('numero_kit')) {
+            } else if (document.getElementById('numero_kit_inicial')) {
                 updateTotalCostKit();
             }
             
             updateCartelasDisplay();
+
+            // ... (O resto do código do DOMContentLoaded com os disparos de Bluetooth mantém-se igual)
 
             // ====================================================
             // 🚀 DISPARO EXTERNO CORRIGIDO (Evita travar o WebView)        
@@ -1125,7 +1346,6 @@ async function executarAcao(formaEnvio) {
         }
     }
 }
-
 
     </script>
 </body>
