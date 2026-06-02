@@ -245,6 +245,14 @@
                     </div>
                     {% endif %}
 
+                    {% if nivel >= 4 %}
+                    <div class="form-group">
+                        <label for="id_regional" class="text-amber-700 font-bold">🏢 ID Regional (Master):</label>
+                        <input type="number" id="id_regional" name="id_regional" class="form-control bg-amber-50 border-amber-300 focus:ring-amber-500" value="{{ cliente.get('id_regional', '') }}" placeholder="Ex: 1" min="1">
+                        <small class="text-[10px] font-bold text-amber-600 uppercase">Define a qual sala o cliente pertence.</small>
+                    </div>
+                    {% endif %}
+
                     {% if "nome_cliente" in campos %}
                     <div class="form-group">
                         <label for="nome_cliente" class="{% if campos.get('nome_cliente') %}required-label{% endif %}">Nome Completo:</label>
@@ -341,9 +349,17 @@
                                     </div>
                                     <p class="text-xs text-gray-400 font-medium">{{ cliente.nome_cliente }} | {{ cliente.cidade | default('N/A') }}</p>
                                 </div>
-                                <div class="text-right">
-                                    <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</p>
-                                    <span class="text-xl font-black {{ 'text-red-600' if cliente.saldo_float < 0 else 'text-blue-600' }}">R$ {{ cliente.saldo_float | format_moeda }}</span>
+                                <div class="flex items-center gap-4 text-right">
+                                    <div class="pr-4 border-r-2 border-gray-100">
+                                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Regional</p>
+                                        <span class="text-xl font-black text-gray-500">
+                                            {{ cliente.get('id_regional', 1) }}
+                                        </span>
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</p>
+                                        <span class="text-xl font-black {{ 'text-red-600' if cliente.saldo_float < 0 else 'text-blue-600' }}">R$ {{ cliente.saldo_float | format_moeda }}</span>
+                                    </div>
                                 </div>
                             </div>
                             <div class="mt-4 flex flex-wrap gap-2 items-center">
@@ -417,11 +433,26 @@
 </div>
 {% endif %}
 
+            {% if nivel >= 4 %}
+            <form method="GET" action="{{ url_for('cadastro_cliente') }}" class="mb-4 bg-gray-50 border border-gray-200 p-3 rounded-xl flex items-end gap-3 shadow-sm">
+                <input type="hidden" name="view" value="listar">
+                <div class="flex-1 max-w-xs">
+                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Filtrar por Regional:</label>
+                    <input type="number" name="filtro_regional" class="form-control mb-0 py-1.5 border-gray-300 text-sm font-bold text-gray-700" placeholder="ID da Regional (Ex: 1)" value="{{ request.args.get('filtro_regional', '') }}">
+                </div>
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-1.5 rounded-lg text-sm transition">Buscar</button>
+                {% if request.args.get('filtro_regional') %}
+                    <a href="{{ url_for('cadastro_cliente', view='listar') }}" class="bg-gray-300 hover:bg-gray-400 text-gray-700 font-bold px-4 py-1.5 rounded-lg text-sm transition">Limpar</a>
+                {% endif %}
+            </form>
+            {% endif %}
+
 
                 <table class="min-w-full bg-white">
                     <thead>
                         <tr class="list-header bg-gray-50 text-[12px] font-black text-gray-600 uppercase tracking-widest text-left">
-                            <th class="py-1 px-4 border-b">ID</th>
+                            <th class="py-1 px-1 border-b">ID</th>
+                            <th class="py-1 px-1 border-b text-center">Reg.</th> 
                             <th class="py-1 px-4 border-b">Nick / Nome</th>
                             <th class="py-1 px-4 border-b">Cidade</th>
                             <th class="py-1 px-4 border-b">Saldo (R$)</th>
@@ -432,7 +463,13 @@
                         {% if active_view == 'listar' and clientes_lista %}
                             {% for cliente in clientes_lista %}
                             <tr class="list-row hover:bg-green-50/50 transition duration-150">
-                                <td class="py-1 px-4 border-b font-mono text-[20px] text-gray-800">{{ cliente.id_cliente }}</td>
+                                <td class="py-1 px-1 border-b font-mono text-[20px] text-gray-800">{{ cliente.id_cliente }}</td>
+                                <td class="py-1 px-1 border-b text-center">
+                                    <span class="bg-amber-100 text-amber-800 font-black text-xs px-2 py-1 rounded-md">
+                                        {{ cliente.get('id_regional', 1) }}
+                                    </span>
+                                </td>
+
                                 <td class="py-1 px-4 border-b">
                                     <div class="font-bold text-[16px] text-blue-800 uppercase tracking-tighter">{{ cliente.nick }}</div>
                                     <div class="font-semibold text-[14px] text-gray-600">{{ cliente.nome_cliente }}</div>

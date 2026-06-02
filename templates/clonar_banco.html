@@ -38,9 +38,9 @@
             </div>
 
             <div id="container_destino" class="mb-6 hidden">
-                <label class="block text-sm font-bold text-gray-700 mb-2">3. Nome do Novo Banco de Dados</label>
-                <input type="text" id="db_destino" placeholder="Ex: VendasOnLine_004" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition">
-                <p class="text-xs text-gray-500 mt-1">Se o banco não existir, o sistema o criará automaticamente.</p>
+                <label class="block text-sm font-bold text-gray-700 mb-2">3. URL do Cluster de Destino</label>
+                <input type="text" id="url_destino" placeholder="Ex: mongodb+srv://usuario:senha@cluster0.mongodb.net/?appName=Cluster0" class="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-indigo-500 outline-none transition font-mono text-sm">
+                <p class="text-xs text-blue-600 font-bold mt-2">💡 O novo banco assumirá automaticamente o nome da origem.</p>
             </div>
 
             <div id="container_botao" class="mt-8 hidden">
@@ -53,7 +53,7 @@
     </div>
 
     <script>
-        function carregarColecoes() {
+         function carregarColecoes() {
             const dbNome = document.getElementById('db_origem').value;
             const containerCol = document.getElementById('container_colecoes');
             const listaCol = document.getElementById('lista_colecoes');
@@ -80,10 +80,16 @@
                             return;
                         }
                         data.colecoes.forEach(col => {
+                            // 🚀 LÓGICA DA TRAVA VISUAL
+                            const isObrigatorio = col === 'parametros' || col === 'colaboradores';
+                            const checkState = isObrigatorio ? 'checked disabled' : '';
+                            const badge = isObrigatorio ? '<span class="text-[10px] text-red-500 font-bold ml-1 uppercase">(Obrigatório)</span>' : '';
+                            const cursorStyle = isObrigatorio ? 'cursor-not-allowed opacity-80 bg-red-50' : 'cursor-pointer hover:bg-gray-100';
+
                             listaCol.innerHTML += `
-                                <label class="flex items-center space-x-2 cursor-pointer p-2 hover:bg-gray-100 rounded transition">
-                                    <input type="checkbox" name="colecao" value="${col}" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500">
-                                    <span class="text-sm font-medium text-gray-700 truncate" title="${col}">${col}</span>
+                                <label class="flex items-center space-x-2 ${cursorStyle} p-2 rounded transition border border-transparent ${isObrigatorio ? 'border-red-100' : ''}">
+                                    <input type="checkbox" name="colecao" value="${col}" class="w-4 h-4 text-indigo-600 rounded focus:ring-indigo-500" ${checkState}>
+                                    <span class="text-sm font-medium text-gray-700 truncate" title="${col}">${col} ${badge}</span>
                                 </label>
                             `;
                         });
@@ -97,7 +103,8 @@
         }
 
         function marcarTodas() {
-            const checkboxes = document.querySelectorAll('input[name="colecao"]');
+            // 🚀 Ignora os checkboxes que estão bloqueados (disabled) para não alterar o estado deles
+            const checkboxes = document.querySelectorAll('input[name="colecao"]:not(:disabled)');
             let todasMarcadas = true;
             
             checkboxes.forEach(cb => { if (!cb.checked) todasMarcadas = false; });
@@ -106,21 +113,24 @@
 
         function executarClone() {
             const dbOrigem = document.getElementById('db_origem').value;
-            const dbDestino = document.getElementById('db_destino').value.trim();
+            const urlDestino = document.getElementById('url_destino').value.trim();
             const btn = document.getElementById('btn_clonar');
             
             const checkboxes = document.querySelectorAll('input[name="colecao"]:checked');
             const colecoesSelecionadas = Array.from(checkboxes).map(cb => cb.value);
 
-            if (!dbDestino) { alert("Por favor, informe o nome do novo banco de dados."); return; }
-            if (dbOrigem === dbDestino) { alert("A origem e o destino não podem ter o mesmo nome."); return; }
+            // 🚀 TRAVA DE SEGURANÇA: Garante as tabelas estruturais no pacote
+            if (!colecoesSelecionadas.includes('parametros')) colecoesSelecionadas.push('parametros');
+            if (!colecoesSelecionadas.includes('colaboradores')) colecoesSelecionadas.push('colaboradores');
+
+            if (!urlDestino) { alert("Por favor, informe a URL de conexão do destino."); return; }
             if (colecoesSelecionadas.length === 0) { alert("Selecione pelo menos uma tabela para copiar."); return; }
 
-            if (!confirm(`Confirma a clonagem de ${colecoesSelecionadas.length} tabelas para o banco '${dbDestino}'?`)) return;
+            if (!confirm(`Confirma a clonagem de ${colecoesSelecionadas.length} tabelas para o servidor de destino?`)) return;
 
             // Muda estado do botão
             const btnHtmlOriginal = btn.innerHTML;
-            btn.innerHTML = '⏳ Copiando Dados... Por favor, não feche a página.';
+            btn.innerHTML = '⏳ Conectando e Copiando...';
             btn.disabled = true;
             btn.classList.replace('bg-indigo-600', 'bg-gray-400');
             btn.classList.remove('hover:bg-indigo-700');
@@ -130,7 +140,7 @@
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     db_origem: dbOrigem,
-                    db_destino: dbDestino,
+                    url_destino: urlDestino,
                     colecoes: colecoesSelecionadas
                 })
             })
@@ -138,9 +148,7 @@
             .then(data => {
                 if (data.status === 'success') {
                     alert("🎉 Sucesso!\n" + data.message);
-                    document.getElementById('db_destino').value = '';
-                    // Opcional: Recarregar a página para o novo banco aparecer na origem
-                    window.location.reload(); 
+                    document.getElementById('url_destino').value = '';
                 } else {
                     alert("⚠️ Erro: " + data.message);
                 }

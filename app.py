@@ -2876,8 +2876,15 @@ def cadastro_cliente():
        
             if active_view == 'listar':
                 query_listagem = base_query.copy()
+                
+                # Filtro existente por colaborador
                 if filtro_colab:
                     query_listagem["id_colaborador"] = filtro_colab
+
+                # 🚀 NOVO: Filtro por Regional (Apenas para Master)
+                filtro_regional = request.args.get('filtro_regional')
+                if session.get('nivel', 0) >= 4 and filtro_regional and filtro_regional.isdigit():
+                    query_listagem["id_regional"] = int(filtro_regional)
 
                 clientes_cursor = db.clientes.find(query_listagem).sort("nick", pymongo.ASCENDING).limit(100)
                 clientes_lista = list(clientes_cursor)
@@ -2942,7 +2949,8 @@ def gravar_cliente():
     next_page = request.form.get('next', 'menu_operacoes')
     view_mode = 'novo' if not id_cliente_raw else 'alterar'
     
-    #print(f"\n[DEBUG] --- INICIANDO GRAVAR CLIENTE ---")
+    # Captura explícita da regional enviada pelo formulário (se existir)
+    id_regional_form = request.form.get('id_regional')
 
     try:
         # 1. Coleta de Dados
@@ -2984,28 +2992,20 @@ def gravar_cliente():
             if cliente_nick and str(cliente_nick.get('id_cliente')) != str(id_cliente_raw or ''):
                 raise ValueError(f"O Nick '{nick}' já está em uso.")
 
-        # --- NOVA LÓGICA DE SENHA (CORREÇÃO) ---
+        # --- NOVA LÓGICA DE SENHA ---
         hashed_password = None
         
         if not id_cliente_raw:  # NOVO CADASTRO
-            # Se não digitou senha, define o padrão "senha"
             senha_final = senha if senha else "Senha"
-            
-            # Se ele digitou algo, validamos a confirmação
             if senha and senha != confirma_senha:
                 raise ValueError("As senhas não conferem.")
-                
-            # Criptografa a senha (seja a digitada ou a padrão "senha")
             hashed_password = bcrypt.hashpw(senha_final.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-            #print(f"[DEBUG] Definindo senha para novo cliente: {'Padrão' if not senha else 'Manual'}")
             
         else:  # EDIÇÃO
-            # Na edição, só processamos se o campo de senha não estiver vazio
             if senha:
                 if senha != confirma_senha:
                     raise ValueError("As senhas não conferem.")
                 hashed_password = bcrypt.hashpw(senha.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
-                #print("[DEBUG] Atualizando senha do cliente (Manual)")
 
         # Busca se o modo treinamento está ON  
         params = db.parametros.find_one({})
@@ -3023,35 +3023,51 @@ def gravar_cliente():
             "data_atualizacao": hora_brasil()
         }
         
-        # Só adicionamos a chave "senha" ao dicionário se ela foi gerada
+        # Se veio do formulário e é válido, atualiza no dicionário (Útil para Master alterando Regional)
+        if id_regional_form and id_regional_form.isdigit():
+            dados_cliente["id_regional"] = int(id_regional_form)
+        
         if hashed_password:
             dados_cliente["senha"] = hashed_password
 
         # 5. Gravação no Banco
         if id_cliente_raw:
             # Edição
-            #print(f"[DEBUG] Atualizando ID {id_cliente_raw}")
             db.clientes.update_one({'id_cliente': int(id_cliente_raw)}, {'$set': dados_cliente})
             registrar_log("EDITAR", "CLIENTES", f"Dados do cliente {nick} alterados.", id_cliente_raw)
             success_msg = f"Cliente {nick} atualizado com sucesso!"
         else:
-            # Novo
-            #print(f"[DEBUG] Criando Novo Cliente")
+            # Novo Cadastro - 🚀 LÓGICA DE ATRIBUIÇÃO REGIONAL
+            if "id_regional" not in dados_cliente:
+                id_regional_final = 1 # Valor Default (Matriz / Auto-cadastro)
+                
+                id_regional_sessao = session.get('id_regional')
+                id_colab_sessao = session.get('id_colaborador')
+                
+                if id_regional_sessao:
+                    id_regional_final = int(id_regional_sessao)
+                elif id_colab_sessao:
+                    # Fallback: Tenta buscar a regional no cadastro do colaborador se a sessão falhar
+                    colab_db = db.colaboradores.find_one({'id_colaborador': id_colab_sessao})
+                    if colab_db and 'id_regional' in colab_db:
+                        id_regional_final = int(colab_db['id_regional'])
+                        
+                dados_cliente["id_regional"] = id_regional_final
+
             novo_id = get_next_cliente_sequence()
             if not novo_id: raise Exception("Erro Sequence ID.")
             
             dados_cliente.update({
                 "id_cliente": novo_id,
                 "id_colaborador": session.get('id_colaborador'),
-                "data_cadastro":hora_brasil() if isinstance(hora_brasil(), datetime) else datetime.now(),
+                "data_cadastro": hora_brasil() if isinstance(hora_brasil(), datetime) else datetime.now(),
                 "origem": "interno",
-                "em_treinamento": modo_treino, # Marca se o cliente nasceu no treino
+                "em_treinamento": modo_treino,
                 "saldo_atual": Decimal128("1000.00") if modo_treino else Decimal128("0.00")
             })
             
             db.clientes.insert_one(dados_cliente)
 
-            # Se for treino, já gera a primeira transação no extrato para ficar bonito
             if modo_treino:
                 db.transacoes_clientes.insert_one({
                     "id_transacao": f"TRX_TREINO_{int(time.time())}",
@@ -3059,24 +3075,23 @@ def gravar_cliente():
                     "tipo": "recarga_treinamento",
                     "valor": Decimal128("1000.00"),
                     "natureza": "ENTRADA",
-                    "saldo_anterior": Decimal128("0.00"), # <-- Adicionado
-                    "saldo_posterior": Decimal128("1000.00"), # <-- Adicionado
+                    "saldo_anterior": Decimal128("0.00"), 
+                    "saldo_posterior": Decimal128("1000.00"), 
                     "descricao": "Bônus de Boas-vindas (MODO TREINAMENTO)",
-                    "registrado_por": "SISTEMA", # <-- Adicionado
+                    "registrado_por": "SISTEMA", 
                     "data_hora": hora_brasil()
                 })
 
             success_msg = f"Cliente {nick} cadastrado! ID: CLI{novo_id}"
 
-        #print(f"[DEBUG] Sucesso! Redirecionando...\n")
         return redirect(url_for('cadastro_cliente', view='listar', success=success_msg))
 
     except ValueError as ve:
-        print(f"[DEBUG] ERRO DE VALIDAÇÃO: {ve}")
         cliente_form = {
             'id_cliente': id_cliente_raw, 'nome_cliente': nome_cliente, 'nick': nick,
             'telefone': telefone, 'cpf': cpf_raw, 'cidade': cidade,
-            'chave_pix': request.form.get('chave_pix'), 'observacao': observacao
+            'chave_pix': request.form.get('chave_pix'), 'observacao': observacao,
+            'id_regional': id_regional_form # Devolve para o form não perder caso dê erro
         }
         return render_template('cadastro_cliente.html', 
                                error=str(ve),
@@ -3088,7 +3103,6 @@ def gravar_cliente():
                                g=g)
 
     except Exception as e:
-        print(f"[DEBUG] ERRO CRÍTICO: {e}")
         traceback.print_exc()
         return render_template('cadastro_cliente.html', 
                                error=f"Erro interno: {e}",
@@ -7776,6 +7790,127 @@ def exportar_indicacoes():
     )
 
 
+# ROTA 1: Carrega a página HTML
+@app.route('/admin/clonar_banco', methods=['GET'])
+@login_required
+def view_clonar_banco():
+    # Segurança: Apenas Master deve acessar esta ferramenta
+    if session.get('nivel', 0) < 4:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado. Área Master."))
+    
+    # Obtém o cliente raiz do MongoDB para listar todos os bancos
+    # Adapte 'mongo.cx' para a variável do seu MongoClient (ex: client)
+    cliente_mongo = get_vendas_db().client 
+    
+    bancos_ocultos = ['admin', 'config', 'local']
+    bancos_disponiveis = [db for db in cliente_mongo.list_database_names() if db not in bancos_ocultos]
+    
+    return render_template('clonar_banco.html', bancos=bancos_disponiveis)
+
+
+# ROTA 2: API que devolve as tabelas (coleções) de um banco escolhido
+@app.route('/api/colecoes_banco/<nome_banco>', methods=['GET'])
+@login_required
+def api_colecoes_banco(nome_banco):
+    if session.get('nivel', 0) < 4:
+        return jsonify({'status': 'error', 'message': 'Acesso negado'})
+        
+    try:
+        cliente_mongo = get_vendas_db().client
+        db_origem = cliente_mongo[nome_banco]
+        colecoes = db_origem.list_collection_names()
+        # Ordena alfabeticamente para facilitar a visualização
+        return jsonify({'status': 'success', 'colecoes': sorted(colecoes)})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
+# ROTA 3: API que faz a cópia (Clone) das tabelas e dados para uma URL Externa
+@app.route('/api/executar_clone', methods=['POST'])
+@login_required
+def api_executar_clone():
+    if session.get('nivel', 0) < 4:
+        return jsonify({'status': 'error', 'message': 'Acesso negado'})
+
+    dados = request.json
+    db_origem_nome = dados.get('db_origem')
+    url_destino_bruta = dados.get('url_destino') # Recebe a URL base
+    colecoes_selecionadas = dados.get('colecoes', [])
+
+     # 🚀 TRAVA DE SEGURANÇA: Injeta tabelas vitais obrigatoriamente
+    tabelas_vitais = ['parametros', 'colaboradores']
+    for tabela in tabelas_vitais:
+        if tabela not in colecoes_selecionadas:
+            colecoes_selecionadas.append(tabela)
+
+    if not db_origem_nome or not url_destino_bruta or not colecoes_selecionadas:
+        return jsonify({'status': 'error', 'message': 'Dados incompletos. Preencha todos os campos.'})
+
+    try:
+        from pymongo import MongoClient
+
+        # --- TRATAMENTO INTELIGENTE DA URL ---
+        # 1. Separa os parâmetros (tudo depois do '?')
+        partes_url = url_destino_bruta.split('?', 1)
+        url_base = partes_url[0]
+        query_params = '?' + partes_url[1] if len(partes_url) > 1 else ''
+
+        # 2. Isola o protocolo (mongodb:// ou mongodb+srv://) do host
+        if '://' in url_base:
+            protocolo, resto = url_base.split('://', 1)
+        else:
+            protocolo, resto = 'mongodb', url_base
+
+        # 3. Limpa qualquer banco que o usuário possa ter deixado na URL
+        host_auth = resto.split('/')[0]
+
+        # 4. Reconstrói a URL final forçando o nome do banco de origem
+        url_destino_final = f"{protocolo}://{host_auth}/{db_origem_nome}{query_params}"
+        # -------------------------------------
+
+        # Conexão de Origem
+        cliente_origem = get_vendas_db().client
+        db_origem = cliente_origem[db_origem_nome]
+
+        # Conexão de Destino (Usando a URL tratada)
+        cliente_destino = MongoClient(url_destino_final)
+        db_destino = cliente_destino[db_origem_nome]
+
+        estatisticas = []
+
+        for nome_col in colecoes_selecionadas:
+            col_origem = db_origem[nome_col]
+            col_destino = db_destino[nome_col]
+
+            # Copiamos em lotes de 1000 documentos
+            lote = []
+            total_copiado = 0
+            
+            # Limpa a coleção de destino caso ela já exista
+            col_destino.delete_many({})
+
+            for documento in col_origem.find():
+                lote.append(documento)
+                if len(lote) >= 1000:
+                    col_destino.insert_many(lote)
+                    total_copiado += len(lote)
+                    lote = []
+            
+            if lote:
+                col_destino.insert_many(lote)
+                total_copiado += len(lote)
+                
+            estatisticas.append(f"{nome_col} ({total_copiado} docs)")
+
+        msg_sucesso = f"Banco '{db_origem_nome}' espelhado com sucesso no novo servidor! Tabelas clonadas: " + ", ".join(estatisticas)
+        return jsonify({'status': 'success', 'message': msg_sucesso})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': f"Erro interno: {str(e)}"})
+
+
 #=================================================================
 # CORREÇÕES DO SISTEMA (Funções com chamadas externas)
 # =============================
@@ -8149,6 +8284,7 @@ def corrigir_tipo_data_e_treino():
         return redirect(url_for('cadastro_cliente', error=f"Erro crítico: {e}"))
 
 
+# >>>  http://localhost:5001/admin/manutencao_clientes_regional
 @app.route('/migrar_historico_vendas')
 @login_required
 def migrar_historico_vendas():
@@ -8185,95 +8321,82 @@ def criar_indices_regionais(db):
     return "Índices criados com sucesso!"
 
 
-
-# ROTA 1: Carrega a página HTML
-@app.route('/admin/clonar_banco', methods=['GET'])
+@app.route('/admin/manutencao_clientes_regional', methods=['GET'])
 @login_required
-def view_clonar_banco():
-    # Segurança: Apenas Master deve acessar esta ferramenta
+def manutencao_clientes_regional():
+    # Segurança: Apenas Master pode rodar scripts de manutenção estrutural
     if session.get('nivel', 0) < 4:
-        return redirect(url_for('menu_operacoes', error="Acesso Negado. Área Master."))
-    
-    # Obtém o cliente raiz do MongoDB para listar todos os bancos
-    # Adapte 'mongo.cx' para a variável do seu MongoClient (ex: client)
-    cliente_mongo = get_vendas_db().client 
-    
-    bancos_ocultos = ['admin', 'config', 'local']
-    bancos_disponiveis = [db for db in cliente_mongo.list_database_names() if db not in bancos_ocultos]
-    
-    return render_template('clonar_banco.html', bancos=bancos_disponiveis)
+        return "Acesso Negado. Apenas nível Master.", 403
 
+    db = get_vendas_db()
+    if db is None:
+        return "Erro ao conectar ao banco de dados.", 500
 
-# ROTA 2: API que devolve as tabelas (coleções) de um banco escolhido
-@app.route('/api/colecoes_banco/<nome_banco>', methods=['GET'])
-@login_required
-def api_colecoes_banco(nome_banco):
-    if session.get('nivel', 0) < 4:
-        return jsonify({'status': 'error', 'message': 'Acesso negado'})
+    try:
+        # Busca apenas os clientes que AINDA NÃO TEM o campo id_regional
+        clientes_desatualizados = list(db.clientes.find({"id_regional": {"$exists": False}}))
         
-    try:
-        cliente_mongo = get_vendas_db().client
-        db_origem = cliente_mongo[nome_banco]
-        colecoes = db_origem.list_collection_names()
-        # Ordena alfabeticamente para facilitar a visualização
-        return jsonify({'status': 'success', 'colecoes': sorted(colecoes)})
-    except Exception as e:
-        return jsonify({'status': 'error', 'message': str(e)})
+        if not clientes_desatualizados:
+            return "<h1>Tudo OK!</h1><p>Nenhum cliente desatualizado encontrado. Todos já possuem id_regional.</p><br><a href='/menu_operacoes'>Voltar ao Menu</a>"
 
+        count_colab = 0
+        count_default = 0
+        
+        # Dicionário em memória para não consultar o mesmo colaborador centenas de vezes
+        cache_regional_colabs = {}
 
-# ROTA 3: API que faz a cópia (Clone) das tabelas e dados
-@app.route('/api/executar_clone', methods=['POST'])
-@login_required
-def api_executar_clone():
-    if session.get('nivel', 0) < 4:
-        return jsonify({'status': 'error', 'message': 'Acesso negado'})
-
-    dados = request.json
-    db_origem_nome = dados.get('db_origem')
-    db_destino_nome = dados.get('db_destino')
-    colecoes_selecionadas = dados.get('colecoes', [])
-
-    if not db_origem_nome or not db_destino_nome or not colecoes_selecionadas:
-        return jsonify({'status': 'error', 'message': 'Dados incompletos. Preencha todos os campos.'})
-
-    try:
-        cliente_mongo = get_vendas_db().client
-        db_origem = cliente_mongo[db_origem_nome]
-        db_destino = cliente_mongo[db_destino_nome]
-
-        estatisticas = []
-
-        for nome_col in colecoes_selecionadas:
-            col_origem = db_origem[nome_col]
-            col_destino = db_destino[nome_col]
-
-            # Copiamos em lotes de 1000 documentos para proteger a memória do servidor
-            lote = []
-            total_copiado = 0
+        for cli in clientes_desatualizados:
+            id_colab = cli.get('id_colaborador')
+            id_regional_final = 1  # Padrão: Matriz
             
-            # Limpa a coleção de destino caso ela já exista para evitar duplicação (Opcional, mas seguro)
-            col_destino.delete_many({})
-
-            for documento in col_origem.find():
-                lote.append(documento)
-                if len(lote) >= 1000:
-                    col_destino.insert_many(lote)
-                    total_copiado += len(lote)
-                    lote = []
+            if id_colab:
+                # Se ainda não sabemos a regional deste colaborador, vamos buscar ao banco
+                if id_colab not in cache_regional_colabs:
+                    colab_db = db.colaboradores.find_one({'id_colaborador': id_colab})
+                    if colab_db and 'id_regional' in colab_db:
+                        cache_regional_colabs[id_colab] = int(colab_db['id_regional'])
+                    else:
+                        cache_regional_colabs[id_colab] = 1 # Se o colab não tiver, assume 1
+                        
+                # Aplica a regional descoberta
+                id_regional_final = cache_regional_colabs[id_colab]
             
-            if lote:
-                col_destino.insert_many(lote)
-                total_copiado += len(lote)
-                
-            estatisticas.append(f"{nome_col} ({total_copiado} docs)")
+            # Atualiza o cliente no banco de dados
+            db.clientes.update_one(
+                {'_id': cli['_id']},
+                {'$set': {'id_regional': id_regional_final}}
+            )
+            
+            # Contadores para o relatório final
+            if id_regional_final == 1:
+                count_default += 1
+            else:
+                count_colab += 1
 
-        msg_sucesso = f"Banco '{db_destino_nome}' gerado com sucesso! Tabelas clonadas: " + ", ".join(estatisticas)
-        return jsonify({'status': 'success', 'message': msg_sucesso})
+        total = count_colab + count_default
+        
+        # Relatório de Execução em HTML simples
+        html_report = f"""
+        <div style="font-family: sans-serif; max-width: 600px; margin: 40px auto; padding: 20px; border: 1px solid #ccc; border-radius: 10px; background: #f9f9f9;">
+            <h1 style="color: #059669;">✅ Manutenção Concluída!</h1>
+            <p>O banco de dados foi atualizado com sucesso.</p>
+            <ul style="font-size: 18px;">
+                <li><b>Total Atualizado:</b> {total} clientes</li>
+                <li><b>Herdaram a regional do Colaborador:</b> {count_colab}</li>
+                <li><b>Atribuídos à Matriz (Reg. 1):</b> {count_default}</li>
+            </ul>
+            <br>
+            <a href="/cadastro_cliente?view=listar" style="display: inline-block; padding: 10px 20px; background: #2563eb; color: white; text-decoration: none; border-radius: 5px; font-weight: bold;">Ver Lista de Clientes</a>
+        </div>
+        """
+        return html_report
 
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return jsonify({'status': 'error', 'message': f"Erro interno: {str(e)}"})
+        return f"<h1>Erro Fatal:</h1><p>{str(e)}</p>"
+
+
 
 #########################################################
 if __name__ == '__main__':
