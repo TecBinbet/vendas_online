@@ -3690,6 +3690,13 @@ def gravar_evento():
         tipo_de_cartela = int(request.form.get('tipo_de_cartela', 15)) 
         tipo_de_evento = request.form.get('tipo_de_evento', 'Normal') 
         tipo_premiacao = request.form.get('tipo_premiacao', 'Fixa')
+        
+        # 🚀 NOVO: Captura do COMBO
+        try:
+            combo_qtde = int(request.form.get('combo_qtde', 1))
+            if combo_qtde < 1: combo_qtde = 1
+        except ValueError:
+            combo_qtde = 1
 
         # --- LÓGICA DE CARTELA E NÚMERO MÁXIMO ---
         if tipo_de_cartela == 25:
@@ -3726,14 +3733,12 @@ def gravar_evento():
 
         bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
 
-        # --- ADIÇÃO: CAPTURA DO NOVO CAMPO DE CORTESIAS ---
         try:
             distribuir_cortesia = int(request.form.get('distribuir_cortesia', 0))
             if distribuir_cortesia < 0: 
                 distribuir_cortesia = 0
         except ValueError:
             distribuir_cortesia = 0
-        # ---------------------------------------------------
 
         if not all([data_evento_str, hora_evento, descricao, unidade_de_venda]):
              raise ValueError("Preencha todos os campos obrigatórios (*).")
@@ -3770,12 +3775,14 @@ def gravar_evento():
             "bola_tope_acumulado": bola_tope_acumulado,
             "minimo_de_venda": int(minimo_de_venda),
             "id_colaborador": session.get('id_colaborador', 'N/A'),
-            "distribuir_cortesia": distribuir_cortesia # --- ADIÇÃO NO DICIONÁRIO ---
+            "distribuir_cortesia": distribuir_cortesia,
+            "combo_qtde": combo_qtde # 🚀 NOVO
         }
         
         if id_evento_edicao:
             db.eventos.update_one({'id_evento': int(id_evento_edicao)}, {'$set': dados_evento})
             success_msg = f"Evento ID: {id_evento_edicao} atualizado com sucesso!"
+            return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
         else:
             novo_id = get_next_evento_sequence()
             dados_evento.update({
@@ -3786,29 +3793,30 @@ def gravar_evento():
             })
             db.eventos.insert_one(dados_evento)
 
-            # --- FASE 3: AUTOMAÇÃO DE ÍNDICES REGIONAIS COMPOSTOS ---
             nome_colecao_vendas = f"vendas{novo_id}"
             try:
                 db[nome_colecao_vendas].create_index([("id_regional", 1), ("data_venda", -1)])
                 db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_vendedor", 1)])
                 db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_colaborador", 1)])
                 db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_cliente", 1)])
-
-                if MODO_DEBUG:
-                    print(f"🚀 [SISTEMA] Índices Regionais Compostos criados em {nome_colecao_vendas}")
-                
             except Exception as e:
-                print(f"⚠️ Erro ao criar índices automáticos: {e}")
+                pass
 
-            success_msg = f"Evento '{dados_evento['descricao']}' salvo com sucesso! ID: {novo_id}."
-        
-        return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
+            # 🚀 LÓGICA DE REDIRECIONAMENTO COMBO
+            if combo_qtde > 1:
+                replicas = combo_qtde - 1
+                success_msg = f"Evento '{dados_evento['descricao']}' gravado (ID: {novo_id}). Defina agora o intervalo para criar os próximos {replicas} eventos."
+                return redirect(url_for('cadastro_evento', view='alterar', id_evento=novo_id, auto_replicar=replicas, success=success_msg))
+            else:
+                success_msg = f"Evento '{dados_evento['descricao']}' salvo com sucesso! ID: {novo_id}."
+                return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
 
     except Exception as e:
         print(f"ERRO na gravação: {e}")
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
         return redirect(url_for('cadastro_evento', error=f"Erro ao salvar: {e}", view=view_redirect, id_evento=id_evento_edicao))
+
 
 @app.route('/consulta_vendas', methods=['GET'])
 @login_required
@@ -6018,9 +6026,9 @@ def monitor_saques():
         
     query = {}
 
-    if not is_master and id_regional_sessao:
+    #if not is_master and id_regional_sessao:
         # AQUI FOI REMOVIDO O QUE CAUSAVA O ERRO
-        query['id_regional'] = int(id_regional_sessao)
+        #query['id_regional'] = int(id_regional_sessao)
 
     if filtro_status != 'todos':
         query['status'] = filtro_status
@@ -7002,6 +7010,7 @@ def gravar_replicacao():
         premio_formatado = f"{premio_bruto:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
         eventos_para_inserir = []
+        ids_replicados = [] # 🚀 NOVO: Lista para guardar os IDs dos eventos gerados
 
         # Parâmetros e Modo Treino
         params = db.parametros.find_one({})
@@ -7035,6 +7044,8 @@ def gravar_replicacao():
                                         error=f"Conflito de horário detectado em {data_str} {hora_str}. Cancelado."))
 
             novo_id = get_next_evento_sequence()
+            ids_replicados.append(novo_id) # 🚀 NOVO: Guarda o ID gerado na lista
+
             nova_descricao = f"{novo_dt.strftime('%d/%m')} às {hora_str} - R$ {premio_formatado}"
 
             novo_evento = evento_molde.copy()
@@ -7051,7 +7062,8 @@ def gravar_replicacao():
                 "status": status_replicas,
                 "data_ativado": None if status_replicas != 'ativo' else hora_brasil(),
                 "data_cadastro": hora_brasil(),
-                "id_colaborador": session.get('id_colaborador', 'N/A')
+                "id_colaborador": session.get('id_colaborador', 'N/A'),
+                "id_evento_principal_combo": id_evento_molde # 🚀 NOVO: O filho sabe quem é o pai
             })
 
             eventos_para_inserir.append(novo_evento)
@@ -7063,8 +7075,6 @@ def gravar_replicacao():
             # ==========================================================
             nome_colecao_replica = f"vendas{novo_id}"
             try:
-                # Criamos os índices independentemente de ter vendas clonadas ou não,
-                # pois essa tabela receberá vendas futuras e precisará ser rápida no painel de comissões.
                 db[nome_colecao_replica].create_index([("id_vendedor", 1)])
                 db[nome_colecao_replica].create_index([("id_colaborador", 1)])
                 db[nome_colecao_replica].create_index([("id_cliente", 1)])
@@ -7072,8 +7082,6 @@ def gravar_replicacao():
                     ("id_colaborador", 1), 
                     ("id_vendedor", 1)
                 ])
-                if MODO_DEBUG:
-                    print(f"[SISTEMA] Índices criados para réplica {nome_colecao_replica}")
             except Exception as e:
                 print(f"[ERRO] Falha ao criar índices para réplica {nome_colecao_replica}: {e}")
             # ==========================================================
@@ -7093,8 +7101,8 @@ def gravar_replicacao():
                     v_clone.update({
                         'id_evento': novo_id,
                         'data_venda': novo_dt,
-                        'numero_inicial': v.get('numero_inicial'), # Puxa o original do clone
-                        'numero_final': v.get('numero_final'),     # Puxa o original do clone
+                        'numero_inicial': v.get('numero_inicial'),
+                        'numero_final': v.get('numero_final'),     
                         'id_venda': f"T{novo_id}-{v.get('numero_inicial')}"
                     })
             
@@ -7102,11 +7110,9 @@ def gravar_replicacao():
 
                     proxima_venda_fixo = int(v.get('numero_final', 0)) + 1
         
-                # Insere vendas clonadas na tabela certa
                 if vendas_clonadas_da_replica:
                     db[nome_colecao_replica].insert_many(vendas_clonadas_da_replica)
             
-                # Atualiza controle com o valor congelado do molde
                 db.controle_venda.update_one(
                     {'id_evento': novo_id},
                     {'$set': {'inicial_proxima_venda':  proxima_venda_fixo}},
@@ -7115,6 +7121,15 @@ def gravar_replicacao():
  
         if eventos_para_inserir:
             db.eventos.insert_many(eventos_para_inserir)
+            
+            # 🚀 NOVO: AMARRAÇÃO FINAL (PAI GUARDA OS FILHOS)
+            # Atualiza o evento original adicionando a lista de eventos relacionados ao combo
+            if ids_replicados:
+                db.eventos.update_one(
+                    {'id_evento': id_evento_molde},
+                    {'$set': {'eventos_combo_relacionados': ids_replicados}}
+                )
+
             registrar_log("REPLICAR", "EVENTOS", f"Geradas {qtd} réplicas a partir do evento {id_evento_molde}.")
             msg = f"Sucesso! {qtd} evento(s) replicado(s) com o status '{status_replicas}'."
             return redirect(url_for('cadastro_evento', success=msg, view='listar'))
@@ -7755,7 +7770,7 @@ def exportar_indicacoes():
     for c in clientes:
         id_cli = c.get('id_cliente')
         
-        # --- BUSCA RÁPIDA DE ATIVIDADE ---xxx
+        # --- BUSCA RÁPIDA DE ATIVIDADE ---
         # Verificamos na coleção de vendas se existe algum registro para este ID
         # (Ajuste o nome da coleção 'vendas_global' ou similar conforme seu banco)
         ultima_venda = db.vendas_consolidado.find_one(
