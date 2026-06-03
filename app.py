@@ -2720,6 +2720,7 @@ def buscar_clientes():
     """
     Rota API para busca dinâmica de clientes.
     AJUSTADA PARA BUSCAR APENAS O INÍCIO DA PALAVRA (STARTSWITH)
+    INCLUI 'id_colaborador' PARA TRAVA DE SEGURANÇA.
     """
     db = get_vendas_db()
     if db is None: 
@@ -2743,19 +2744,18 @@ def buscar_clientes():
                 return jsonify({'clientes': []})
                 
         elif tipo_busca == 'nome':
-            # --- MUDANÇA AQUI: Adicionado o '^' antes do termo ---
             # O '^' diz ao Banco: "Busque apenas se COMEÇAR com isso"
             regex_term = re.compile(f"^{re.escape(termo)}", re.IGNORECASE)
             query_filter = {'nome_cliente': {'$regex': regex_term}}
             
         else: # Padrão: 'nick'
-            # --- MUDANÇA AQUI TAMBÉM ---
             regex_term = re.compile(f"^{re.escape(termo)}", re.IGNORECASE)
             query_filter = {'nick': {'$regex': regex_term}}
             
         clientes_cursor = db.clientes.find(
             query_filter, 
-            {'id_cliente': 1, 'nome_cliente': 1, 'nick': 1, 'cidade': 1}
+            # 🚀 CORREÇÃO: Adicionado 'id_colaborador': 1 para o Mongo devolver este campo
+            {'id_cliente': 1, 'nome_cliente': 1, 'nick': 1, 'cidade': 1, 'id_colaborador': 1}
         ).limit(10) # Mantém o limite para ser rápido
         
         resultados = []
@@ -2764,6 +2764,7 @@ def buscar_clientes():
                 'id': cli.get('id_cliente'),
                 'nome': cli.get('nome_cliente'),
                 'nick': cli.get('nick'),
+                'id_colaborador': cli.get('id_colaborador', 0), # 🚀 Garante que vai como 0 se não existir
                 'cidade': cli.get('cidade', 'N/A')
             })
             
@@ -3117,14 +3118,41 @@ def gravar_cliente():
 @login_required
 def excluir_cliente(id_cliente):
     db = get_vendas_db()
-    if db is None: return redirect(url_for('login')) # <-- CORREÇÃO PYMONGO
+    if db is None: return redirect(url_for('login'))
+
+    nivel_usuario = session.get('nivel', 1)
 
     try:
+        # 1. Puxa o cliente para validar as finanças antes de excluir
+        cliente = db.clientes.find_one({'id_cliente': id_cliente})
+        if not cliente:
+            return redirect(url_for('cadastro_cliente', error="Cliente não encontrado para exclusão.", view='listar'))
+
+        # Extrai o saldo de forma segura
+        saldo_atual = 0.0
+        if 'saldo_atual' in cliente:
+            val = cliente['saldo_atual']
+            saldo_atual = float(str(val.to_decimal())) if hasattr(val, 'to_decimal') else float(val)
+
+        # 2. 🛡️ TRAVA DE SEGURANÇA BACK-END
+        if abs(saldo_atual) > 0.001:
+            if nivel_usuario < 4:
+                msg_erro = f"⛔ Exclusão bloqueada! O cliente possui um saldo pendente (R$ {saldo_atual:.2f}). Apenas gestores Master podem excluir este registo."
+                return redirect(url_for('cadastro_cliente', error=msg_erro, view='listar'))
+            # Se for >= 4, o backend permite. A confirmação dupla ocorreu no Frontend.
+
+        # 3. Execução Atómica da Exclusão
         result = db.clientes.delete_one({'id_cliente': id_cliente})
         
         if result.deleted_count == 1:
             success_msg = f"Cliente ID: CLI{id_cliente} excluído com sucesso."
-            registrar_log("EXCLUIR", "CLIENTES", f"Cliente ID {id_cliente} removido permanentemente.", id_cliente)
+            
+            # Deixa um rastro na auditoria caso um Master tenha forçado a exclusão de alguém com saldo
+            detalhe_log = f"Cliente ID {id_cliente} removido permanentemente."
+            if abs(saldo_atual) > 0.001:
+                detalhe_log += f" [⚠️ ATENÇÃO: Master forçou exclusão de cliente com saldo de R$ {saldo_atual:.2f}]"
+                
+            registrar_log("EXCLUIR", "CLIENTES", detalhe_log, id_cliente)
         else:
             success_msg = f"Cliente ID: CLI{id_cliente} não encontrado para exclusão."
 

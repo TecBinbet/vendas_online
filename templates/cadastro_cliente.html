@@ -236,6 +236,7 @@
 
                     <!-- NOVO CAMPO: SALDO ATUAL (Apenas na Alteração) -->
                     {% if active_view == 'alterar' %}
+                    {% if nivel >= 3 %}
                     <div class="form-group">
                         <label>Saldo Disponível (R$):</label>
                         <input type="text" 
@@ -243,6 +244,7 @@
                                disabled 
                                class="form-control bg-green-50 border-green-200 text-green-700 font-bold text-lg">
                     </div>
+                    {% endif %} 
                     {% endif %}
 
                     {% if nivel >= 4 %}
@@ -356,19 +358,28 @@
                                             {{ cliente.get('id_regional', 1) }}
                                         </span>
                                     </div>
+                                    
+                                    {% if nivel >= 3 %}
                                     <div>
                                         <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</p>
                                         <span class="text-xl font-black {{ 'text-red-600' if cliente.saldo_float < 0 else 'text-blue-600' }}">R$ {{ cliente.saldo_float | format_moeda }}</span>
                                     </div>
+                                    {% endif %}
+                                    
                                 </div>
                             </div>
                             <div class="mt-4 flex flex-wrap gap-2 items-center">
-                                <button type="button" onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}')" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm shadow">💰 + Crédito</button>
+                                <button type="button" 
+        onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}' {% if nivel >= 3 %}, '{{ cliente.saldo_float }}'{% endif %})" 
+        class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm shadow">💰 + Crédito</button>
+                                
+                                {% if nivel >= 3 or (cliente.get('id_colaborador') | string == id_logado | string) %}
                                 <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold">✏️ Alterar</a>
+                                {% endif %}
                                 
                                 {% if nivel >= 3 %}
                                 <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" id="form-excluir-consulta-{{ cliente.id_cliente }}" class="inline-block" onsubmit="return ativarLoading(this, 'Excluindo cliente...')">
-                                    <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta")' class="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">🗑️ Excluir</button>
+                                    <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta", {{ cliente.saldo_float }})' class="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">🗑️ Excluir</button>
                                 </form>
                                 {% endif %}
                             </div>
@@ -447,7 +458,6 @@
             </form>
             {% endif %}
 
-
                 <table class="min-w-full bg-white">
                     <thead>
                         <tr class="list-header bg-gray-50 text-[12px] font-black text-gray-600 uppercase tracking-widest text-left">
@@ -455,7 +465,9 @@
                             <th class="py-1 px-1 border-b text-center">Reg.</th> 
                             <th class="py-1 px-4 border-b">Nick / Nome</th>
                             <th class="py-1 px-4 border-b">Cidade</th>
+                            {% if nivel >= 3 %}
                             <th class="py-1 px-4 border-b">Saldo (R$)</th>
+                            {% endif %}
                             <th class="py-1 px-4 border-b text-right">Ações</th>
                         </tr>
                     </thead>
@@ -475,16 +487,21 @@
                                     <div class="font-semibold text-[14px] text-gray-600">{{ cliente.nome_cliente }}</div>
                                 </td>
                                 <td class="py-2 px-4 border-b text-gray-500 font-medium">{{ cliente.cidade | default('—') }}</td>
+                                 {% if nivel >= 3 %} 
                                 <td class="py-2 px-4 border-b font-bold text-[16px] {{ 'text-red-600' if cliente.saldo_float < 0 else 'text-green-700' }}">
-                                       {{ cliente.saldo_float | format_moeda }}
+                                        {{ cliente.saldo_float | format_moeda }}
                                 </td>
+                                {% endif %} 
                                 <td class="py-2 px-4 border-b text-right">
                                     <div class="flex justify-end gap-3">
+                                        
+                                        {% if nivel >= 3 or (cliente.get('id_colaborador') | string == id_logado | string) %}
                                         <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="text-blue-500 font-bold hover:underline">Editar</a>
+                                        {% endif %}
                                         
                                         {% if nivel >= 3 %}
                                         <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" id="form-excluir-listar-{{ cliente.id_cliente }}" class="inline-block" onsubmit="return ativarLoading(this, 'Excluindo cliente...')">
-                                            <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "listar")' class="text-red-500 font-bold hover:underline">Excluir</button>
+                                            <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "listar", {{ cliente.saldo_float }})' class="text-red-500 font-bold hover:underline">Excluir</button>
                                         </form>
                                         {% endif %}
                                     </div>
@@ -492,7 +509,7 @@
                             </tr>
                             {% endfor %}
                         {% else %}
-                            <tr><td colspan="4" class="py-10 text-center text-gray-400 font-bold italic">Nenhum cliente cadastrado.</td></tr>
+                            <tr><td colspan="5" class="py-10 text-center text-gray-400 font-bold italic">Nenhum cliente cadastrado.</td></tr>
                         {% endif %}
                     </tbody>
                 </table>
@@ -536,20 +553,25 @@
         </div>
     </div>
 
-    <!-- Modal Recarga -->
-    <div id="recarga-modal" class="modal-overlay" onclick="closeRecargaModal()">
+<div id="recarga-modal" class="modal-overlay" onclick="closeRecargaModal()">
         <div class="modal-content" onclick="event.stopPropagation()">
-            <h3 class="text-xl font-black mb-1 text-primary">💰 Adicionar Crédito</h3>
-            <p class="text-xs text-gray-400 mb-6 uppercase tracking-widest font-bold">Destino: <span id="modal-recarga-nick" class="text-gray-800">...</span></p>
+            <h3 class="text-xl font-black -mt-2 mb-1 text-primary">💰 Adicionar Crédito</h3>
+            <p class="text-xs text-gray-400 mb-2 uppercase tracking-widest font-bold">
+                Destino: <span id="modal-recarga-nick" class="text-gray-800">...</span>
+                
+                <span id="modal-recarga-saldo-container" class="hidden ml-2 pl-2 border-l-2 border-gray-200">
+                    Saldo: <span id="modal-recarga-saldo-valor" class="text-blue-600 font-black">R$ 0,00</span>
+                </span>
+            </p>
             <form method="POST" action="{{ url_for('adicionar_credito_cliente') }}" onsubmit="return ativarLoading(this, 'Processando recarga...')">
                 <input type="hidden" name="id_cliente" id="modal-recarga-id">
-                <div class="mb-6">
-                    <label class="block text-[10px] font-black text-gray-400 uppercase mb-2 tracking-widest">Valor da Recarga (R$)</label>
+                <div class="mb-2">
+                    <label class="block text-[10px] font-black text-gray-600 uppercase mb-1 tracking-widest">Valor da Recarga (R$)</label>
                     <input type="number" name="valor_recarga" step="0.01" min="0.01" required 
                            class="w-full p-4 border-2 border-primary/20 rounded-xl text-3xl font-black text-center text-primary focus:border-primary focus:ring-4 focus:ring-primary/10 outline-none transition-all bg-primary/5">
                 </div>
                 <div class="flex gap-2">
-                    <button type="button" class="flex-1 py-3 bg-gray-100 text-gray-500 rounded-xl font-bold hover:bg-gray-200" onclick="closeRecargaModal()">Cancelar</button>
+                    <button type="button" class="flex-1 py-3 bg-gray-100 text-red-600 rounded-xl font-bold hover:bg-red-200" onclick="closeRecargaModal()">Cancelar</button>
                     <button type="submit" class="flex-1 py-3 bg-primary text-white rounded-xl font-bold shadow-lg hover:brightness-110 active:scale-95 transition-all">Confirmar</button>
                 </div>
             </form>
@@ -733,22 +755,57 @@
             resultsDiv.style.display = 'block';
             resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center text-xs">Buscando...</div>';
 
+            // 🚀 Captura os dados de segurança do operador logado xxx
+            const nivelLogado = parseInt('{{ nivel | default(1) }}', 10);
+            const idLogado = '{{ id_logado | string }}';
             try {
                 const response = await fetch(`/buscar_clientes?termo=${encodeURIComponent(termo)}&tipo=${tipo}`);
                 const data = await response.json();
                 resultsDiv.innerHTML = ''; 
+                
                 if (data.clientes && data.clientes.length > 0) {
                     data.clientes.forEach(cli => {
                         const div = document.createElement('div');
-                        div.className = 'search-result-item';
-                        div.innerHTML = `<div class=\"font-bold text-gray-800\">${cli.nick}</div><div class=\"text-[10px] text-gray-500\">${cli.nome} | ID: ${cli.id}</div>`;
-                        div.onclick = () => { window.location.href = `{{ url_for('cadastro_cliente', view='alterar') }}&id_cliente=${cli.id}`; };
+                        div.className = 'search-result-item p-2 border-b border-gray-100 transition';
+                        
+                        // 🚀 TRAVA DE ACESSO
+                        // O backend precisa retornar 'id_colaborador' no JSON
+                        const donoDoCliente = String(cli.id_colaborador);
+                        const podeEditar = (nivelLogado >= 3 || donoDoCliente === idLogado);
+                        if (podeEditar) {
+                            div.innerHTML = `
+                                <div class="flex justify-between items-center">
+                                    <div>
+                                        <div class="font-bold text-blue-800">${cli.nick}</div>
+                                        <div class="text-[10px] text-gray-500">${cli.nome} | ID: ${cli.id}</div>
+                                    </div>
+                                    <span class="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-1 rounded">✏️ Editar</span>
+                                </div>
+                            `;
+                            div.onclick = () => { window.location.href = `{{ url_for('cadastro_cliente', view='alterar') }}&id_cliente=${cli.id}`; };
+                            div.classList.add('cursor-pointer', 'hover:bg-blue-50');
+                        } else {
+                            div.innerHTML = `
+                                <div class="flex justify-between items-center opacity-70">
+                                    <div>
+                                        <div class="font-bold text-gray-800">${cli.nick}</div>
+                                        <div class="text-[10px] text-gray-500">${cli.nome} | ID: ${cli.id}</div>
+                                    </div>
+                                    <span class="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-1 rounded">🔒 Bloqueado</span>
+                                </div>
+                            `;
+                            div.onclick = () => { alert("🔒 Acesso Negado: Você só pode alterar os clientes que você mesmo cadastrou."); };
+                            div.classList.add('cursor-not-allowed', 'bg-gray-50');
+                        }
+
                         resultsDiv.appendChild(div);
                     });
                 } else {
-                    resultsDiv.innerHTML = '<div class=\"p-2 text-gray-500 text-center text-xs\">Nenhum resultado.</div>';
+                    resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center text-xs">Nenhum resultado.</div>';
                 }
-            } catch (err) { resultsDiv.innerHTML = '<div class=\"p-2 text-red-500 text-center text-xs\">Erro na busca.</div>'; }
+            } catch (err) { 
+                resultsDiv.innerHTML = '<div class="p-2 text-red-500 text-center text-xs">Erro na busca.</div>'; 
+            }
         }
 
         // Modais
@@ -758,7 +815,22 @@
         const btnConfirmDelete = document.getElementById('modal-btn-confirm-delete');
         let formIdParaExcluir = null; 
 
-        function openDeleteModal(id, nick, view) {
+        function openDeleteModal(id, nick, view, saldoFloat) {
+            const nivelLogado = parseInt('{{ nivel | default(1) }}', 10);
+            const saldo = parseFloat(saldoFloat || 0);
+
+            // 🚀 TRAVA VISUAL DE SALDO NO FRONT-END
+            if (Math.abs(saldo) > 0.001) {
+                if (nivelLogado < 4) {
+                    alert(`⛔ EXCLUSÃO BLOQUEADA!\n\nEste cliente tem um saldo de R$ ${saldo.toLocaleString('pt-BR', {minimumFractionDigits: 2})}.\n\nSó contas de nível Master podem excluir clientes com movimentação financeira pendente.`);
+                    return; // Aborta e impede a abertura do modal
+                } else {
+                    const confirmacaoExtra = confirm(`⚠️ ATENÇÃO MASTER!\n\nO cliente possui um saldo de R$ ${saldo.toLocaleString('pt-BR', {minimumFractionDigits: 2})}.\n\nTem a certeza ABSOLUTA que deseja apagar este registo financeiro junto com o cliente?`);
+                    if (!confirmacaoExtra) return; // Aborta se o Master clicar em Cancelar
+                }
+            }
+
+            // Se passou das travas (ou se saldo é 0), segue o fluxo normal
             formIdParaExcluir = `form-excluir-${view}-${id}`;
             modalDeleteId.textContent = id;
             modalDeleteNick.textContent = nick; 
@@ -779,19 +851,42 @@
         const recargaModal = document.getElementById('recarga-modal');
         const recargaNick = document.getElementById('modal-recarga-nick');
         const recargaId = document.getElementById('modal-recarga-id');
-        function openRecargaModal(id, nick) {
+        
+        // 🚀 RECEBE O SALDO COMO 3º PARÂMETRO
+        function openRecargaModal(id, nick, saldoAtual) {
             if (!recargaModal) return;
             recargaId.value = id;
             recargaNick.textContent = nick;
+
+            // 🚀 LÓGICA DE EXIBIÇÃO DO SALDO
+            const saldoContainer = document.getElementById('modal-recarga-saldo-container');
+            const saldoValor = document.getElementById('modal-recarga-saldo-valor');
+
+            // Verifica se o saldo foi passado (ou seja, se o Jinja liberou a visualização)
+            if (saldoAtual !== undefined && saldoAtual !== null && saldoAtual !== '') {
+                const valorFloat = parseFloat(saldoAtual);
+                saldoValor.textContent = 'R$ ' + valorFloat.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+                
+                if (valorFloat < 0) {
+                    saldoValor.className = 'text-red-600 font-black text-xl ';
+                } else {
+                    saldoValor.className = 'text-blue-600 font-black text-xl';
+                }
+                saldoContainer.classList.remove('hidden');
+            } else {
+                saldoContainer.classList.add('hidden');
+            }
+
             recargaModal.style.display = 'flex';
             
             // Foca no input de valor automaticamente
             setTimeout(() => {
-                const inputVal = recargaModal.querySelector('input[name=\"valor_recarga\"]');
+                const inputVal = recargaModal.querySelector('input[name="valor_recarga"]');
                 if(inputVal) inputVal.focus();
             }, 100);
         }
-        function closeRecargaModal() { if(recargaModal) recargaModal.style.display = 'none'; }
+        
+        function closeRecargaModal() { if(recargaModal) recargaModal.style.display = 'none'; } 
     </script>
 </body>
 </html>
