@@ -196,18 +196,26 @@ app.permanent_session_lifetime = timedelta(minutes=60)
 app.register_blueprint(venda_lite_bp)
 
 # ---- UTILITARIOS
-# --- DECORATOR DE AUTENTICAÇÃO ---
+# --- DECORATOR DE AUTENTICAÇÃO BLINDADO ---
 def login_required(f):
-    """Decorator para exigir login em uma rota."""
+    """Decorator para exigir login em uma rota e preservar id_sala."""
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not session.get('logged_in'):
-            # Preservar id_sala no redirect de falha de login
-            id_sala_atual = session.get('id_sala') or request.args.get('id_sala')
+            
+            # ORDEM DE BUSCA: 1º Sessão -> 2º URL -> 3º Cookie Persistente
+            id_sala_atual = (
+                session.get('id_sala') or 
+                request.args.get('id_sala') or 
+                request.cookies.get('id_sala_salvo')
+            )
+            
             redirect_args = {'error': "Acesso restrito. Faça o login."}
             if id_sala_atual:
                 redirect_args['id_sala'] = id_sala_atual
-            return redirect(url_for('login_page', **redirect_args))
+                
+            return redirect(url_for('login', **redirect_args)) # Use 'login' ou 'login_page' conforme sua rota principal
+            
         return f(*args, **kwargs)
     return decorated_function
 
@@ -2878,9 +2886,7 @@ def processar_venda_combo_quantidade():
                 db[nome_colecao_venda].insert_many(documentos_inserir)
                 
             # Sincroniza o ponteiro de todos os irmãos para ficarem alinhados com o Pai
-            novo_ponteiro_geral = numero_base_banco + total_cartelas_consumidas
-            print(f"🛠️ [DEBUG VENDA COMBO QTDE] novo_ponteiro_geral:    '{novo_ponteiro_geral}'")
-  
+            novo_ponteiro_geral = numero_base_banco + total_cartelas_consumidas 
 
         # ==========================================================
         # 🚀 SINCRONIZAÇÃO DO PONTEIRO (FORA DO LOOP)
@@ -2888,9 +2894,6 @@ def processar_venda_combo_quantidade():
         if not modo_aleatorio:
             # Pega o ponteiro inicial e soma o bloco total do combo
             novo_ponteiro_geral = numero_base_banco + total_cartelas_consumidas
-            print(f"🛠️ [DEBUG VENDA COMBO QTDE] >> numero_base_banco:    '{numero_base_banco}'")
-            print(f"🛠️ [DEBUG VENDA COMBO QTDE] >> total_cartelas_consumidas:    '{total_cartelas_consumidas}'")
-            print(f"🛠️ [DEBUG VENDA COMBO QTDE] >> novo_ponteiro_geral:    '{novo_ponteiro_geral}'") 
             # Cria uma lista apenas com os números dos IDs de todos os eventos (Pai e Filhos)
             ids_eventos_atualizar = [e['id_evento'] for e in eventos_combo]
             
