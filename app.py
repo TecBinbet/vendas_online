@@ -5429,7 +5429,7 @@ def gerar_lista_vendas():
 
 # --- ROTAS DE GERAÇÃO DE PDF E ARQUIVOS ---
 @app.route('/gerar_cartelas_pdf_25')
-@login_required
+#@login_required
 def gerar_cartelas_pdf_25():
     """
     Gera PDF de cartelas de 25 números.
@@ -5579,7 +5579,7 @@ def gerar_cartelas_pdf_25():
 
 # Rota para cartelas de 15 números
 @app.route('/gerar_cartelas_pdf_15')
-@login_required
+#@login_required
 def gerar_cartelas_pdf_15():
     """
     Gera PDF de cartelas de 15 números.

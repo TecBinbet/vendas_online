@@ -413,8 +413,8 @@
             // 2. Monta os parâmetros da URL (Query String)
             const parametros = new URLSearchParams({
                 id_evento: idEvento,
-                numero_inicial: numInicial,
-                numero_final: numFinal,
+                numero_inicial_pdf: numInicial,  // <-- Ajustado aqui
+                numero_final_pdf: numFinal,      // <-- Ajustado aqui
                 nome_cliente: nomeCliente || "Cliente"
             });
             
