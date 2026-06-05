@@ -410,15 +410,19 @@
                             <p class="text-xs text-gray-500 mt-1">Vendas Registadas: {{ evento.qtd_vendas | default(0) }}</p>
 
                             <div class="mt-2 flex space-x-3">
-                                <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
-                                
-                                <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}" 
-                                      id="form-excluir-consulta-{{ evento.id_evento }}"
-                                      class="inline-block">
-                                    <button type="button" 
-                                            onclick='openDeleteModal("{{ evento.id_evento }}", {{ evento.descricao | tojson }}, "consulta", {{ evento.qtd_vendas | default(0) }})'
-                                            class="action-link delete-link hover:text-red-600">Excluir</button>
-                                </form>
+                                {% if evento.is_combo_filho %}
+                                    <span class="text-[10px] font-bold text-purple-600 bg-purple-100 px-3 py-1 rounded cursor-not-allowed border border-purple-200" title="Altere ou exclua através do Evento Principal">🔒 Réplica (Combo)</span>
+                                {% else %}
+                                    <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+                                    
+                                    <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}" 
+                                          id="form-excluir-consulta-{{ evento.id_evento }}"
+                                          class="inline-block">
+                                        <button type="button" 
+                                                onclick='openDeleteModal("{{ evento.id_evento }}", {{ evento.descricao | tojson }}, "consulta", {{ evento.qtd_vendas | default(0) }})'
+                                                class="action-link delete-link hover:text-red-600">Excluir</button>
+                                    </form>
+                                {% endif %}
                             </div>
                         </div>
                     {% endfor %}
@@ -469,15 +473,19 @@
                                 <td class="py-2 px-2 border-b text-sm text-gray-600">{{ evento.qtd_vendas | default(0) }}</td>
                                 <td class="py-2 px-2 border-b text-sm">{{ evento.status }}</td>
                                 <td class="py-2 px-2 border-b text-sm whitespace-nowrap">
-                                    <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
-                                    
-                                    <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}"
-                                          id="form-excluir-listar-{{ evento.id_evento }}"
-                                          class="inline-block">
-                                        <button type="button" 
-                                                onclick='openDeleteModal("{{ evento.id_evento }}", {{ evento.descricao | tojson }}, "listar", {{ evento.qtd_vendas | default(0) }})'
-                                                class="action-link delete-link hover:text-red-600">Excluir</button>
-                                    </form>
+                                    {% if evento.is_combo_filho %}
+                                        <span class="text-[10px] font-bold text-purple-600 bg-purple-100 px-2 py-1 rounded cursor-not-allowed border border-purple-200" title="Altere ou exclua através do Evento Principal">🔒 Réplica (Combo)</span>
+                                    {% else %}
+                                        <a href="{{ url_for('cadastro_evento', view='alterar', id_evento=evento.id_evento) }}" class="action-link text-blue-500 hover:text-blue-700">Alterar</a>
+                                        
+                                        <form method="POST" action="{{ url_for('excluir_evento', id_evento=evento.id_evento) }}"
+                                              id="form-excluir-listar-{{ evento.id_evento }}"
+                                              class="inline-block">
+                                            <button type="button" 
+                                                    onclick='openDeleteModal("{{ evento.id_evento }}", {{ evento.descricao | tojson }}, "listar", {{ evento.qtd_vendas | default(0) }})'
+                                                    class="action-link delete-link hover:text-red-600">Excluir</button>
+                                        </form>
+                                    {% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
@@ -566,7 +574,11 @@
                                 {% for evento in eventos_lista %}
                                 <tr class="list-row hover:bg-red-50 transition duration-150 cursor-pointer" onclick="toggleRowCheckbox('check-{{ evento.id_evento }}', event)">
                                     <td class="py-2 px-4 border-b text-center" onclick="event.stopPropagation()">
-                                        <input type="checkbox" name="eventos_selecionados" value="{{ evento.id_evento }}" id="check-{{ evento.id_evento }}" class="evento-checkbox w-5 h-5 cursor-pointer accent-red-600">
+                                        {% if evento.is_combo_filho %}
+                                            <span class="text-sm cursor-not-allowed opacity-50" title="Bloqueado: Réplica de Combo">🔒</span>
+                                        {% else %}
+                                            <input type="checkbox" name="eventos_selecionados" value="{{ evento.id_evento }}" id="check-{{ evento.id_evento }}" class="evento-checkbox w-5 h-5 cursor-pointer accent-red-600">
+                                        {% endif %}
                                     </td>
                                     <td class="py-2 px-2 border-b text-sm font-medium text-gray-700">{{ evento.id_evento }}</td>
                                     <td class="py-2 px-2 border-b text-sm font-bold">{{ evento.descricao }}</td>

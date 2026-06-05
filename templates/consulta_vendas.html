@@ -43,8 +43,20 @@
         {% endif %}
 
         {% if not selected_event %}
-            <h3 class="text-xl font-semibold mb-0 -mt-2 text-gray-700">1. Selecione um Evento Ativo</h3>
+            <div class="flex flex-col sm:flex-row justify-between sm:items-end gap-2 mb-3 -mt-2">
+                <h3 class="text-xl font-semibold text-gray-700 m-0">1. Selecione um Evento</h3>
+                
+                <form method="GET" action="{{ url_for('consulta_vendas') }}" class="flex items-center bg-white px-3 py-1.5 rounded border border-gray-200 shadow-sm">
+                    <label for="status_filtro" class="text-[10px] font-black text-gray-500 uppercase tracking-widest mr-2 mt-1">Filtro:</label>
+                    <select name="status_filtro" id="status_filtro" onchange="this.form.submit()" class="form-select py-1 px-2 border-0 bg-transparent text-sm font-bold cursor-pointer outline-none text-blue-700 w-auto">
+                        <option value="ativos" {% if request.args.get('status_filtro', 'ativos') == 'ativos' %}selected{% endif %}>🟢 Ativos / ⏸️ Paralisados</option>
+                        <option value="finalizados" {% if request.args.get('status_filtro') == 'finalizados' %}selected{% endif %}>🔴 Finalizados</option>
+                    </select>
+                </form>
+            </div>
+            
             <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+
                 {% for evento in eventos %}
                     <a href="{{ url_for('consulta_vendas', id_evento=evento._id) }}" class="block event-card bg-green-100 p-4 ">
                         <p class="text-lg font-bold text-primary">{{ evento.descricao }} ( {{ evento.id_evento }} )</p>
@@ -54,7 +66,7 @@
                         </p>
                     </a>
                 {% else %}
-                    <div class="alert-info col-span-2">Nenhum evento ativo encontrado para consulta.</div>
+                    <div class="alert-info col-span-2 text-center font-bold">Nenhum evento encontrado para o filtro selecionado.</div>
                 {% endfor %}
             </div>
         {% endif %}

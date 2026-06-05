@@ -95,7 +95,7 @@ function bingoConfirm(msg, callback) {
             <h3 style="margin-top: 0; color: #2c3e50; font-size: 24px; border-bottom: 2px solid #27ae60; padding-bottom: 15px;">Confirmação</h3>
             <p style="margin: 25px 0; font-size: 19px; line-height: 1.4; font-weight: 500;">${msg}</p>
             <div style="display: flex; gap: 20px; justify-content: center;">
-                <button id="confirm-sim" style="background: #27ae60; color: white; padding: 20px 40px; font-size: 22px; min-width: 160px; cursor: pointer; border-radius: 10px; border: none; font-weight: bold; transition: 0.2s;">SIM</button>
+                <button id="confirm-sim" style="background: #27ae60; color: white; padding: 20px 40px; font-size: 22px; min-width: 160px; cursor: pointer; border-radius: 10px; border: none; font-weight: bold; transition: 0.2s; outline: none; box-shadow: 0 0 0 4px rgba(39, 174, 96, 0.4);">SIM</button>
                 <button id="confirm-nao" style="background: #e74c3c; color: white; padding: 20px 40px; font-size: 22px; min-width: 160px; cursor: pointer; border-radius: 10px; border: none; font-weight: bold; transition: 0.2s;">NÃO</button>
             </div>
         </div>
@@ -103,8 +103,25 @@ function bingoConfirm(msg, callback) {
     
     document.body.appendChild(confirmBox);
 
-    document.getElementById('confirm-sim').onclick = () => { confirmBox.remove(); callback(); };
-    document.getElementById('confirm-nao').onclick = () => { confirmBox.remove(); };
+    const btnSim = document.getElementById('confirm-sim');
+    const btnNao = document.getElementById('confirm-nao');
+
+    btnSim.onclick = () => { confirmBox.remove(); callback(); };
+    btnNao.onclick = () => { confirmBox.remove(); };
+
+    // 🚀 DIRECIONA O FOCO PARA O BOTÃO SIM
+    // O setTimeout com 10ms garante que o navegador já desenhou o botão na tela antes de focar
+    setTimeout(() => {
+        btnSim.focus();
+    }, 10);
+    
+    // (Bônus) Permite fechar o modal com a tecla ESC
+    confirmBox.tabIndex = -1;
+    confirmBox.onkeydown = (e) => {
+        if (e.key === 'Escape') {
+            confirmBox.remove();
+        }
+    };
 }
 
 // Alerta personalizado com cores fixas
@@ -313,4 +330,25 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
             printWindow.print();
         }, 250);
     }
+}
+
+// 🧮 Motor Matemático do Combo (Frontend)
+function calcularRodadasCombo(numeroInicial, qtdCartelasCompradas, unidadeVenda, comboQtde) {
+    const rodadas = [];
+    // Calcula qual foi o Kit primário comprado
+    const kitBase = Math.floor((numeroInicial - 1) / unidadeVenda) + 1;
+
+    for (let r = 1; r <= comboQtde; r++) {
+        let kitAtual = kitBase + (r - 1);
+        let iniAtual = ((kitAtual - 1) * unidadeVenda) + 1;
+        let fimAtual = iniAtual + qtdCartelasCompradas - 1;
+
+        rodadas.push({
+            rodada: r,
+            kit: kitAtual,
+            inicial: iniAtual,
+            final: fimAtual
+        });
+    }
+    return rodadas;
 }

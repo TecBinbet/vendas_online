@@ -303,9 +303,19 @@
                     <div class="form-group password-group">
                         <label for="senha" class="{% if campos.get('senha') and active_view != 'alterar' %}required-label{% endif %}">Senha:</label>
                         <button type="button" class="password-toggle" onclick="togglePasswordVisibility('senha')">👁️</button>
-                        <input type="password" id="senha" name="senha" class="form-control" autocomplete="new-password" placeholder="{% if active_view == 'alterar' %}Deixe em branco{% else %}Senha{% endif %}" {% if campos.get('senha') and active_view != 'alterar' %}required{% endif %}>
+                        <input type="password" id="senha" name="senha" class="form-control" autocomplete="new-password" placeholder="{% if active_view == 'alterar' %}Deixe em branco para manter a atual{% else %}Senha{% endif %}" {% if campos.get('senha') and active_view != 'alterar' %}required{% endif %}>
+                        
                      </div>
                     {% endif %}
+
+                        {% if active_view == 'alterar' and nivel >= 3 %}
+                        <div class="mt-2 text-right">
+                            <button type="button" onclick="confirmarResetSenha('{{ cliente.get('id_cliente') }}', '{{ cliente.get('nick') }}')" class="bg-amber-100 text-amber-700 hover:bg-amber-200 px-3 py-1.5 rounded-lg text-[11px] font-black transition border border-amber-300 shadow-sm uppercase tracking-wider">
+                                🔄 Resetar para "Senha"
+                            </button>
+                        </div>
+                        {% endif %}
+
                 </div>
                 
                 <div class="mt-4 flex justify-end space-x-2 border-t pt-4">
@@ -887,6 +897,22 @@
         }
         
         function closeRecargaModal() { if(recargaModal) recargaModal.style.display = 'none'; } 
+
     </script>
+    <form id="form-reset-senha" method="POST" style="display: none;"></form>
+
+    <script>
+        function confirmarResetSenha(idCliente, nick) {
+            const confirmacao = confirm(`⚠️ ATENÇÃO!\n\nTem a certeza que deseja redefinir a senha do cliente ${nick} (CLI${idCliente})?\n\nA nova senha será exatamente a palavra: Senha`);
+            
+            if (confirmacao) {
+                const form = document.getElementById('form-reset-senha');
+                form.action = `/resetar_senha_cliente/${idCliente}`;
+                ativarLoading(form, 'A resetar senha para o padrão...');
+                form.submit();
+            }
+        }
+    </script>
+
 </body>
 </html>

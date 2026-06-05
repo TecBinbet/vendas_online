@@ -5,7 +5,8 @@ import threading
 import traceback
 import pymongo
 from zoneinfo import ZoneInfo
-from flask import Blueprint, Flask, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response, send_file
+
+from flask import Blueprint, Flask, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response, send_file, render_template_string
 #from flask_login import login_required, current_user
 from fpdf import FPDF
 # import pdfkit
@@ -1176,93 +1177,60 @@ def calcular_comissoes_colaborador(db, id_colaborador, id_evento, id_regional_fi
 # --- HOOKS DA APLICAÇÃO ---@app.before_request
 @app.before_request
 def before_request():
-    global client_control, db_control, DEFAULT_SALA_ID
+    global client_control, db_control
 
-    # Setup Básico
-    if not hasattr(g, 'client_control'): 
-        g.client_control = client_control
-    
-    if not hasattr(g, 'parametros_globais'): 
-        g.parametros_globais = {}
-    
-    # CORREÇÃO AQUI: Verificamos explicitamente se não é None
+    # 1. Setup Básico de Contexto
+    if not hasattr(g, 'client_control'): g.client_control = client_control
+    if not hasattr(g, 'parametros_globais'): g.parametros_globais = {}
     g.db_status = True if db_control is not None else False
 
-    # 1. Define ID SALA (URL > Sessão > Default)
+    # 2. DEFINIÇÃO PERSISTENTE DO ID_SALA (Sticky Session)
+    # Tenta obter da URL -> Tenta da Sessão -> Se não, assume '000'
     id_sala_url = request.args.get('id_sala')
     id_sala_sessao = session.get('id_sala')
     
     if id_sala_url:
         g.id_sala = id_sala_url
-        session['id_sala'] = id_sala_url
+        session['id_sala'] = id_sala_url # Grava na sessão para manter nas próximas requisições
     elif id_sala_sessao:
         g.id_sala = id_sala_sessao
     else:
         g.id_sala = "000"
         session['id_sala'] = "000"
 
-    # 2. Carrega Parâmetros (Apenas se DB estiver ON)
+    # 3. Carrega Parâmetros
     if g.db_status:
         try:
             db = get_vendas_db() 
-            
-            # Valores padrão
-            default_config_cadastro = {
-                "nome_cliente": True, "nick": True, "telefone": True,
-                "cpf": False, "cidade": True, "chave_pix": True, "senha": True
-            }
-            
-            # Verifica se db não é None antes de usar
             if db is not None:
-                #print(f"\n[DEBUG] --- Iniciando busca de parâmetros para sala: '{g.id_sala}' ---")
-                
-                # Busca parametros no banco específico da sala
+                # Busca parametros
                 params = db.parametros.find_one({'id_sala': g.id_sala})
-                
-                # Se não achar por ID exato, tenta com prefixo "SALA"
-                if params is None:
-                     #print(f"[DEBUG] ID exato não encontrado. Tentando buscar por 'SALA{g.id_sala}'...")
-                     params = db.parametros.find_one({'id_sala': f"SALA{g.id_sala}"})
+                if not params:
+                    params = db.parametros.find_one({'id_sala': f"SALA{g.id_sala}"})
 
-                if params is not None:
-                    # LOGS PARA CONFERÊNCIA
-                    val_banco = params.get('limite_de_credito')
-                    #print(f"[DEBUG] SUCESSO! Documento encontrado.")
-                    #print(f"[DEBUG] > Nome Sala no Banco: {params.get('nome_sala')}")
-                    #print(f"[DEBUG] > Limite Crédito no Banco: {val_banco} (Tipo: {type(val_banco)})")
-                    #print(f"[DEBUG] > 'http_apk:  {params.get('http_apk')}")
-
-                    
+                if params:
                     val_limite_bruto = params.get('limite_de_credito', 100) 
-                    limite_convertido = float(str(val_limite_bruto))
-
                     g.parametros_globais = {
-                        'url_live': params.get('url_live', '#'), 
-                        'url_site': params.get('url_site', '#'), 
+                        'url_live': params.get('url_live', '#'),
                         'nome_sala': params.get('nome_sala', 'SALA PADRÃO').strip(),
-                        'http_apk': params.get('http_apk', 'http://localhost:5000'), 
-                        'http_vendas': params.get('http_vendas', 'http://localhost:5000'),
+                        'http_apk': params.get('http_apk', 'http://localhost:5000'),
                         'id_sala_param': g.id_sala,
-                        'url_canal_live': params.get('url_canal_live', ''),
-                        'venda_lite': params.get('venda_lite', False), 
-                        'tipo_cadastro_cliente': params.get('tipo_cadastro_cliente', default_config_cadastro), 
-                        'comissao_padrao': params.get('comissao_padrao', 20),
-                        'comissao_autoatendimento': params.get('comissao_autoatendimento', 10), 
-                        
-                        # Conversão explícita e Logada
-                        'limite_de_credito': limite_convertido,
-                        
-                        'tipo_cadastro_colaborador': params.get('tipo_cadastro_colaborador', {})
+                        'venda_lite': params.get('venda_lite', False),
+                        'limite_de_credito': float(str(val_limite_bruto)),
+                        'tipo_cadastro_cliente': params.get('tipo_cadastro_cliente', {
+                            "nome_cliente": True, "nick": True, "telefone": True, 
+                            "cpf": False, "cidade": True, "chave_pix": True, "senha": True
+                        })
                     }
-                    #print(f"[DEBUG] > Parâmetro Global Final 'limite_de_credito': {g.parametros_globais['limite_de_credito']}")
                 else:
-                    # Defaults se não achar parametros
-                    log_sistema(f"[DEBUG] AVISO: Nenhum parâmetro encontrado no banco. Usando DEFAULTS (Limite 100.0).")
-                    g.parametros_globais = {'tipo_cadastro_cliente': default_config_cadastro, 'comissao_padrao': 20, 'nome_sala': 'SALA (DEFAULT)', 'id_sala_param': g.id_sala, 'limite_de_credito': 100.00}
-
+                    # Fallback de emergência
+                    g.parametros_globais = {'nome_sala': 'SALA (DEFAULT)', 'id_sala_param': g.id_sala, 'limite_de_credito': 100.0}
         except Exception as e:
             print(f"Erro ao carregar parâmetros no before_request: {e}")
 
+@app.context_processor
+def inject_sala():
+    return dict(id_sala=session.get('id_sala', '000'))
 
 @app.teardown_request
 def teardown_request(exception=None):
@@ -1563,6 +1531,57 @@ def consulta_status_eventos():
                            filtro_atual=filtro_str,
                            limit_atual=limit_atual)
 
+@app.route('/evento/mudar_status_lote', methods=['POST'])
+@login_required
+def evento_mudar_status_lote():
+    """
+    Recebe um dicionário JSON com vários eventos e seus novos status.
+    Aplica a alteração em todos eles e nos seus respetivos Combos em Cascata.
+    """
+    db = get_vendas_db()
+    if db is None or session.get('nivel', 0) < 3:
+        return jsonify({'status': 'error', 'message': 'Acesso negado ou DB offline.'})
+
+    try:
+        data = request.json
+        changes = data.get('changes', {}) # Ex: { "105": "ativo", "106": "finalizado" }
+        
+        count_modificados = 0
+        
+        for id_str, novo_status in changes.items():
+            id_evento_int = int(id_str)
+            if novo_status not in ['ativo', 'paralizado', 'finalizado']:
+                continue
+                
+            update_data = {'status': novo_status}
+            
+            # Regra da Data de Ativação
+            if novo_status == 'ativo':
+                evento = db.eventos.find_one({'id_evento': id_evento_int}, {'data_ativado': 1})
+                if evento and evento.get('data_ativado') is None:
+                    from datetime import datetime
+                    # Use a sua função hora_brasil() se a tiver importada
+                    update_data['data_ativado'] = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+                    
+            # 1. Atualiza o Pai
+            db.eventos.update_one({'id_evento': id_evento_int}, {'$set': update_data})
+            
+            # 2. Sincronização em Cascata (COMBO FASE 2)
+            db.eventos.update_many(
+                {'id_evento_principal_combo': id_evento_int}, 
+                {'$set': update_data}
+            )
+            count_modificados += 1
+
+        session['success_message'] = f"{count_modificados} evento(s) (e os seus combos) atualizados com sucesso!"
+        return jsonify({'status': 'success'})
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
 @app.route('/evento/mudar_status', methods=['POST'])
 @login_required
 def evento_mudar_status():
@@ -1589,16 +1608,36 @@ def evento_mudar_status():
 
     try:
         update_data = {'status': novo_status}
+        
+        # Regra da Data de Ativação
         if novo_status == 'ativo':
             evento = db.eventos.find_one({'id_evento': id_evento_int}, {'data_ativado': 1})
             if evento and evento.get('data_ativado') is None:
                 update_data['data_ativado'] = hora_brasil()
         
+        # 1. ATUALIZA O EVENTO PRINCIPAL
         result = db.eventos.update_one({'id_evento': id_evento_int}, {'$set': update_data})
-        if result.modified_count == 1:
-            session['success_message'] = f"Evento EVE{id_evento_int} atualizado para '{novo_status.upper()}'."
+        
+        # ====================================================================
+        # 🚀 2. SINCRONIZAÇÃO EM CASCATA (COMBO FASE 2)
+        # ====================================================================
+        # Busca todos os eventos "Filhos" (réplicas) que pertençam a este evento e atualiza-os também
+        result_combo = db.eventos.update_many(
+            {'id_evento_principal_combo': id_evento_int}, 
+            {'$set': update_data}
+        )
+        # ====================================================================
+
+        if result.modified_count == 1 or result.matched_count == 1:
+            msg_sucesso = f"Evento EVE{id_evento_int} atualizado para '{novo_status.upper()}'."
+            
+            # Se encontrou combos atrelados, avisa o gestor que a mágica aconteceu!
+            if result_combo.modified_count > 0:
+                msg_sucesso += f" 🔄 Sincronizado com {result_combo.modified_count} evento(s) de Combo atrelado(s)."
+                
+            session['success_message'] = msg_sucesso
         else:
-            session['error_message'] = f"Evento EVE{id_evento_int} não foi modificado."
+            session['error_message'] = f"Evento EVE{id_evento_int} não encontrado para modificação."
 
     except Exception as e:
         session['error_message'] = f"Erro de banco de dados: {e}"
@@ -2882,11 +2921,12 @@ def cadastro_cliente():
                 if filtro_colab:
                     query_listagem["id_colaborador"] = filtro_colab
 
-                # 🚀 NOVO: Filtro por Regional (Apenas para Master)
+                # Filtro por Regional (Apenas para Master)
                 filtro_regional = request.args.get('filtro_regional')
                 if session.get('nivel', 0) >= 4 and filtro_regional and filtro_regional.isdigit():
                     query_listagem["id_regional"] = int(filtro_regional)
 
+                # Busca ordenada pelo Mongo
                 clientes_cursor = db.clientes.find(query_listagem).sort("nick", pymongo.ASCENDING).limit(100)
                 clientes_lista = list(clientes_cursor)
 
@@ -2898,9 +2938,15 @@ def cadastro_cliente():
                     regex_term = re.compile(re.escape(search_term), re.IGNORECASE)
                     query_filter = {'$or': [{'nome_cliente': {'$regex': regex_term}}, {'nick': {'$regex': regex_term}}]}
                 
-                # Mescla busca com trava regional[cite: 1]
+                # Mescla busca com trava regional
                 final_query = {"$and": [base_query, query_filter]} if base_query else query_filter
-                clientes_lista = list(db.clientes.find(final_query))
+                
+                # 🚀 CORREÇÃO: Adicionada a ordenação também na pesquisa
+                clientes_lista = list(db.clientes.find(final_query).sort("nick", pymongo.ASCENDING))
+
+            # 🚀 GARANTIA ALFABÉTICA (Case-Insensitive)
+            # Evita que "Zebra" venha antes de "abelha" só por causa da letra maiúscula.
+            clientes_lista.sort(key=lambda x: (x.get('nick') or '').lower())
 
         except Exception as e:
             error = f"Erro ao carregar dados: {e}"
@@ -2936,6 +2982,38 @@ def cadastro_cliente():
         'lista_bloqueio': lista_bloqueio
     }
     return render_template('cadastro_cliente.html', **context)
+
+@app.route('/resetar_senha_cliente/<int:id_cliente>', methods=['POST'])
+@login_required
+def resetar_senha_cliente(id_cliente):
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+
+    # Trava de Segurança
+    if session.get('nivel', 1) < 3:
+        return redirect(url_for('cadastro_cliente', view='listar', error="⛔ Acesso Negado: Apenas gestores podem resetar senhas."))
+
+    try:
+        from werkzeug.security import generate_password_hash
+        
+        # Gera a nova senha criptografada com a palavra padrão "Senha"
+        nova_senha_hash = generate_password_hash("Senha")
+
+        result = db.clientes.update_one(
+            {'id_cliente': id_cliente},
+            {'$set': {'senha': nova_senha_hash}}
+        )
+
+        if result.modified_count > 0 or result.matched_count > 0:
+            success_msg = f"Senha do cliente ID CLI{id_cliente} redefinida com sucesso para o padrão: <b>Senha</b>."
+            registrar_log("ALTERAR", "CLIENTES", f"Senha resetada para o padrão 'Senha'.", id_cliente)
+            return redirect(url_for('cadastro_cliente', view='alterar', id_cliente=id_cliente, success=success_msg))
+        else:
+            return redirect(url_for('cadastro_cliente', view='listar', error="Cliente não encontrado."))
+
+    except Exception as e:
+        print(f"Erro ao resetar senha do cliente {id_cliente}: {e}")
+        return redirect(url_for('cadastro_cliente', view='alterar', id_cliente=id_cliente, error="Erro interno ao resetar senha."))
 
 
 @app.route('/gravar_cliente', methods=['POST'])
@@ -3446,7 +3524,6 @@ def cadastro_evento():
     numeric_int_fields = ['unidade_de_venda', 'numero_inicial', 'numero_maximo', 'tipo_de_cartela', 'quantidade_de_linhas', 'bola_tope_acumulado', 'distribuir_cortesia']
     all_numeric_fields = numeric_float_fields + numeric_int_fields
 
-    # Função auxiliar interna para garantir que o Jinja não receba Decimal128
     def to_num(val, is_int=False):
         try:
             res = float(str(val.to_decimal())) if hasattr(val, 'to_decimal') else float(val or 0)
@@ -3462,17 +3539,25 @@ def cadastro_evento():
         try:
             evento_edicao = db.eventos.find_one({'id_evento': int(id_evento_edicao)})
             if evento_edicao:
-                if '_id' in evento_edicao: evento_edicao['_id'] = str(evento_edicao['_id'])
-                # Conversão preventiva para o form de edição
-                for key in numeric_float_fields:
-                    if key in evento_edicao: evento_edicao[key] = to_num(evento_edicao[key])
-                for key in numeric_int_fields:
-                    if key in evento_edicao: evento_edicao[key] = to_num(evento_edicao[key], is_int=True)
+                
+                # =========================================================
+                # 🚀 TRAVA DE SEGURANÇA: COMBO FILHO NÃO PODE SER EDITADO
+                # =========================================================
+                if evento_edicao.get('id_evento_principal_combo'):
+                    error = f"❌ Acesso Negado: O Evento {id_evento_edicao} é uma réplica de Combo. Exclusões e alterações só podem ser feitas no Evento Principal."
+                    active_view = 'listar'
+                    evento_edicao = None
+                else:
+                    if '_id' in evento_edicao: evento_edicao['_id'] = str(evento_edicao['_id'])
+                    for key in numeric_float_fields:
+                        if key in evento_edicao: evento_edicao[key] = to_num(evento_edicao[key])
+                    for key in numeric_int_fields:
+                        if key in evento_edicao: evento_edicao[key] = to_num(evento_edicao[key], is_int=True)
 
-                dev = evento_edicao.get('data_evento')
-                if dev and isinstance(dev, str):
-                    try: evento_edicao['data_evento'] = datetime.strptime(dev, '%d/%m/%Y').strftime('%Y-%m-%d')
-                    except: pass
+                    dev = evento_edicao.get('data_evento')
+                    if dev and isinstance(dev, str):
+                        try: evento_edicao['data_evento'] = datetime.strptime(dev, '%d/%m/%Y').strftime('%Y-%m-%d')
+                        except: pass
         except: 
             error, active_view = "ID inválido.", 'listar'
 
@@ -3491,7 +3576,10 @@ def cadastro_evento():
 
             # 5. Processamento Regionalizado (Fase 4)
             for evento in eventos_lista:
-                # Limpeza de tipos para a lista
+                
+                # 🚀 IDENTIFICA SE É FILHO PARA O FRONT-END BLOQUEAR OS BOTÕES
+                evento['is_combo_filho'] = bool(evento.get('id_evento_principal_combo'))
+                
                 for key in all_numeric_fields:
                     if key in evento: evento[key] = to_num(evento[key])
 
@@ -3513,7 +3601,6 @@ def cadastro_evento():
             error = f"Erro: {e}"
 
     # 6. Preparação Final do Contexto
-    # Limpamos o acumulado vindo dos parâmetros para evitar o erro <= 0
     raw_acumulado = param_doc_global.get('acumulado', 0)
     raw_tope =  param_doc_global.get('tope', 0) 
     raw_minimo  =  param_doc_global.get('minimo_terminal', 6)
@@ -3523,7 +3610,7 @@ def cadastro_evento():
         'total_eventos': total_eventos,
         'eventos_lista': eventos_lista,
         'active_view': active_view,
-        'default_acumulado': to_num(raw_acumulado), # Limpo para o Jinja
+        'default_acumulado': to_num(raw_acumulado), 
         'default_tope': raw_tope, 
         'default_minimo': raw_minimo,
         'default_maximo': raw_maximo,  
@@ -3539,6 +3626,7 @@ def cadastro_evento():
 
 
 @app.route('/excluir_eventos_periodo', methods=['POST'])
+@login_required
 def excluir_eventos_periodo():
     db = get_vendas_db()
     if db is None: return redirect(url_for('login'))
@@ -3556,6 +3644,8 @@ def excluir_eventos_periodo():
         inicio_dt = datetime.strptime(inicio_raw, '%Y-%m-%dT%H:%M')
         fim_dt = datetime.strptime(fim_raw, '%Y-%m-%dT%H:%M')
 
+        # 🚀 SEGURANÇA COMBO: No expurgo por período, nós varremos TUDO o que estiver no intervalo.
+        # Os filhos que caírem no intervalo serão apagados independentemente, mas o motor garantirá que as tabelas morrem.
         query_periodo = {"data_hora_evento": {"$gte": inicio_dt, "$lte": fim_dt}}
         eventos_para_excluir = list(db.eventos.find(query_periodo, {"id_evento": 1}))
         
@@ -3581,7 +3671,7 @@ def excluir_eventos_periodo():
             contagem += 1
 
         registrar_log("EXPURGO", "EVENTOS", f"Removidos {contagem} eventos via período ({inicio_raw} a {fim_raw})")
-        return redirect(url_for('cadastro_evento', view='exclusao_lote', success=f"Sucesso! {contagem} eventos e todos os seus dados vinculados (incluindo snapshots) foram excluídos."))
+        return redirect(url_for('cadastro_evento', view='exclusao_lote', success=f"Sucesso! {contagem} eventos (Pais e Filhos) e todos os seus dados vinculados (incluindo snapshots) foram excluídos."))
 
     except Exception as e:
         print(f"ERRO NO EXPURGO PERÍODO: {e}")
@@ -3604,41 +3694,59 @@ def excluir_eventos_lote():
 
     excluidos_sucesso = 0
     falhas = 0
+    filhos_bloqueados = 0
 
     try:
         for id_str in ids_selecionados_str:
             try:
                 id_evento = int(id_str)
                 
-                # 1. Exclui registro principal
-                result = db.eventos.delete_one({'id_evento': id_evento})
+                # 🚀 SEGURANÇA COMBO: Verifica se o evento escolhido é filho.
+                evento_db = db.eventos.find_one({'id_evento': id_evento})
+                if evento_db and evento_db.get('id_evento_principal_combo'):
+                    filhos_bloqueados += 1
+                    continue # Pula a exclusão deste evento porque é filho!
                 
-                if result.deleted_count == 1:
-                    # 2. BLOCO ADAPTADOR: Remove coleções dinâmicas (Incluindo o Snapshot agora)
-                    colecoes_para_apagar = [
-                        f"vendas{id_evento}",
-                        f"vendas_sorte_extra{id_evento}",
-                        f"pagamentos{id_evento}",
-                        f"snapshot_vendas_{id_evento}"
-                    ]
-                    
-                    for col_name in colecoes_para_apagar:
-                        if col_name in db.list_collection_names():
-                            db[col_name].drop()
+                # É um evento principal (Pai ou Evento Normal). Pega também todos os IDs dos Filhos.
+                lista_ids_para_apagar = [id_evento]
+                filhos_cursor = db.eventos.find({'id_evento_principal_combo': id_evento}, {'id_evento': 1})
+                for filho in filhos_cursor:
+                    lista_ids_para_apagar.append(filho['id_evento'])
 
-                    # 3. Remove registros vinculados nas tabelas de apoio
-                    db.resultados.delete_many({'id_evento': id_evento})
-                    db.controle_venda.delete_many({'id_evento': id_evento})
+                # 🚀 DESTRUIÇÃO EM CASCATA: Apaga o Pai e os Filhos no mesmo laço
+                for id_alvo in lista_ids_para_apagar:
+                    result = db.eventos.delete_one({'id_evento': id_alvo})
                     
-                    excluidos_sucesso += 1
-                else:
-                    falhas += 1
+                    if result.deleted_count == 1:
+                        # 2. BLOCO ADAPTADOR: Remove coleções dinâmicas de TODOS os IDs
+                        colecoes_para_apagar = [
+                            f"vendas{id_alvo}",
+                            f"vendas_sorte_extra{id_alvo}",
+                            f"pagamentos{id_alvo}",
+                            f"snapshot_vendas_{id_alvo}"
+                        ]
+                        
+                        for col_name in colecoes_para_apagar:
+                            if col_name in db.list_collection_names():
+                                db[col_name].drop()
+
+                        # 3. Remove registros vinculados nas tabelas de apoio
+                        db.resultados.delete_many({'id_evento': id_alvo})
+                        db.controle_venda.delete_many({'id_evento': id_alvo})
+                        
+                        excluidos_sucesso += 1
+                    else:
+                        falhas += 1
 
             except ValueError:
                 falhas += 1
 
         registrar_log("EXCLUIR", "EVENTOS", f"Exclusão em lote: {excluidos_sucesso} eventos removidos.")
-        msg = f"Operação concluída! {excluidos_sucesso} eventos e todos os dados vinculados (vendas e snapshots) foram apagados."
+        
+        msg = f"Operação concluída! {excluidos_sucesso} eventos (incluindo réplicas em cascata) apagados."
+        if filhos_bloqueados > 0:
+            msg += f" (⚠️ {filhos_bloqueados} itens selecionados foram ignorados por serem Combos Filhos protegidos)."
+            
         return redirect(url_for('cadastro_evento', view='exclusao_lote', success=msg))
 
     except Exception as e:
@@ -3653,45 +3761,61 @@ def excluir_evento(id_evento):
     if db is None: return redirect(url_for('login'))
 
     try:
-        # 1. Tenta excluir o registro principal do Evento
-        result = db.eventos.delete_one({'id_evento': id_evento})
-        
-        if result.deleted_count == 1:
-            # 2. BLOCO ADAPTADOR: Remove as coleções dinâmicas inteiras
-            # Incluímos Vendas, Sorte Extra, Pagamentos e o Snapshot
-            colecoes_para_limpar = [
-                f"vendas{id_evento}",
-                f"vendas_sorte_extra{id_evento}",
-                f"pagamentos{id_evento}",
-                f"snapshot_vendas_{id_evento}"
-            ]
+        # 🚀 SEGURANÇA COMBO: Verifica se é Filho antes de tentar apagar
+        evento_db = db.eventos.find_one({'id_evento': id_evento})
+        if not evento_db:
+             return redirect(url_for('cadastro_evento', error="Evento não encontrado no banco de dados.", view='listar'))
+             
+        if evento_db.get('id_evento_principal_combo'):
+            return redirect(url_for('cadastro_evento', error="❌ Operação Cancelada: Eventos de Combo (Réplicas) não podem ser excluídos isoladamente. Exclua o evento principal correspondente.", view='listar'))
+
+        # Se passou na trava, procura se ele tem Filhos
+        lista_ids_para_apagar = [id_evento]
+        filhos_cursor = db.eventos.find({'id_evento_principal_combo': id_evento}, {'id_evento': 1})
+        for filho in filhos_cursor:
+            lista_ids_para_apagar.append(filho['id_evento'])
+
+        excluidos = 0
+        # 🚀 DESTRUIÇÃO EM CASCATA
+        for id_alvo in lista_ids_para_apagar:
+            result = db.eventos.delete_one({'id_evento': id_alvo})
             
-            for nome_col in colecoes_para_limpar:
-                if nome_col in db.list_collection_names():
-                    db[nome_col].drop()
+            if result.deleted_count == 1:
+                # 2. BLOCO ADAPTADOR: Remove as coleções dinâmicas inteiras
+                colecoes_para_limpar = [
+                    f"vendas{id_alvo}",
+                    f"vendas_sorte_extra{id_alvo}",
+                    f"pagamentos{id_alvo}",
+                    f"snapshot_vendas_{id_alvo}"
+                ]
+                
+                for nome_col in colecoes_para_limpar:
+                    if nome_col in db.list_collection_names():
+                        db[nome_col].drop()
 
-            # 3. Remove registros vinculados nas tabelas de apoio
-            db.resultados.delete_many({'id_evento': id_evento})
-            db.controle_venda.delete_many({'id_evento': id_evento})
+                # 3. Remove registros vinculados nas tabelas de apoio
+                db.resultados.delete_many({'id_evento': id_alvo})
+                db.controle_venda.delete_many({'id_evento': id_alvo})
+                
+                excluidos += 1
 
-            # 4. Auditoria unificada
-            registrar_log(
-                acao="EXCLUIR",
-                categoria="EVENTOS",
-                detalhes=f"Exclusão individual do evento e todas as suas tabelas vinculadas (vendas/snapshots).",
-                alvo_id=f"EVENTO_{id_evento}"
-            )
+        # 4. Auditoria unificada
+        registrar_log(
+            acao="EXCLUIR",
+            categoria="EVENTOS",
+            detalhes=f"Exclusão do Evento e seus Combos (Total: {excluidos}) e tabelas vinculadas.",
+            alvo_id=f"EVENTO_{id_evento}"
+        )
 
-            success_msg = f"Evento ID: {id_evento} e todos os seus dados vinculados foram removidos com sucesso."
-        else:
-            success_msg = f"Evento ID: {id_evento} não foi encontrado no banco de dados."
-
+        success_msg = f"Evento ID: {id_evento} e as suas Réplicas de Combo (Total apagado: {excluidos}) foram removidos com sucesso!"
         return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
 
     except Exception as e:
         print(f"ERRO CRÍTICO na exclusão de evento ID {id_evento}: {e}")
+        import traceback
         traceback.print_exc()
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento: {e}", view='listar'))
+
 
 @app.route('/gravar_evento', methods=['POST'])
 @login_required
@@ -3845,13 +3969,13 @@ def gravar_evento():
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
         return redirect(url_for('cadastro_evento', error=f"Erro ao salvar: {e}", view=view_redirect, id_evento=id_evento_edicao))
 
-
 @app.route('/consulta_vendas', methods=['GET'])
 @login_required
 def consulta_vendas():
     """
     Página de consulta de vendas regionalizada.
     Garante que gestores vejam apenas dados de sua jurisdição.
+    INCLUI FILTRO DE STATUS (Ativos/Paralisados vs Finalizados).
     """
     db = get_vendas_db()
     if db is None: return redirect(url_for('login'))
@@ -3869,6 +3993,8 @@ def consulta_vendas():
     
     id_evento_param = request.args.get('id_evento')
     id_colaborador_param = request.args.get('id_colaborador')
+    # 🚀 Captura o filtro de status do novo Dropdown
+    status_filtro = request.args.get('status_filtro', 'ativos')
 
     eventos_ativos = []
     colaboradores_lista = []
@@ -3891,7 +4017,16 @@ def consulta_vendas():
             return evento
 
         if not id_evento_param:
-            eventos_ativos_cursor = db.eventos.find({'status': 'ativo'}).sort('data_evento', pymongo.ASCENDING)
+            # 🚀 APLICA O FILTRO DE STATUS NA BUSCA DE EVENTOS
+            if status_filtro == 'finalizados':
+                query_status = {'status': 'finalizado'}
+                ordem = pymongo.DESCENDING # Finalizados mais recentes primeiro
+            else:
+                query_status = {'status': {'$in': ['ativo', 'paralisado']}}
+                ordem = pymongo.ASCENDING # Ativos pela ordem normal
+
+            eventos_ativos_cursor = db.eventos.find(query_status).sort('data_evento', ordem)
+            
             for evento in eventos_ativos_cursor:
                 eventos_ativos.append(clean_event_numerics(evento))
         
@@ -3906,7 +4041,7 @@ def consulta_vendas():
             # --- 1. FILTRO DE COLABORADORES (REGIONALIZADO) ---
             colabs_query = {}
             if not is_master and id_regional_sessao:
-                colabs_query['id_regional'] = int(id_regional_sessao) # Só vê colegas da mesma regional[cite: 1]
+                colabs_query['id_regional'] = int(id_regional_sessao) # Só vê colegas da mesma regional
 
             if nivel_usuario >= 3:
                 colaboradores_lista.append({'nick': 'TODOS', 'id_colaborador': 'ALL'})
@@ -3915,13 +4050,13 @@ def consulta_vendas():
                     colaboradores_lista.append(colab)
                     comissao_map[colab['id_colaborador']] = colab.get('comissao', default_comissao)
             
-            # --- 2. MONTAGEM DO MATCH PARA AGREGATION ---[cite: 1]
+            # --- 2. MONTAGEM DO MATCH PARA AGREGATION ---
             id_evento_int = selected_event.get('id_evento')
             nome_colecao_venda = f"vendas{id_evento_int}"
             
             match_stage = {'id_evento': id_evento_int}
             
-            # Trava Regional: Essencial para usar o ÍNDICE COMPOSTO da Fase 3[cite: 1]
+            # Trava Regional: Essencial para usar o ÍNDICE COMPOSTO da Fase 3
             if not is_master and id_regional_sessao:
                 match_stage['id_regional'] = int(id_regional_sessao)
 
@@ -3938,9 +4073,9 @@ def consulta_vendas():
                 else:
                     selected_colab_id_str = 'ALL'
 
-            # --- PIPELINE DE AGREGAÇÃO ---[cite: 1]
+            # --- PIPELINE DE AGREGAÇÃO ---
             pipeline = [
-                {'$match': match_stage}, # Filtro regional e de evento aplicado aqui[cite: 1]
+                {'$match': match_stage}, # Filtro regional e de evento aplicado aqui
                 {
                     '$group': {
                         '_id': '$id_colaborador', 
@@ -3974,7 +4109,7 @@ def consulta_vendas():
                     res['total_valor_float'] = safe_float(res['total_valor'])
                     resultados_agregados.append(res)
 
-            # --- RESUMO GERAL ---[cite: 1]
+            # --- RESUMO GERAL ---
             if selected_colab_id_str == 'ALL' and resultados_agregados:
                 resumo_geral = {
                     'nick_colaborador': '⭐ Resumo Regional' if not is_master else '⭐ Resumo Global',
@@ -3988,10 +4123,10 @@ def consulta_vendas():
 
     except Exception as e:
         error = f"Erro na consulta: {e}"
+        import traceback
         traceback.print_exc()
 
     return render_template('consulta_vendas.html', g=g, error=error, success=success, nivel=nivel_usuario, eventos=eventos_ativos, selected_event=selected_event, colaboradores=colaboradores_lista, selected_colab_id=selected_colab_id_str, resumo_geral=resumo_geral, resultados_agregados=resultados_agregados)
-
 
 @app.route('/consulta_vendas/detalhes', methods=['GET'])
 @login_required
@@ -4715,35 +4850,40 @@ def reimprimir_comprovante_txt():
     """
     Gera o texto (TXT) de um comprovante para "Venda Única" ou "Vendas Cliente"
     e retorna como JSON para ser copiado pela área de transferência.
+    INCLUI MATEMÁTICA DE COMBO (Fase 1)
     """
     db = get_vendas_db()
-    if db is None: # <-- CORREÇÃO PYMONGO
+    if db is None:
         return jsonify({'status': 'error', 'message': 'DB Offline'})
 
     try:
         data = request.json
         tipo_reimpressao = data.get('tipo_reimpressao') 
-        id_venda_str = data.get('id_venda')           
+        id_venda_str = data.get('id_venda')            
         id_cliente_int = int(data.get('id_cliente'))
  
         valor_id_evento = str(data.get('id_evento'))
    
         # --- BLINDAGEM DO EVENTO ---
-        if len(valor_id_evento) == 24: # Se tem 24 caracteres, é o hash (ObjectId)
-            # Busca pelo _id original do evento ou pelo campo id_evento_ObjectId
+        if len(valor_id_evento) == 24:
+            from bson.objectid import ObjectId
             evento = db.eventos.find_one({
                 '$or': [
                     {'_id': ObjectId(valor_id_evento)},
                     {'id_evento_ObjectId': ObjectId(valor_id_evento)}
                 ]
             })
-        else: # Se for curtinho, é o número inteiro puro
+        else: 
             evento = db.eventos.find_one({'id_evento': int(valor_id_evento)})
     
         if not evento:
             return jsonify({'status': 'error', 'message': 'Evento não encontrado'})
         
         id_evento_int = evento.get('id_evento')
+        
+        # 🚀 VARIÁVEIS DO COMBO
+        combo_qtde = int(evento.get('combo_qtde', 1))
+        unidade_de_venda = int(evento.get('unidade_de_venda', 1))
 
         http_apk = g.parametros_globais.get('http_apk', '')
         url_canal_live = g.parametros_globais.get('url_canal_live', '')
@@ -4766,12 +4906,23 @@ def reimprimir_comprovante_txt():
             if not venda:
                 return jsonify({'status': 'error', 'message': 'Venda não encontrada'})
             
-            periodo_principal = f"   > {venda['numero_inicial']} a {venda['numero_final']}<br>"
-            periodo_adicional = ""
-                       
+            # 🚀 MOTOR DO COMBO NA REIMPRESSÃO (WhatsApp)
+            detalhes_rodadas_html = ""
+            qtd_cartelas = (venda['numero_final'] - venda['numero_inicial']) + 1
+            kit_base = ((venda['numero_inicial'] - 1) // unidade_de_venda) + 1
+            
+            for rodada in range(1, combo_qtde + 1):
+                kit_atual = kit_base + (rodada - 1)
+                ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+                fim_atual = ini_atual + qtd_cartelas - 1
+                
+                texto_r = f"Rodada {rodada:02d}"
+                if unidade_de_venda > 1:
+                     texto_r += f" (Kit {kit_atual})"
+                detalhes_rodadas_html += f"   > {texto_r}: {ini_atual} a {fim_atual}<br>"
+                
             if venda.get('numero_inicial2', 0) > 0:
-                periodo_adicional = f"    > {venda['numero_inicial2']} a {venda['numero_final2']}<br>"
-                #link_periodos += f"&periodo={venda['numero_inicial2']},{venda['numero_final2']}"
+                detalhes_rodadas_html += f"   > Adicional: {venda['numero_inicial2']} a {venda['numero_final2']}<br>"
 
             receipt_html = (
                 f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
@@ -4786,8 +4937,7 @@ def reimprimir_comprovante_txt():
                 f"Unidades Compradas: <strong>{venda['quantidade_unidades']}<strong><br>"
                 f"     (Cartelas: {venda['quantidade_cartelas']})<br>"
                 f"<strong> >  Período de Cartelas  <<strong><br>"
-                f"{periodo_principal}"
-                f"{periodo_adicional}"
+                f"{detalhes_rodadas_html}"
                 f"  VALOR: R$ {safe_float(venda['valor_total']):.2f}<br>"
             )
 
@@ -4822,10 +4972,22 @@ def reimprimir_comprovante_txt():
                 total_cartelas += venda['quantidade_cartelas']
                 total_valor += safe_float(venda['valor_total'])
                 
-                periodos_html_list.append(f"   > {venda['numero_inicial']} a {venda['numero_final']}<br>")
+                # 🚀 MOTOR DO COMBO PARA CADA VENDA NO RESUMO DO CLIENTE
+                qtd_cartelas = (venda['numero_final'] - venda['numero_inicial']) + 1
+                kit_base = ((venda['numero_inicial'] - 1) // unidade_de_venda) + 1
+                
+                for rodada in range(1, combo_qtde + 1):
+                    kit_atual = kit_base + (rodada - 1)
+                    ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+                    fim_atual = ini_atual + qtd_cartelas - 1
+                    
+                    texto_r = f"R{rodada:02d}"
+                    if unidade_de_venda > 1:
+                         texto_r += f"(K{kit_atual})"
+                    periodos_html_list.append(f"   > {texto_r}: {ini_atual} a {fim_atual}<br>")
                 
                 if venda.get('numero_inicial2', 0) > 0:
-                    periodos_html_list.append(f"    > {venda['numero_inicial2']} a {venda['numero_final2']}<br>")
+                    periodos_html_list.append(f"    > Adic: {venda['numero_inicial2']} a {venda['numero_final2']}<br>")
 
             todos_periodos_html = "".join(periodos_html_list)
 
@@ -4850,7 +5012,7 @@ def reimprimir_comprovante_txt():
                 f"<br>"
                 f"<br>"                
                 f">CLIQUE NO <strong>LINK</strong> ABAIXO PARA<br>"
-                f"    ACESSAR SUAS CARTELAS 📱<br>"
+                f"   ACESSAR SUAS CARTELAS 📱<br>"
             )
 
         else:
@@ -4859,6 +5021,8 @@ def reimprimir_comprovante_txt():
         receipt_html += f"<br><strong> {link_final_limpo} </strong>"
 
         def clean_html_to_txt(html_str):
+            import re
+            import html
             txt = re.sub(r'<br\s*/?>', '\n', html_str, flags=re.IGNORECASE)
             txt = re.sub(r'<[^>]+>', '', txt)
             txt = html.unescape(txt)
@@ -4874,8 +5038,10 @@ def reimprimir_comprovante_txt():
 
     except Exception as e:
         print(f"Erro ao reimprimir comprovante: {e}")
+        import traceback
         traceback.print_exc()
         return jsonify({'status': 'error', 'message': f'Erro interno: {e}'})
+
 
 @app.route('/reimprimir_comprovante_json', methods=['POST'])
 @login_required
@@ -4883,6 +5049,7 @@ def reimprimir_comprovante_json():
     """
     Gera o pacote estruturado (JSON) de um comprovante para "Venda Única" ou "Vendas Cliente".
     Este payload é lido pela ponte Android para imprimir na térmica 58mm.
+    INCLUI MATEMÁTICA DE COMBO (Fase 1)
     """
     db = get_vendas_db()
     if db is None:
@@ -4911,6 +5078,11 @@ def reimprimir_comprovante_json():
             return jsonify({'status': 'error', 'message': 'Evento não encontrado'})
         
         id_evento_int = evento.get('id_evento')
+        
+        # 🚀 VARIÁVEIS DO COMBO
+        combo_qtde = int(evento.get('combo_qtde', 1))
+        unidade_de_venda = int(evento.get('unidade_de_venda', 1))
+
         http_apk = g.parametros_globais.get('http_apk', '')
         url_canal_live = g.parametros_globais.get('url_canal_live', '')
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
@@ -4950,9 +5122,7 @@ def reimprimir_comprovante_json():
             if not venda:
                 return jsonify({'status': 'error', 'message': 'Venda não encontrada'})
             
-            #add_linha("== 2 VIA DE RECIBO ==", "centro", "normal", True)
             add_linha("COMPROVANTE DE COMPRA", "centro", "normal", True)
-            #add_linha(nome_sala, "centro", "normal", False)
             add_linha(" ", "centro", "normal", False)
             
             add_linha(f"ID da Venda: {venda['id_venda']}", "centro", "normal", False)
@@ -4968,18 +5138,31 @@ def reimprimir_comprovante_json():
             add_linha(str(venda['quantidade_cartelas']), "centro", "duplo", False)
 
             add_linha("> PERIODO DE CARTELAS <", "centro", "normal", True)
-            add_linha(f"{venda['numero_inicial']} a {venda['numero_final']}", "centro", "normal", False)
+            
+            # 🚀 LÓGICA DO COMBO NA REIMPRESSÃO
+            qtd_cartelas = (venda['numero_final'] - venda['numero_inicial']) + 1
+            kit_base = ((venda['numero_inicial'] - 1) // unidade_de_venda) + 1
+            
+            for rodada in range(1, combo_qtde + 1):
+                kit_atual = kit_base + (rodada - 1)
+                ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+                fim_atual = ini_atual + qtd_cartelas - 1
+                
+                texto_r = f"Rodada {rodada:02d}"
+                if unidade_de_venda > 1:
+                    texto_r += f" (Kit {kit_atual})"
+                add_linha(texto_r, "centro", "normal", True)
+                add_linha(f"{ini_atual} a {fim_atual}", "centro", "normal", False)
+                
             if venda.get('numero_inicial2', 0) > 0:
-                add_linha(f"{venda['numero_inicial2']} a {venda['numero_final2']}", "centro", "normal", False)
+                add_linha(f"Adicional: {venda['numero_inicial2']} a {venda['numero_final2']}", "centro", "normal", False)
             
             add_linha("-------------------------------", "centro", "normal", False)
             
-            # Formatação de Moeda segura no Python
             valor_formatado = f"{safe_float(venda['valor_total']):.2f}".replace('.', ',')
             
             add_linha("VALOR PAGO", "centro", "normal", False)
             add_linha(f"R$ {valor_formatado}", "centro", "duplo", False)
-            
             add_linha("===============================", "centro", "normal", False)
 
         # ==========================================
@@ -5004,9 +5187,7 @@ def reimprimir_comprovante_json():
             total_cartelas = 0
             total_valor = 0.0
             
-            #add_linha("== 2 VIA DE RECIBO ==", "centro", "normal", True)
             add_linha("RESUMO DO CLIENTE", "centro", "normal", True)
-            #add_linha(nome_sala, "centro", "normal", False)
             add_linha("-------------------------------", "centro", "normal", False)
             add_linha(f"Cliente: {nome_cliente.upper()}", "esquerda", "normal", True)
             add_linha(f"ID Cliente: {id_cliente_int}", "esquerda", "normal", False)
@@ -5026,9 +5207,22 @@ def reimprimir_comprovante_json():
             
             add_linha("> PERIODOS ADQUIRIDOS <", "centro", "normal", True)
             for venda in vendas_cliente:
-                add_linha(f"{venda['numero_inicial']} a {venda['numero_final']}", "centro", "normal", False)
+                # 🚀 LÓGICA DO COMBO NAS VENDAS TOTAIS DO CLIENTE
+                qtd_cartelas = (venda['numero_final'] - venda['numero_inicial']) + 1
+                kit_base = ((venda['numero_inicial'] - 1) // unidade_de_venda) + 1
+                
+                for rodada in range(1, combo_qtde + 1):
+                    kit_atual = kit_base + (rodada - 1)
+                    ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+                    fim_atual = ini_atual + qtd_cartelas - 1
+                    
+                    texto_r = f"R{rodada:02d}"
+                    if unidade_de_venda > 1:
+                        texto_r += f"(K{kit_atual})"
+                    add_linha(f"{texto_r}: {ini_atual} a {fim_atual}", "centro", "normal", False)
+                
                 if venda.get('numero_inicial2', 0) > 0:
-                    add_linha(f"{venda['numero_inicial2']} a {venda['numero_final2']}", "centro", "normal", False)
+                    add_linha(f"Adic: {venda['numero_inicial2']} a {venda['numero_final2']}", "centro", "normal", False)
             
             add_linha("-------------------------------", "centro", "normal", False)
             
@@ -5051,7 +5245,7 @@ def reimprimir_comprovante_json():
 
         return jsonify({
             'status': 'success',
-            'recibo': recibo # Retorna o objeto completo { config, linhas }
+            'recibo': recibo 
         })
 
     except Exception as e:
@@ -5106,133 +5300,132 @@ def excluir_venda():
         return jsonify({'status': 'error', 'message': f'Erro interno: {e}'})
 
 
-# --- ROTA GERAR LISTA (DOWNLOAD TXT) ---
+# --- ROTA GERAR LISTA (MULTIPLOS DOWNLOADS COM TEMPORIZADOR) ---
 @app.route('/gerar_lista_vendas')
 @login_required
 def gerar_lista_vendas():
     """
-    Gera um arquivo TXT em memória (com cabeçalho e dados de cliente)
-    e o envia para download.
+    Gera arquivos TXT. Se for Combo, abre tela de temporizador para baixar
+    sequencialmente cada rodada como 'periodo.1', 'periodo.2', etc.
     """
-    
     db = get_vendas_db()
-    if db is None: # <-- CORREÇÃO PYMONGO
+    if db is None:
         session['error_message'] = "Erro de conexão com o BD de Vendas."
         return redirect(url_for('consulta_vendas'))
 
     if session.get('nivel', 0) < 3:
         return redirect(url_for('menu_operacoes', error="Acesso Negado."))
 
+    nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
+
     id_evento_param = request.args.get('id_evento')
-    
-    redirect_url = url_for('consulta_vendas', 
-                           id_evento=id_evento_param, 
-                           id_colaborador='ALL')
+    forcar_download = request.args.get('forcar_download') 
+    redirect_url = url_for('consulta_vendas', id_evento=id_evento_param, id_colaborador='ALL')
 
     if not id_evento_param:
         session['error_message'] = "Erro: ID do Evento não fornecido."
         return redirect(url_for('consulta_vendas'))
 
     try:
-        evento_oid = try_object_id(id_evento_param)
-        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
-        
-        selected_event = db.eventos.find_one(
-            {'_id': evento_oid},
-            { 
-                'id_evento': 1, 'unidade_de_venda': 1, 'numero_maximo': 1,
-                'tipo_de_cartela': 1, 'valor_de_venda': 1, 'descricao': 1, 
-                'premio_quadra': 1, 'quantidade_de_linhas': 1, 'premio_linha': 1, 
-                'premio_faltaum': 1,'premio_bingo': 1, 'premio_segundobingo': 1,
-                'premio_acumulado': 1,'bola_tope_acumulado': 1
-            }
-        )
+        # Busca inteligente (ID inteiro ou Hash)
+        if len(str(id_evento_param)) == 24:
+            query_busca = {'_id': try_object_id(id_evento_param)}
+        else:
+            query_busca = {'id_evento': int(id_evento_param)}
 
-        #   
+        selected_event = db.eventos.find_one(query_busca, {
+            'id_evento': 1, 'unidade_de_venda': 1, 'numero_maximo': 1,
+            'tipo_de_cartela': 1, 'valor_de_venda': 1, 'descricao': 1, 
+            'premio_quadra': 1, 'quantidade_de_linhas': 1, 'premio_linha': 1, 
+            'premio_faltaum': 1, 'premio_bingo': 1, 'premio_segundobingo': 1,
+            'premio_acumulado': 1, 'bola_tope_acumulado': 1,
+            'combo_qtde': 1, 'id_evento_principal_combo': 1
+        })
 
         if not selected_event:
+            selected_event = db.eventos.find_one({'id_evento': int(id_evento_param)})
+
+        if not selected_event:
+            print(f"DEBUG: Evento {id_evento_param} não encontrado no BD.") 
             session['error_message'] = "Erro: Evento não encontrado."
             return redirect(redirect_url)
-            
-        id_evento_int = selected_event.get('id_evento')
-        nome_colecao_venda = f"vendas{id_evento_int}"
-        
-        file_name = f"periodo.{id_evento_int}"
 
-        io_buffer = io.StringIO()
-        
-        header_line = (
-            f"{selected_event.get('unidade_de_venda', 6)}!"
-            f"{selected_event.get('numero_maximo', 12000)}!"
-            f"{selected_event.get('tipo_de_cartela', 15)}!"
-            f"{safe_float(selected_event.get('valor_de_venda', 0))}!"
-            f"{selected_event.get('descricao', 'N/A')}!"
-            f"{safe_float(selected_event.get('premio_quadra', 0))}!"
-            f"{selected_event.get('quantidade_de_linhas', 1)}!"
-            f"{safe_float(selected_event.get('premio_linha', 0))}!"
-            f"{safe_float(selected_event.get('premio_faltaum', 0))}!"
-            f"{safe_float(selected_event.get('premio_bingo', 0))}!"
-            f"{safe_float(selected_event.get('premio_segundobingo', 0))}!"
-            f"{safe_float(selected_event.get('premio_acumulado', 0))}!"
-            f"{selected_event.get('bola_tope_acumulado', 0)}!" 
-            f"{nome_sala}\r\n")  # <--- ADICIONADO AQUI NO FINAL        
-
-        io_buffer.write(header_line)
-
-        vendas_cursor = db[nome_colecao_venda].find(
-            {'id_evento': id_evento_int},
-            { 
-                'numero_inicial': 1, 'numero_final': 1, 'numero_inicial2': 1,
-                'numero_final2': 1, 'id_cliente': 1, 'nome_cliente': 1,
-                'id_colaborador': 1, 'nick_colaborador': 1
-            }
-        ).sort('numero_inicial', pymongo.ASCENDING)
-        
-        lista_vendas = list(vendas_cursor) 
-        
-        if not lista_vendas:
-            session['error_message'] = "Não há nenhuma venda neste evento para gerar o arquivo."
+        # Trava: Bloqueia download direto por filho de combo
+        if selected_event.get('id_evento_principal_combo') and not forcar_download:
+            id_pai = selected_event.get('id_evento_principal_combo')
+            session['error_message'] = f"❌ Download bloqueado. Use o Evento Principal (ID: {id_pai})."
             return redirect(redirect_url)
 
-        cliente_ids_set = {v.get('id_cliente') for v in lista_vendas if v.get('id_cliente')}
-        
-        clientes_cursor = db.clientes.find(
-            {'id_cliente': {'$in': list(cliente_ids_set)}},
-            {'id_cliente': 1, 'telefone': 1, 'cidade': 1} 
-        )
-        
-        clientes_map = {c['id_cliente']: c for c in clientes_cursor}
+        combo_qtde = int(selected_event.get('combo_qtde', 1))
+        id_evento_int = selected_event.get('id_evento')
 
-        for venda in lista_vendas:
-            id_cliente = venda.get('id_cliente')
-            cliente_info = clientes_map.get(id_cliente, {})
-            
-            line_venda = (
-                f"{venda.get('numero_inicial', 0)}!"
-                f"{venda.get('numero_final', 0)}!"
-                f"{venda.get('numero_inicial2', 0)}!"
-                f"{venda.get('numero_final2', 0)}!"
-                f"{id_cliente or 'N/A'}!"
-                f"{venda.get('nome_cliente', 'N/A')}!"
-                f"{venda.get('id_colaborador', 'N/A')}!"
-                f"{venda.get('nick_colaborador', 'N/A')}!"
-                f"{cliente_info.get('telefone', 'N/A')}!"
-                f"{cliente_info.get('cidade', 'N/A')}\r\n" # <-- CRLF
-            )
-            io_buffer.write(line_venda)
+        # PARTE 1: Temporizador para Combos
+        if combo_qtde > 1 and not forcar_download:
+            eventos_ordenados = list(db.eventos.find(
+                {'$or': [{'id_evento': id_evento_int}, {'id_evento_principal_combo': id_evento_int}]},
+                {'id_evento': 1}
+            ).sort([
+                ('id_evento', pymongo.ASCENDING), 
+                ('numero_inicial', pymongo.ASCENDING)
+            ]))            
+            mapa_ordem = {ev['id_evento']: i + 1 for i, ev in enumerate(eventos_ordenados)}
+            ids_para_baixar = [ev['id_evento'] for ev in eventos_ordenados]
+
+            return render_template_string("""
+            <!DOCTYPE html>
+            <html lang="pt-br"><head><meta charset="UTF-8"><script src="https://cdn.tailwindcss.com"></script></head>
+            <body class="bg-gray-100 flex items-center justify-center h-screen">
+                <div class="bg-white p-8 rounded-xl shadow-2xl text-center max-w-md w-full border-t-4 border-blue-600">
+                    <h2 class="text-2xl font-black text-blue-800 mb-4">Exportando Rodadas</h2>
+                    <div class="mb-4"><span id="texto" class="font-bold">Preparando...</span></div>
+                    <div class="w-full bg-gray-200 h-4 rounded-full"><div id="bar" class="bg-blue-600 h-4 rounded-full" style="width:0%"></div></div>
+                </div>
+                <script>
+                    const ids = {{ ids | tojson }};
+                    const mapa = {{ mapa | tojson }};
+                    let i = 0;
+                    function prox() {
+                        if(i < ids.length) {
+                            const id = ids[i];
+                            document.getElementById('texto').innerText = `Baixando período ${mapa[id]}...`;
+                            const iframe = document.createElement('iframe');
+                            iframe.style.display = 'none';
+                            iframe.src = `{{ url_for('gerar_lista_vendas') }}?id_evento=${id}&forcar_download=1&ordem_rodada=${mapa[id]}`;
+                            document.body.appendChild(iframe);
+                            i++;
+                            document.getElementById('bar').style.width = (i/ids.length)*100 + '%';
+                            setTimeout(prox, 1500);
+                        } else {
+                            window.location.href = '{{ redirect_url }}';
+                        }
+                    }
+                    setTimeout(prox, 500);
+                </script>
+            </body></html>""", ids=ids_para_baixar, mapa=mapa_ordem, redirect_url=redirect_url)
+
+        # PARTE 2: Geração do Ficheiro TXT
+        nome_colecao_venda = f"vendas{id_evento_int}"
+        ordem_rodada = request.args.get('ordem_rodada', None)
+        file_name = f"periodo.{ordem_rodada}" if ordem_rodada else f"periodo.{id_evento_int}"
         
-        output_text = io_buffer.getvalue()
-        
-        return Response(
-            output_text.encode('latin-1', 'ignore'), 
-            mimetype="text/plain",
-            headers={"Content-Disposition": f"attachment;filename={file_name}"}
-        )
+        io_buffer = io.StringIO()
+        header = f"{selected_event.get('unidade_de_venda', 6)}!{selected_event.get('numero_maximo', 12000)}!{selected_event.get('tipo_de_cartela', 15)}!{safe_float(selected_event.get('valor_de_venda', 0))}!{selected_event.get('descricao', 'N/A')}!{safe_float(selected_event.get('premio_quadra', 0))}!{selected_event.get('quantidade_de_linhas', 1)}!{safe_float(selected_event.get('premio_linha', 0))}!{safe_float(selected_event.get('premio_faltaum', 0))}!{safe_float(selected_event.get('premio_bingo', 0))}!{safe_float(selected_event.get('premio_segundobingo', 0))}!{safe_float(selected_event.get('premio_acumulado', 0))}!{selected_event.get('bola_tope_acumulado', 0)}!{nome_sala}\r\n"
+        io_buffer.write(header)
+
+        vendas = list(db[nome_colecao_venda].find({'id_evento': id_evento_int}).sort('numero_inicial', pymongo.ASCENDING))
+        if vendas:
+            clientes_map = {c['id_cliente']: c for c in db.clientes.find({'id_cliente': {'$in': [v.get('id_cliente') for v in vendas]}})}
+            for v in vendas:
+                c_info = clientes_map.get(v.get('id_cliente'), {})
+                line = f"{v.get('numero_inicial', 0)}!{v.get('numero_final', 0)}!{v.get('numero_inicial2', 0)}!{v.get('numero_final2', 0)}!{v.get('id_cliente') or 'N/A'}!{v.get('nome_cliente', 'N/A')}!{v.get('id_colaborador', 'N/A')}!{v.get('nick_colaborador', 'N/A')}!{c_info.get('telefone', 'N/A')}!{c_info.get('cidade', 'N/A')}\r\n"
+                io_buffer.write(line)
+
+        return Response(io_buffer.getvalue().encode('latin-1', 'ignore'), mimetype="text/plain", headers={"Content-Disposition": f"attachment;filename={file_name}"})
 
     except Exception as e:
-        print(f"ERRO GERAL ao gerar lista: {e}")
-        session['error_message'] = f"Erro inesperado ao gerar arquivo: {e}"
+        import traceback; traceback.print_exc()
         return redirect(redirect_url)
+
 
 # --- ROTAS DE GERAÇÃO DE PDF E ARQUIVOS ---
 @app.route('/gerar_cartelas_pdf_25')
@@ -5242,6 +5435,7 @@ def gerar_cartelas_pdf_25():
     Gera PDF de cartelas de 25 números.
     Layout: 6 cartelas por página (2 colunas x 3 linhas).
     Cabeçalho: Nome da Sala + Descrição/Data do Evento.
+    INCLUI MATEMÁTICA DE COMBO (Fase 1).
     """
     db = get_vendas_db() 
     if db is None: 
@@ -5267,6 +5461,10 @@ def gerar_cartelas_pdf_25():
         if not evento:
             return "Erro: Evento não encontrado."
 
+        # 🚀 VARIÁVEIS DO COMBO
+        combo_qtde = int(evento.get('combo_qtde', 1))
+        unidade_de_venda = int(evento.get('unidade_de_venda', 1))
+
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
         descricao_evento = evento.get('descricao', '')
         
@@ -5289,7 +5487,7 @@ def gerar_cartelas_pdf_25():
         # Configura PDF
         pdf = PDFCartelas(orientation='P', unit='mm', format='A4') 
         
-        # Injeta textos para o header()
+        # Injeta textos para o header() nativo
         pdf.nome_sala = nome_sala
         pdf.infos_evento = infos_evento
         
@@ -5297,52 +5495,74 @@ def gerar_cartelas_pdf_25():
         
         # --- CONFIGURAÇÃO DE LAYOUT (6 por página) ---
         margem_x = 15
-        margem_top_inicial = 25 # Espaço para o cabeçalho da página
+        margem_top_inicial = 30 # 🚀 Ajustado de 25 para 30 para abrir espaço para o título da rodada
         largura_cartela = 70
-        
-        # Altura da Cartela 25 nums:
-        # Título(6) + Header(8) + 5*Num(10) = 64mm
         altura_cartela_total = 64 
         
         espaco_horizontal = 10
         espaco_vertical = 12 
         
         # Gera as coordenadas para 6 cartelas: (X, Y)
-        # 2 Colunas x 3 Linhas
         posicoes = []
-        for linha in range(3): # Linhas 0, 1, 2
+        for linha in range(3): 
             y = margem_top_inicial + (linha * (altura_cartela_total + espaco_vertical))
-            
-            # Coluna 1
             posicoes.append((margem_x, y))
-            # Coluna 2
             posicoes.append((margem_x + largura_cartela + espaco_horizontal, y))
             
-        cartela_idx_na_pagina = 0
+        # ==============================================================================
+        # 🚀 MATEMÁTICA DO COMBO E GERAÇÃO DAS PÁGINAS
+        # ==============================================================================
+        qtd_cartelas_compradas = (numero_final_pdf - numero_inicial_pdf) + 1
+        kit_base_inicial = ((numero_inicial_pdf - 1) // unidade_de_venda) + 1
 
-        for num_cartela in range(numero_inicial_pdf, numero_final_pdf + 1):
-            
-            if cartela_idx_na_pagina == 0:
-                pdf.add_page()
-            
-            dados_cartela = buscar_dados_cartela_2d(num_cartela, TIPO_CARTELA)
-            
-            if not dados_cartela:
-                 print(f"Aviso: Dados da cartela {num_cartela} (tipo 25) não encontrados.")
-            else:
-                if cartela_idx_na_pagina < len(posicoes):
-                    pos_x, pos_y = posicoes[cartela_idx_na_pagina]
-                    pdf.desenhar_cartela(num_cartela, dados_cartela, pos_x, pos_y)
-            
-            cartela_idx_na_pagina += 1
-            
-            if cartela_idx_na_pagina >= len(posicoes):
-                cartela_idx_na_pagina = 0
+        for rodada in range(1, combo_qtde + 1):
+            # Calcula o kit e o intervalo exato desta rodada
+            kit_atual = kit_base_inicial + (rodada - 1)
+            ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+            fim_atual = ini_atual + qtd_cartelas_compradas - 1
+
+            # A cada nova rodada (combo), forçamos uma nova página zerando o índice
+            cartela_idx_na_pagina = 0
+
+            for num_cartela in range(ini_atual, fim_atual + 1):
+                
+                if cartela_idx_na_pagina == 0:
+                    pdf.add_page()
+                    
+                    # 🚀 INJETA O CABEÇALHO DA RODADA NO TOPO DA PÁGINA
+                    pdf.set_font('Arial', 'B', 12)
+                    pdf.set_text_color(180, 0, 0) # Cor vermelha elegante
+                    
+                    texto_destaque = f"RODADA: {rodada:02d}"
+                    if unidade_de_venda > 1:
+                        texto_destaque += f"   |   KIT: {kit_atual}"
+                        
+                    # Imprime o texto centralizado na altura Y=22 (logo abaixo do Header principal)
+                    pdf.set_y(22)
+                    pdf.cell(0, 5, texto_destaque, 0, 1, 'C')
+                    pdf.set_text_color(0, 0, 0) # Reseta a cor para preto
+
+                # Busca e desenha a cartela
+                dados_cartela = buscar_dados_cartela_2d(num_cartela, TIPO_CARTELA)
+                
+                if not dados_cartela:
+                     print(f"Aviso: Dados da cartela {num_cartela} (tipo 25) não encontrados.")
+                else:
+                    if cartela_idx_na_pagina < len(posicoes):
+                        pos_x, pos_y = posicoes[cartela_idx_na_pagina]
+                        pdf.desenhar_cartela(num_cartela, dados_cartela, pos_x, pos_y)
+                
+                cartela_idx_na_pagina += 1
+                
+                # Se encheu a página, reseta para a próxima iterar `pdf.add_page()`
+                if cartela_idx_na_pagina >= len(posicoes):
+                    cartela_idx_na_pagina = 0
+        # ==============================================================================
         
         pdf_output = bytes(pdf.output()) 
         
         nick_limpo = clean_for_filename(nome_cliente)
-        nome_arquivo = f'{nick_limpo}_eve{id_evento}_25nums_{numero_inicial_pdf}_{numero_final_pdf}.pdf'
+        nome_arquivo = f'{nick_limpo}_eve{id_evento}_25nums_Kits{kit_base_inicial}_{kit_atual}.pdf'
         
         response = make_response(pdf_output)
         response.headers['Content-Type'] = 'application/pdf'
@@ -5352,11 +5572,12 @@ def gerar_cartelas_pdf_25():
 
     except Exception as e:
         print(f"ERRO CRÍTICO ao gerar PDF 25: {e}")
+        import traceback
         traceback.print_exc()
         return f"Erro interno: {e}"
 
 
-# Rota para cartelas de 15 números (PLACEHOLDER)
+# Rota para cartelas de 15 números
 @app.route('/gerar_cartelas_pdf_15')
 @login_required
 def gerar_cartelas_pdf_15():
@@ -5364,6 +5585,7 @@ def gerar_cartelas_pdf_15():
     Gera PDF de cartelas de 15 números.
     Layout: 10 cartelas por página (2 colunas x 5 linhas).
     Cabeçalho: Nome da Sala + Descrição/Data do Evento.
+    INCLUI MATEMÁTICA DE COMBO (Fase 1).
     """
     db = get_vendas_db() 
     if db is None: 
@@ -5389,6 +5611,10 @@ def gerar_cartelas_pdf_15():
         if not evento:
             return "Erro: Evento não encontrado."
 
+        # 🚀 VARIÁVEIS DO COMBO
+        combo_qtde = int(evento.get('combo_qtde', 1))
+        unidade_de_venda = int(evento.get('unidade_de_venda', 1))
+
         # Prepara textos do cabeçalho
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
         descricao_evento = evento.get('descricao', '')
@@ -5396,7 +5622,6 @@ def gerar_cartelas_pdf_15():
         # Formata data e hora
         data_str = evento.get('data_evento', '')
         hora_str = evento.get('hora_evento', '')
-        # Se data vier no formato YYYY-MM-DD, converte para DD/MM/YYYY
         if '-' in str(data_str):
             try:
                 dt = datetime.strptime(str(data_str), '%Y-%m-%d')
@@ -5421,54 +5646,75 @@ def gerar_cartelas_pdf_15():
         
         # --- CONFIGURAÇÃO DE LAYOUT (10 por página) ---
         margem_x = 15
-        margem_top_inicial = 25 # Espaço reservado para o cabeçalho customizado
+        margem_top_inicial = 32 # 🚀 Ajustado para 32 para abrir espaço para o título da rodada sem cortar o fundo
         largura_cartela = 70
-        
-        # Altura calculada na classe PDFCartelas:
-        # Título(5) + Header(6) + 3*Num(9) = 38mm altura total da cartela
         altura_cartela_total = 38 
         
         espaco_horizontal = 10
-        espaco_vertical = 6 # Espaço entre linhas de cartelas
+        espaco_vertical = 6 
         
         # Gera as coordenadas para 10 cartelas: (X, Y)
-        # 2 Colunas x 5 Linhas
         posicoes = []
         for linha in range(5): # 0 a 4
             y = margem_top_inicial + (linha * (altura_cartela_total + espaco_vertical))
-            
-            # Coluna 1
             posicoes.append((margem_x, y))
-            # Coluna 2
             posicoes.append((margem_x + largura_cartela + espaco_horizontal, y))
             
-        # posicoes agora tem 10 tuplas [(x,y)...]
-        
-        cartela_idx_na_pagina = 0
+        # ==============================================================================
+        # 🚀 MATEMÁTICA DO COMBO E GERAÇÃO DAS PÁGINAS
+        # ==============================================================================
+        qtd_cartelas_compradas = (numero_final_pdf - numero_inicial_pdf) + 1
+        kit_base_inicial = ((numero_inicial_pdf - 1) // unidade_de_venda) + 1
 
-        for num_cartela in range(numero_inicial_pdf, numero_final_pdf + 1):
-            
-            if cartela_idx_na_pagina == 0:
-                pdf.add_page()
-            
-            dados_cartela = buscar_dados_cartela_2d(num_cartela, TIPO_CARTELA)
-            
-            if not dados_cartela:
-                 print(f"Aviso: Dados da cartela {num_cartela} (tipo 15) não encontrados.")
-            else:
-                if cartela_idx_na_pagina < len(posicoes):
-                    pos_x, pos_y = posicoes[cartela_idx_na_pagina]
-                    pdf.desenhar_cartela_15(num_cartela, dados_cartela, pos_x, pos_y)
-            
-            cartela_idx_na_pagina += 1
-            
-            # Se preencheu as 10 posições, zera para criar nova página
-            if cartela_idx_na_pagina >= len(posicoes):
-                cartela_idx_na_pagina = 0
+        for rodada in range(1, combo_qtde + 1):
+            # Calcula o kit e o intervalo exato desta rodada
+            kit_atual = kit_base_inicial + (rodada - 1)
+            ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+            fim_atual = ini_atual + qtd_cartelas_compradas - 1
+
+            # Zera o índice para forçar uma nova página no início da rodada
+            cartela_idx_na_pagina = 0
+
+            for num_cartela in range(ini_atual, fim_atual + 1):
+                
+                if cartela_idx_na_pagina == 0:
+                    pdf.add_page()
+                    
+                    # 🚀 INJETA O CABEÇALHO DA RODADA NO TOPO DA PÁGINA
+                    pdf.set_font('Arial', 'B', 12)
+                    pdf.set_text_color(180, 0, 0) # Cor vermelha elegante
+                    
+                    texto_destaque = f"RODADA: {rodada:02d}"
+                    if unidade_de_venda > 1:
+                        texto_destaque += f"   |   KIT: {kit_atual}"
+                        
+                    # Imprime o texto centralizado na altura Y=22
+                    pdf.set_y(22)
+                    pdf.cell(0, 5, texto_destaque, 0, 1, 'C')
+                    pdf.set_text_color(0, 0, 0) # Reseta cor
+
+                # Busca e desenha a cartela (15 números)
+                dados_cartela = buscar_dados_cartela_2d(num_cartela, TIPO_CARTELA)
+                
+                if not dados_cartela:
+                     print(f"Aviso: Dados da cartela {num_cartela} (tipo 15) não encontrados.")
+                else:
+                    if cartela_idx_na_pagina < len(posicoes):
+                        pos_x, pos_y = posicoes[cartela_idx_na_pagina]
+                        pdf.desenhar_cartela_15(num_cartela, dados_cartela, pos_x, pos_y)
+                
+                cartela_idx_na_pagina += 1
+                
+                # Se preencheu as 10 posições, zera para criar nova página
+                if cartela_idx_na_pagina >= len(posicoes):
+                    cartela_idx_na_pagina = 0
+        # ==============================================================================
         
         pdf_output = bytes(pdf.output()) 
+        
         nick_limpo = clean_for_filename(nome_cliente)
-        nome_arquivo = f'{nick_limpo}_eve{id_evento}_15nums_{numero_inicial_pdf}_{numero_final_pdf}.pdf'
+        # Nome do arquivo reflete os kits gerados
+        nome_arquivo = f'{nick_limpo}_eve{id_evento}_15nums_Kits{kit_base_inicial}_{kit_atual}.pdf'
         
         response = make_response(pdf_output)
         response.headers['Content-Type'] = 'application/pdf'
@@ -5478,13 +5724,16 @@ def gerar_cartelas_pdf_15():
 
     except Exception as e:
         print(f"ERRO CRÍTICO ao gerar PDF 15: {e}")
+        import traceback
         traceback.print_exc()
         return f"Erro interno: {e}"
+
 
 @app.route('/imprimir_cartelas_58mm_15')
 @login_required
 def imprimir_cartelas_58mm_15():
-    """ Rota exclusiva para impressão térmica 58mm de Cartelas 3x5 (15 dezenas) via JSON """
+    """ Rota exclusiva para impressão térmica 58mm de Cartelas 3x5 (15 dezenas) via JSON 
+        INCLUI LÓGICA DE COMBO E AVANÇO DE PAPEL ENTRE RODADAS """
     db = get_vendas_db()
     if db is None: return jsonify({"erro": "Banco de dados offline"}), 500
 
@@ -5507,6 +5756,10 @@ def imprimir_cartelas_58mm_15():
 
         evento = db.eventos.find_one(query_evento)
         if not evento: return jsonify({"erro": "Evento não encontrado"}), 404
+
+        # 🚀 VARIÁVEIS DO COMBO
+        combo_qtde = int(evento.get('combo_qtde', 1))
+        unidade_de_venda = int(evento.get('unidade_de_venda', 1))
 
         imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True)
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
@@ -5538,28 +5791,51 @@ def imprimir_cartelas_58mm_15():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================
-        # 2. LAÇO GERADOR (Cartelas 15 números)
+        # 2. MOTOR MATEMÁTICO DO COMBO
         # ==========================================
-        for num_cartela in range(numero_inicial, numero_final + 1):
-            dados_matriz = buscar_dados_cartela_2d(num_cartela, tipo_cartela)
-            if not dados_matriz:
-                continue
-                
-            # --- IDENTIFICAÇÃO DA CARTELA ---
-            recibo["linhas"].append({"texto": f"Ctla. {num_cartela}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
-            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        qtd_cartelas_compradas = (numero_final - numero_inicial) + 1
+        kit_base_inicial = ((numero_inicial - 1) // unidade_de_venda) + 1
 
-            # --- DEZENAS (Matriz da cartela de 15) ---
-            for linha_matriz in dados_matriz:
-                # Formata cada número com 2 dígitos
-                linha_formatada = " ".join([f"{str(n).zfill(2)}" for n in linha_matriz])
-                
-                # Imprime as dezenas
-                recibo["linhas"].append({"texto": linha_formatada, "alinhamento": "centro", "tamanho": "duplo", "negrito": False})
+        for rodada in range(1, combo_qtde + 1):
+            kit_atual = kit_base_inicial + (rodada - 1)
+            ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+            fim_atual = ini_atual + qtd_cartelas_compradas - 1
 
-            # Espaçamento e linha de corte suave entre cartelas
-            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-            recibo["linhas"].append({"texto": "- - - - - - - - - - - - - - - -", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            # 🚀 CABEÇALHO DA RODADA (Impresso a cada novo kit do combo)
+            if combo_qtde > 1:
+                texto_rodada = f"RODADA {rodada:02d}"
+                if unidade_de_venda > 1:
+                    texto_rodada += f" - KIT {kit_atual}"
+                
+                recibo["linhas"].append({"texto": texto_rodada, "alinhamento": "centro", "tamanho": "duplo", "negrito": True})
+                recibo["linhas"].append({"texto": "===============================", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+
+            # --- LAÇO GERADOR (Cartelas da Rodada Atual) ---
+            for num_cartela in range(ini_atual, fim_atual + 1):
+                dados_matriz = buscar_dados_cartela_2d(num_cartela, tipo_cartela)
+                if not dados_matriz:
+                    continue
+                    
+                # --- IDENTIFICAÇÃO DA CARTELA ---
+                recibo["linhas"].append({"texto": f"Ctla. {num_cartela}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+
+                # --- DEZENAS (Matriz da cartela de 15) ---
+                for linha_matriz in dados_matriz:
+                    linha_formatada = " ".join([f"{str(n).zfill(2)}" for n in linha_matriz])
+                    recibo["linhas"].append({"texto": linha_formatada, "alinhamento": "centro", "tamanho": "duplo", "negrito": False})
+
+                # Espaçamento e linha pontilhada entre cartelas do MESMO kit
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": "- - - - - - - - - - - - - - - -", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+
+            # 🚀 MARCA DE CORTE E AVANÇO (Se for combo e não for a última rodada)
+            if combo_qtde > 1 and rodada < combo_qtde:
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": "✂ - - CORTE AQUI - - ✂", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================
         # 3. RODAPÉ GERAL (Uma única vez no final)
@@ -5668,7 +5944,8 @@ from flask import jsonify # Certifique-se de que o jsonify está importado no to
 @app.route('/imprimir_cartelas_58mm_25')
 @login_required
 def imprimir_cartelas_58mm_25():
-    """ Rota exclusiva para impressão térmica 58mm de Cartelas 5x5 (25 dezenas) via JSON """
+    """ Rota exclusiva para impressão térmica 58mm de Cartelas 5x5 (25 dezenas) via JSON 
+        INCLUI LÓGICA DE COMBO E AVANÇO DE PAPEL ENTRE RODADAS """
     db = get_vendas_db()
     if db is None: return jsonify({"erro": "Banco de dados offline"}), 500
 
@@ -5691,6 +5968,10 @@ def imprimir_cartelas_58mm_25():
 
         evento = db.eventos.find_one(query_evento)
         if not evento: return jsonify({"erro": "Evento não encontrado"}), 404
+
+        # 🚀 VARIÁVEIS DO COMBO
+        combo_qtde = int(evento.get('combo_qtde', 1))
+        unidade_de_venda = int(evento.get('unidade_de_venda', 1))
 
         imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True)
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
@@ -5721,29 +6002,54 @@ def imprimir_cartelas_58mm_25():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================
-        # 2. LAÇO GERADOR (Apenas Cartela e Dezenas)
+        # 2. MOTOR MATEMÁTICO DO COMBO
         # ==========================================
-        for num_cartela in range(numero_inicial, numero_final + 1):
-            dados_matriz = buscar_dados_cartela_2d(num_cartela, tipo_cartela)
-            if not dados_matriz:
-                continue
-                
-            # --- IDENTIFICAÇÃO EM DESTAQUE ---
-            recibo["linhas"].append({"texto": f"Ctla.  {num_cartela}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
-  
-            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        qtd_cartelas_compradas = (numero_final - numero_inicial) + 1
+        kit_base_inicial = ((numero_inicial - 1) // unidade_de_venda) + 1
 
-            # --- DEZENAS DO BINGO (Matriz 5x5) ---
-            for linha_matriz in dados_matriz:
-                # Formata cada número para ter sempre 2 dígitos preenchidos com zero à esquerda
-                linha_formatada = " ".join([f"{str(n).zfill(2)}" for n in linha_matriz])
-                
-                # Imprime a linha de dezenas centralizada e com tamanho de fonte ampliado (duplo)
-                recibo["linhas"].append({"texto": linha_formatada, "alinhamento": "centro", "tamanho": "duplo", "negrito": False})
+        for rodada in range(1, combo_qtde + 1):
+            kit_atual = kit_base_inicial + (rodada - 1)
+            ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+            fim_atual = ini_atual + qtd_cartelas_compradas - 1
 
-            # Espaçamento e linha de corte suave entre uma cartela e a próxima
-            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-            recibo["linhas"].append({"texto": "- - - - - - - - - - - - - - - -", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            # 🚀 CABEÇALHO DA RODADA (Impresso a cada novo kit do combo)
+            if combo_qtde > 1:
+                texto_rodada = f"RODADA {rodada:02d}"
+                if unidade_de_venda > 1:
+                    texto_rodada += f" - KIT {kit_atual}"
+                
+                recibo["linhas"].append({"texto": texto_rodada, "alinhamento": "centro", "tamanho": "duplo", "negrito": True})
+                recibo["linhas"].append({"texto": "===============================", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+
+            # --- LAÇO GERADOR (Cartelas da Rodada Atual) ---
+            for num_cartela in range(ini_atual, fim_atual + 1):
+                dados_matriz = buscar_dados_cartela_2d(num_cartela, tipo_cartela)
+                if not dados_matriz:
+                    continue
+                    
+                # --- IDENTIFICAÇÃO EM DESTAQUE ---
+                recibo["linhas"].append({"texto": f"Ctla.  {num_cartela}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+
+                # --- DEZENAS DO BINGO (Matriz 5x5) ---
+                for linha_matriz in dados_matriz:
+                    # Formata cada número para ter sempre 2 dígitos preenchidos com zero à esquerda
+                    linha_formatada = " ".join([f"{str(n).zfill(2)}" for n in linha_matriz])
+                    
+                    # Imprime a linha de dezenas centralizada e com tamanho de fonte ampliado (duplo)
+                    recibo["linhas"].append({"texto": linha_formatada, "alinhamento": "centro", "tamanho": "duplo", "negrito": False})
+
+                # Espaçamento e linha de corte suave entre cartelas do MESMO kit
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": "- - - - - - - - - - - - - - - -", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+
+            # 🚀 MARCA DE CORTE E AVANÇO (Se for combo e não for a última rodada)
+            if combo_qtde > 1 and rodada < combo_qtde:
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": "✂ - - CORTE AQUI - - ✂", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================
         # 3. RODAPÉ GERAL (Uma única vez no final)
@@ -5755,6 +6061,7 @@ def imprimir_cartelas_58mm_25():
             recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
         recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+        
         # Retorna o payload estruturado para consumo da função assíncrona do front-end
         return jsonify(recibo)
 

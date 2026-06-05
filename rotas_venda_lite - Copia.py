@@ -482,38 +482,14 @@ def processar_venda_lite():
     
     session['url_bluetooth_print'] = f"my.bluetoothprint.scheme://{url_api_json}"
     
-    # ==============================================================================
-    # 🚀 MATEMÁTICA DO COMBO PARA O RECIBO (CUPOM)
-    # ==============================================================================
-    detalhes_rodadas_html = ""
-    detalhes_rodadas_txt = "" # Para uso na impressora térmica se necessário
-        
-    # 1. Descobre qual foi o Kit base vendido (Ex: cartela 13 com unid=6, é o Kit 3)
-    kit_base_inicial = ((numero_inicial_atual - 1) // unidade_de_venda) + 1
-        
-    # 2. Roda a matemática para o número de combos (Se combo_qtde = 1, roda só uma vez)
-    for rodada in range(1, combo_qtde + 1):
-        # Calcula o kit e cartelas exatas desta rodada
-        kit_rodada = kit_base_inicial + (rodada - 1)
-        ini_rodada = ((kit_rodada - 1) * unidade_de_venda) + 1
-        fim_rodada = ini_rodada + quantidade_cartelas_atual - 1
-            
-        # Montagem Visual (HTML)
-        detalhes_rodadas_html += f"<div style='margin-top: 5px; padding-top: 5px; border-top: 1px dashed #ccc;'>"
-        detalhes_rodadas_html += f"<strong>Rodada: {rodada:02d}</strong>"
-        if unidade_de_venda > 1:
-             detalhes_rodadas_html += f" (Kit {kit_rodada})"
-        detalhes_rodadas_html += f"<br>Cartelas: <strong>{ini_rodada} a {fim_rodada}</strong></div>"
-
-    # 3. Monta a Mensagem Final
     success_msg = (
-        f"<strong>✅ VENDA CONCLUÍDA</strong><br>"
+        f"<strong>✅ VENDA LITE CONCLUÍDA</strong><br>"
         f"<strong>> {id_venda_formatado} <</strong><br>"
-        f"Cliente: {nick_cliente_lite if 'nick_cliente_lite' in locals() else cliente_doc.get('nick')}<br>"
-        f"Valor: R$ {valor_total_atual:.2f}<br>"
-        f"{detalhes_rodadas_html}" # Injeta o loop matemático aqui!
+        f"Cliente: {nick_cliente_lite}<br>"
+        f"Cartelas: {numero_inicial_atual} a {numero_final_atual}<br>"
+        f"Valor: R$ {valor_total_atual:.2f}"
     )
-
+    
     session['success_message'] = success_msg 
     session['print_data'] = {
         'id_evento': id_evento_int_para_controle,

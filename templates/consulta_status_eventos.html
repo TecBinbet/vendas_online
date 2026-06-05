@@ -24,13 +24,13 @@
         }
     </script>
     <style>
-        body { font-family: 'Inter', sans-serif; background-color: #F7F7F7; }
+        body { font-family: 'Inter', sans-serif; background-color: #F7F7F7; padding-bottom: 80px; }
         .container { max-width: 1200px; margin: 20px auto; padding: 30px; background-color: white; border-radius: 12px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15); }
         .card { 
             border-radius: 10px; 
             padding: 10px; 
             transition: transform 0.2s, box-shadow 0.2s;
-            border: 2px solid #E5E7EB; /* Aumentado para 2px para bordas coloridas aparecerem melhor */
+            border: 2px solid #E5E7EB; 
         }
         .card:hover { transform: translateY(-3px); box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1); }
         
@@ -38,7 +38,7 @@
 
         .status-control-btn {
             padding: 4px 10px; border-radius: 5px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase;
-            cursor: pointer; min-width: 100px; text-align: center; border: 2px solid transparent; transition: all 0.2s;
+            cursor: pointer; min-width: 110px; text-align: center; border: 2px solid transparent; transition: all 0.2s;
         }
         .status-control-btn:hover { opacity: 0.8; }
         
@@ -74,37 +74,28 @@
 
         /* --- CSS DO SPINNER --- */
         .spinner-overlay {
-            position: fixed;
-            inset: 0;
-            background-color: rgba(17, 24, 39, 0.75);
-            display: none; 
-            align-items: center;
-            justify-content: center;
-            z-index: 9999;
+            position: fixed; inset: 0; background-color: rgba(17, 24, 39, 0.75);
+            display: none; align-items: center; justify-content: center; z-index: 9999;
         }
-        
         .spinner-visible { display: flex; }
-
         .spinner-animation {
-            animation: spin 1s linear infinite;
-            border-radius: 9999px;
-            height: 5rem;
-            width: 5rem;
-            border-width: 4px;
-            border-style: solid;
-            border-color: rgba(255, 255, 255, 0.1);
-            border-top-color: #3B82F6;
+            animation: spin 1s linear infinite; border-radius: 9999px; height: 5rem; width: 5rem;
+            border-width: 4px; border-style: solid; border-color: rgba(255, 255, 255, 0.1); border-top-color: #3B82F6;
         }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+        
+        /* Barra de Ações em Lote */
+        .bulk-bar {
+            position: fixed; bottom: 0; left: 0; right: 0; background: white;
+            border-top: 2px solid #E5E7EB; box-shadow: 0 -4px 20px rgba(0,0,0,0.1);
+            transform: translateY(100%); transition: transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            z-index: 50; padding: 15px 20px;
         }
+        .bulk-bar.visible { transform: translateY(0); }
     </style>
 </head>
 <body>
 
-    <!-- Estrutura do Spinner -->
     <div id="loading-spinner" class="spinner-overlay">
         <div class="flex flex-col items-center">
             <div class="spinner-animation"></div>
@@ -112,8 +103,20 @@
         </div>
     </div>
 
+    <!-- 🚀 BARRA FLUTUANTE DE ALTERAÇÕES EM LOTE -->
+    <div id="bulk-bar" class="bulk-bar flex flex-col md:flex-row justify-between items-center gap-4">
+        <div>
+            <span class="text-gray-600 font-bold">Alterações Pendentes:</span>
+            <span id="bulk-count" class="bg-blue-600 text-white font-black px-3 py-1 rounded-full text-lg ml-2">0</span>
+        </div>
+        <div class="flex gap-3 w-full md:w-auto">
+            <button onclick="cancelarLote()" class="flex-1 md:flex-none bg-gray-200 text-gray-700 hover:bg-gray-300 font-bold px-6 py-3 rounded-xl transition">Cancelar Tudo</button>
+            <button onclick="aplicarLote()" class="flex-1 md:flex-none bg-primary text-white hover:bg-emerald-700 font-black px-8 py-3 rounded-xl shadow-lg transition">✅ Aplicar Alterações</button>
+        </div>
+    </div>
+
     <div class="container">
-        <div class="flex justify-center -mt-5 mb">
+        <div class="flex justify-center -mt-5 mb-4">
             <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
         </div>
 
@@ -122,22 +125,22 @@
         </h2>
 
         <div class="flex flex-wrap justify-center gap-2 mb-2 -mt-4">
-<div class="flex gap-2">
-        <button onclick="toggleFilter('ativo')" id="btn-ativo" class="filter-btn">Ativos</button>
-        <button onclick="toggleFilter('paralizado')" id="btn-paralizado" class="filter-btn">Paralisados</button>
-        <button onclick="toggleFilter('finalizado')" id="btn-finalizado" class="filter-btn">Finalizados</button>
-        <button onclick="setFilter('todos')" id="btn-todos" class="filter-btn">Todos</button>
-    </div>
+            <div class="flex gap-2">
+                <button onclick="toggleFilter('ativo')" id="btn-ativo" class="filter-btn">Ativos</button>
+                <button onclick="toggleFilter('paralizado')" id="btn-paralizado" class="filter-btn">Paralisados</button>
+                <button onclick="toggleFilter('finalizado')" id="btn-finalizado" class="filter-btn">Finalizados</button>
+                <button onclick="setFilter('todos')" id="btn-todos" class="filter-btn">Todos</button>
+            </div>
 
-    <div class="flex items-center gap-2 pr-2">
-        <label for="limitInput" class="text-xs font-black text-gray-500 uppercase tracking-widest">Ver:</label>
-        <input type="number" id="limitInput" value="{{ limit_atual }}" min="1" max="500"
-               class="w-16 p-1.5 border border-gray-300 rounded-lg text-center font-bold text-blue-800 focus:ring-2 focus:ring-blue-500 outline-none">
-        <button onclick="atualizarLimite()" 
-                class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs transition shadow-sm">
-            OK
-        </button>
-    </div>
+            <div class="flex items-center gap-2 pr-2">
+                <label for="limitInput" class="text-xs font-black text-gray-500 uppercase tracking-widest">Ver:</label>
+                <input type="number" id="limitInput" value="{{ limit_atual }}" min="1" max="500"
+                       class="w-16 p-1.5 border border-gray-300 rounded-lg text-center font-bold text-blue-800 focus:ring-2 focus:ring-blue-500 outline-none">
+                <button onclick="atualizarLimite()" 
+                        class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-lg font-bold text-xs transition shadow-sm">
+                    OK
+                </button>
+            </div>
         </div>
 
         {% if error %}
@@ -151,13 +154,10 @@
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                 
                 {% for evento in eventos_status %}
-                    {# Lógica de definição de cor do cartão #}
                     {% set bg_color = 'bg-active-bg border-primary' if evento.is_ativo else 'bg-default-bg border-gray-300' %}
-                    
                     {% if evento.status == 'ativo' and evento.tipo_de_evento == 'Especial' %}
                         {% set bg_color = 'bg-yellow-300 border-yellow-600' %}
                     {% endif %}
-
                     {% if evento.status == 'paralizado' %}
                         {% set bg_color = 'bg-paralized-bg border-accent' %}
                     {% elif evento.status == 'finalizado' %}
@@ -176,23 +176,25 @@
                             
                             {% if mode != 'simple' %}
                                 <div class="relative inline-block text-left">
+                                    
                                     {% if evento.status == 'ativo' %}
-                                        <button onclick="toggleMenu('menu-{{ evento.id_evento }}')" type="button" class="status-control-btn btn-ativo">ATIVO ▾</button>
+                                        <button id="btn-status-{{ evento.id_evento }}" onclick="toggleMenu('menu-{{ evento.id_evento }}')" type="button" class="status-control-btn btn-ativo">ATIVO ▾</button>
                                     {% elif evento.status == 'paralizado' %}
-                                        <button onclick="toggleMenu('menu-{{ evento.id_evento }}')" type="button" class="status-control-btn btn-paralizado">PARALISADO ▾</button>
+                                        <button id="btn-status-{{ evento.id_evento }}" onclick="toggleMenu('menu-{{ evento.id_evento }}')" type="button" class="status-control-btn btn-paralizado">PARALISADO ▾</button>
                                     {% else %}
-                                        <button onclick="toggleMenu('menu-{{ evento.id_evento }}')" type="button" class="status-control-btn btn-finalizado">FINALIZADO ▾</button>
+                                        <button id="btn-status-{{ evento.id_evento }}" onclick="toggleMenu('menu-{{ evento.id_evento }}')" type="button" class="status-control-btn btn-finalizado">FINALIZADO ▾</button>
                                     {% endif %}
 
                                     <div id="menu-{{ evento.id_evento }}" class="dropdown-menu hidden">
+                                        <!-- 🚀 AGORA OS BOTÕES ENFILEIRAM A AÇÃO EM LOTE -->
                                         {% if evento.status != 'ativo' %}
-                                            <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'ativo', '{{ mode }}')" class="dropdown-item text-green-600">Ativar</button>
+                                            <button onclick="adicionarFila('{{ evento.id_evento }}', 'ativo', 'ATIVO', 'btn-ativo', 'menu-{{ evento.id_evento }}')" class="dropdown-item text-green-600 font-bold">🟢 Ativar</button>
                                         {% endif %}
                                         {% if evento.status != 'paralizado' %}
-                                            <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'paralizado', '{{ mode }}')" class="dropdown-item text-amber-600">Paralisar</button>
+                                            <button onclick="adicionarFila('{{ evento.id_evento }}', 'paralizado', 'PARALISADO', 'btn-paralizado', 'menu-{{ evento.id_evento }}')" class="dropdown-item text-amber-600 font-bold">⏸️ Paralisar</button>
                                         {% endif %}
                                         {% if evento.status != 'finalizado' %}
-                                            <button onclick="confirmChangeStatus('{{ evento.id_evento }}', 'finalizado', '{{ mode }}')" class="dropdown-item dropdown-item-danger">Finalizar</button>
+                                            <button onclick="adicionarFila('{{ evento.id_evento }}', 'finalizado', 'FINALIZADO', 'btn-finalizado', 'menu-{{ evento.id_evento }}')" class="dropdown-item text-gray-600 font-bold">🔴 Finalizar</button>
                                         {% endif %}
                                         
                                         {% if nivel >= 3 and evento.status == 'finalizado' %}
@@ -214,7 +216,6 @@
                         
                         <div class="font-semibold text-sm text-gray-600 mb-0 border-b pb-2 -space-y-0.5 -mt-1 ">
                             <p>ID: {{ evento.id_evento }}</p>
-                            <!-- DATA CORRIGIDA AQUI: Usando o campo exato agora -->
                             <p>🗓️ Data: <span class="text-md font-bold text-gray-800">**{{ evento.data_evento }} às {{ evento.hora_evento }}**</span></p>
                             <p>💰 Unid. Venda: <span class="font-bold text-gray-800">{{ evento.valor_venda_unit }}</span></p>
                             <p>⏳ Início Vendas: <span class=" font-bold text-gray-800">{{ evento.data_ativacao }}</span></p>
@@ -222,7 +223,7 @@
                         
                         <div class="-space-y-0.5">                        
                             {% if mode != 'simple' %}
-                                <p class="text-md font-semibold text-gray-700">Detalhes das Vendas:</p>
+                                <p class="text-md font-semibold text-gray-700 mt-1">Detalhes das Vendas:</p>
 
                                 <div class="flex justify-between">
                                     <span class="text-gray-600">Qtd. Vendida (Pagas):</span>
@@ -242,7 +243,6 @@
                                 </div>
                                 
                                 {% if nivel == 3 %}
-                                    <!-- AQUI ENTRA O ÍCONE SE O PRÉMIO FOR DINÂMICO -->
                                     <div class="flex justify-between mt-1 pt-1 border-t border-gray-300 border-dashed">
                                         <span class="text-gray-600 font-medium">Prêmio Total:</span>
                                         <span class="font-bold {% if evento.is_premio_dinamico %}text-green-700 text-lg{% else %}text-gray-700{% endif %}">
@@ -278,12 +278,6 @@
         {% endif %}
 
     </div>
-    
-    <form method="POST" action="{{ url_for('evento_mudar_status') }}" id="status-change-form" class="hidden">
-        <input type="hidden" name="id_evento_int" id="form_id_evento_int">
-        <input type="hidden" name="novo_status" id="form_novo_status">
-        <input type="hidden" name="current_mode" id="form_current_mode">
-    </form>
 
     <script>
         function ativarSpinner(mensagem) {
@@ -308,7 +302,6 @@
             if (currentFilters.includes('ativo')) document.getElementById('btn-ativo').classList.add('active-ativo');
             if (currentFilters.includes('paralizado')) document.getElementById('btn-paralizado').classList.add('active-paralizado');
             if (currentFilters.includes('finalizado')) document.getElementById('btn-finalizado').classList.add('active-finalizado');
-            
             if (currentFilters.includes('ativo') && currentFilters.includes('paralizado') && currentFilters.includes('finalizado')) {
                 document.getElementById('btn-todos').classList.add('active-todos');
             }
@@ -317,12 +310,8 @@
         function toggleFilter(status) {
             let newFilters = [...currentFilters];
             if (newFilters.includes(status)) {
-                if (newFilters.length > 1) {
-                    newFilters = newFilters.filter(item => item !== status);
-                }
-            } else {
-                newFilters.push(status);
-            }
+                if (newFilters.length > 1) { newFilters = newFilters.filter(item => item !== status); }
+            } else { newFilters.push(status); }
             ativarSpinner("Filtrando eventos...");
             reloadWithFilters(newFilters.join(','));
         }
@@ -350,16 +339,23 @@
             if (menu) menu.classList.toggle('hidden');
         }
 
-        function confirmChangeStatus(idEvento, novoStatus, currentMode) {
-            var msg = `Tem certeza que deseja alterar o status do evento EVE${idEvento} para '${novoStatus.toUpperCase()}'?`;
-            if (window.confirm(msg)) {
-                ativarSpinner("Alterando status do evento...");
-                document.getElementById('form_id_evento_int').value = idEvento;
-                document.getElementById('form_novo_status').value = novoStatus;
-                document.getElementById('form_current_mode').value = currentMode;
-                document.getElementById('status-change-form').submit();
+        document.addEventListener('click', function(event) {
+            if (!event.target.closest('.status-control-btn') && !event.target.closest('.dropdown-menu')) {
+                document.querySelectorAll('.dropdown-menu').forEach(function(menu) { menu.classList.add('hidden'); });
             }
+        }, true);
+
+        function atualizarLimite() {
+            const novoLimite = document.getElementById('limitInput').value;
+            const url = new URL(window.location.href);
+            ativarSpinner(`Carregando últimos ${novoLimite} eventos...`);
+            url.searchParams.set('limit', novoLimite);
+            window.location.href = url.toString();
         }
+
+        document.getElementById('limitInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') atualizarLimite();
+        });
         
         function confirmDelete(idEvento) {
             var msg = `⚠️ ATENÇÃO: EXCLUSÃO DE EVENTO!\n\nVocê tem certeza que deseja EXCLUIR DEFINITIVAMENTE o evento ${idEvento}?\n\nIsso apagará todas as vendas e registros financeiros associados.\nEsta ação não pode ser desfeita.`;
@@ -371,33 +367,72 @@
             }
         }
 
-        document.addEventListener('click', function(event) {
-            if (!event.target.closest('.status-control-btn') && !event.target.closest('.dropdown-menu')) {
-                document.querySelectorAll('.dropdown-menu').forEach(function(menu) {
-                    menu.classList.add('hidden');
-                });
+        // =======================================================
+        // 🚀 LÓGICA DO CARRINHO DE MUDANÇA DE STATUS EM LOTE
+        // =======================================================
+        let filaAlteracoes = {};
+
+        function adicionarFila(idEvento, novoStatus, rotulo, cssBotao, menuId) {
+            // 1. Registra a alteração na memória
+            filaAlteracoes[idEvento] = novoStatus;
+            
+            // 2. Esconde o menu
+            toggleMenu(menuId);
+            
+            // 3. Atualiza o visual do botão do evento para "Piscando" (indicando que está pendente)
+            const btn = document.getElementById(`btn-status-${idEvento}`);
+            btn.className = `status-control-btn ${cssBotao} animate-pulse border-dashed border-2`;
+            btn.innerHTML = `⏳ ${rotulo}`;
+            
+            // 4. Atualiza a barra flutuante
+            atualizarBarraLote();
+        }
+
+        function atualizarBarraLote() {
+            const contagem = Object.keys(filaAlteracoes).length;
+            const barra = document.getElementById('bulk-bar');
+            document.getElementById('bulk-count').innerText = contagem;
+
+            if (contagem > 0) {
+                barra.classList.add('visible');
+            } else {
+                barra.classList.remove('visible');
             }
-        }, true);
+        }
 
-function atualizarLimite() {
-    const novoLimite = document.getElementById('limitInput').value;
-    const url = new URL(window.location.href);
-    
-    ativarSpinner(`Carregando últimos ${novoLimite} eventos...`);
-    
-    url.searchParams.set('limit', novoLimite);
-    window.location.href = url.toString();
-}
+        function cancelarLote() {
+            // A forma mais limpa de cancelar e resetar os botões é recarregar a tela
+            location.reload(); 
+        }
 
-// Permitir o "Enter" no campo de limite
-document.getElementById('limitInput').addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') {
-        atualizarLimite();
-    }
-});
+        async function aplicarLote() {
+            const contagem = Object.keys(filaAlteracoes).length;
+            if (contagem === 0) return;
+            
+            ativarSpinner(`Salvando ${contagem} alterações...`);
 
+            try {
+                const response = await fetch("{{ url_for('evento_mudar_status_lote') }}", {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ changes: filaAlteracoes })
+                });
+
+                const result = await response.json();
+
+                if (result.status === 'success') {
+                    // Recarrega para mostrar as mensagens de sucesso geradas no backend
+                    location.reload(); 
+                } else {
+                    alert("Erro ao salvar: " + result.message);
+                    location.reload();
+                }
+            } catch (err) {
+                alert('Erro de conexão ao tentar salvar as alterações em lote.');
+                location.reload();
+            }
+        }
 
     </script>
-
 </body>
 </html>

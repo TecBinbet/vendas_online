@@ -207,14 +207,17 @@
                     </h4>
                     <p>Data: <strong>{{ selected_event.data_evento }}</strong> - | - Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
                     <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
+
+                     {% if padrao_venda == 'quantidade' %}
                     <p class="text-lg text-red-600 -mt-1.5 -mb-2.5 ">  Numeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
+                     {% endif %}
                 </div>
             </form> <hr class="my-4 border-gray-300">
 
             <form method="POST" action="{{ url_for('venda_lite.processar_venda_lite') }}" id="confirm-form">
                 <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
                 
-                <div class="form-group relative mt-2 bg-green-50/50 p-3 rounded-lg border border-green-200 shadow-sm">
+                <div class="form-group relative -mt-3 bg-green-50/50 p-2 rounded-lg border border-green-200 shadow-sm">
                     <h3 class="text-xs font-bold text-green-800 mb-2 border-b border-green-200 pb-1 uppercase tracking-wider">Identificação do Cliente</h3>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -230,8 +233,9 @@
                             <label for="nick_cliente_lite" class="font-bold text-gray-700 text-sm">Nome / Apelido:</label>
                             <div class="flex gap-2">
                                 <input type="text" id="nick_cliente_lite" name="nick_cliente_lite" 
-                                       class="form-control flex-grow transition-colors" placeholder="Nome do cliente..." required autocomplete="off">
-                                <button type="button" onclick="limparCliente()" class="bg-white hover:bg-gray-100 text-red-600 px-3 py-2 rounded text-sm font-bold border border-red-200 transition shadow-sm">
+       class="form-control flex-grow transition-colors" placeholder="Nome do cliente..." required autocomplete="off"
+       onkeydown="irParaProximoCampo(event, this)">
+                                <button type="button" onclick="limparCliente()" class="bg-white hover:bg-gray-100 text-red-600 px-3 py-1 rounded text-sm font-bold border border-red-200 transition shadow-sm">
                                     Limpar
                                 </button>
                             </div>
@@ -257,15 +261,11 @@
 
                 {% elif padrao_venda == 'numeracao' %}
                     {% if selected_event.combo_qtde and selected_event.combo_qtde > 1 %}
-                    <div class="bg-orange-100 border-l-4 border-orange-500 p-1 -mt-1 mb-1 rounded shadow-sm">
+                    <div class="bg-orange-100 border-l-4 border-orange-500 p-1 -mt-1 -mb-1 rounded shadow-sm">
                         <div class="flex items-center gap-2 mb-1">
                             <span class="text-xl">🔥</span>
-                            <strong class="text-orange-800 text-sm uppercase tracking-tight">Venda COMBO Ativa ({{ selected_event.combo_qtde }} Eventos)</strong>
+                            <strong class="text-orange-800 text-sm uppercase tracking-tight">Venda de COMBO Ativa ({{ selected_event.combo_qtde }} Eventos)</strong>
                         </div>
-                        <p class="text-orange-700 text-xs font-medium">O sistema reservará automaticamente os próximos {{ selected_event.combo_qtde - 1 }} kits em sequência nos eventos futuros.</p>
-                        <p class="text-orange-800 font-bold mt-1 text-[11px] bg-orange-200/50 p-1 rounded inline-block">
-                            ⚠️ Inicie pelos múltiplos primários: 1, {{ 1 + selected_event.combo_qtde }}, {{ 1 + (selected_event.combo_qtde * 2) }}, {{ 1 + (selected_event.combo_qtde * 3) }}...
-                        </p>
                     </div>
                     {% endif %}
 
@@ -374,50 +374,53 @@
         </div>
     </div>
 
-     <div id="ultimas-vendas-modal" class="modal">
+<div id="ultimas-vendas-modal" class="modal">
         <div class="modal-content bg-white p-2 w-full md:w-3/4 lg:w-1/2">
             <h3 class="text-lg font-bold text-gray-800 border-b pb-2 mb-2">🕒 Suas Últimas 5 Vendas</h3>
-           <button onclick="closeUltimasVendas()" class="btn bg-red-500 text-white hover:bg-red-700 -mt-2 mb-1 w-full shadow-lg">Fechar Janela</button>
+            <button onclick="closeUltimasVendas()" class="btn bg-red-500 text-white hover:bg-red-700 -mt-2 mb-1 w-full shadow-lg">Fechar Janela</button>
 
             {% if ultimas_vendas %}
+                {% set qtde_kit = selected_event.get('unidade_de_venda', 1) | int %}
+                
                 <div class="space-y-2">
                 {% for v in ultimas_vendas %}
                     <div class="border rounded p-1 shadow-sm bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-2 hover:bg-blue-50 transition-colors">
                         <div class="text-left w-full sm:w-auto">
                             <p class="text-sm font-bold text-blue-800">{{ v.id_venda }} - {{ v.nome_cliente }}</p>
-                            <p class="text-xl text-gray-600">Cartelas: <strong>{{ v.numero_inicial }} a {{ v.numero_final }}</strong></p>
+                            
+                            <p class="text-xl text-gray-600 flex items-center flex-wrap gap-2">
+                                <span>Crtls: <strong>{{ v.numero_inicial }} a {{ v.numero_final }}</strong></span>
+                                
+                                {% if qtde_kit > 1 %}
+                                    {% set kit_fim = v.numero_final // qtde_kit %}
+                                    {% set kit_ini = (v.numero_inicial - 1) // qtde_kit + 1 %}
+                                    
+                                    <span class="text-xs font-black text-amber-700 bg-amber-100 px-2 py-0.5 rounded shadow-sm border border-amber-200">
+                                        {% if kit_ini == kit_fim %}
+                                            Kit {{ kit_fim }}
+                                        {% else %}
+                                            Kits {{ kit_ini }} a {{ kit_fim }}
+                                        {% endif %}
+                                    </span>
+                                {% endif %}
+                            </p>
+                            
                             <p class="text-xs font-bold text-green-700">R$ {{ "%.2f"|format(v.valor_total_float) }}</p>
                         </div>
-<div class="flex gap-2 w-full sm:w-auto justify-end mt-1 sm:mt-0">
-    <button type="button" 
-            onclick="abrirMenuAcao('{{ v.id_venda }}', '{{ v.id_cliente }}', 'cupom')" 
-            class="btn bg-blue-600 hover:bg-blue-800 text-white btn-small py-2 px-3 text-xs shadow">
-        📄 Cupom
-    </button>
-    
-    <button type="button" 
-            onclick="abrirMenuAcao('{{ v.id_venda }}', '{{ v.id_cliente }}', 'cartelas')" 
-            class="btn bg-emerald-600 hover:bg-emerald-800 text-white btn-small py-2 px-3 text-xs shadow">
-        🎲 Cartelas
-    </button>
-</div>
-
-<div id="acao-modal" class="modal">
-    <div class="modal-content bg-white p-4 w-full md:w-1/3 lg:w-1/4 text-center">
-        <h3 id="titulo-acao" class="text-lg font-bold text-gray-800 mb-4">Ações</h3>
+                        
+                        <div class="flex gap-2 w-full sm:w-auto justify-end mt-1 sm:mt-0">
+                            <button type="button" 
+                                onclick="abrirMenuAcao('{{ v.id_venda }}', '{{ v.id_cliente }}', 'cupom')" 
+                                class="btn bg-blue-600 hover:bg-blue-800 text-white btn-small py-2 px-3 text-xs shadow">
+                                📄 Cupom
+                            </button>
         
-        <input type="hidden" id="temp-id-venda">
-        <input type="hidden" id="temp-id-cliente">
-        <input type="hidden" id="temp-tipo-acao">
-
-        <div class="flex flex-col gap-3">
-            <button onclick="executarAcao('imprimir')" class="btn bg-gray-700 text-white py-3 shadow">🖨️ Imprimir</button>
-            <button onclick="executarAcao('whatsapp')" class="btn bg-green-600 text-white py-3 shadow">📲 Enviar / Copiar</button>
-            <button onclick="document.getElementById('acao-modal').style.display='none'" class="btn bg-red-500 text-white py-2 mt-2">Fechar</button>
-        </div>
-    </div>
-</div>
-
+                            <button type="button" 
+                                onclick="abrirMenuAcao('{{ v.id_venda }}', '{{ v.id_cliente }}', 'cartelas')" 
+                                class="btn bg-emerald-600 hover:bg-emerald-800 text-white btn-small py-2 px-3 text-xs shadow">
+                                🧮 Cartelas
+                            </button>
+                        </div>
                     </div>
                 {% endfor %}
                 </div>
@@ -425,6 +428,22 @@
                 <p class="text-center text-gray-500 py-4 font-semibold">Nenhuma venda sua registrada neste evento ainda.</p>
             {% endif %}
             
+        </div>
+    </div>
+
+    <div id="acao-modal" class="modal">
+        <div class="modal-content bg-white p-4 w-full md:w-1/3 lg:w-1/4 text-center">
+            <h3 id="titulo-acao" class="text-lg font-bold text-gray-800 mb-4">Ações</h3>
+            
+            <input type="hidden" id="temp-id-venda">
+            <input type="hidden" id="temp-id-cliente">
+            <input type="hidden" id="temp-tipo-acao">
+
+            <div class="flex flex-col gap-3">
+                <button onclick="executarAcao('imprimir')" class="btn bg-gray-700 text-white py-3 shadow">🖨️ Imprimir</button>
+                <button onclick="executarAcao('whatsapp')" class="btn bg-green-600 text-white py-3 shadow">📲 Enviar / Copiar</button>
+                <button onclick="document.getElementById('acao-modal').style.display='none'" class="btn bg-red-500 text-white py-2 mt-2 shadow">Fechar</button>
+            </div>
         </div>
     </div>
 
@@ -1169,41 +1188,41 @@ async function openUltimasVendas() {
             }, 2000);
         }
 
-async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, tipoCartela) {
-    const baseUrl = `/gerar_cartelas_pdf_${tipoCartela}`;
-    const params = new URLSearchParams({
-        numero_inicial_pdf: numInicial,
-        numero_final_pdf: numFinal,
-        id_evento: idEvento,
-        id_cliente: 0,
-        nome_cliente: nomeCliente
-    });
+        async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, tipoCartela) {
+            const baseUrl = `/gerar_cartelas_pdf_${tipoCartela}`;
+            const params = new URLSearchParams({
+                numero_inicial_pdf: numInicial,
+                numero_final_pdf: numFinal,
+                id_evento: idEvento,
+                id_cliente: 0,
+                nome_cliente: nomeCliente
+            });
     
-    const urlCompleta = window.location.origin + baseUrl + '?' + params.toString();
+            const urlCompleta = window.location.origin + baseUrl + '?' + params.toString();
 
-    // VERIFICA ONDE O SISTEMA ESTÁ RODANDO
-    if (typeof window.AndroidTerminal !== 'undefined') {
-        // --- 1. ESTÁ NO APP ANDROID ---
-        bingoAlert("⏳ Abrindo WhatsApp...", 2000, '#0047AB');
-        const urlPdfCodificada = encodeURIComponent(urlCompleta);
-        const nomeCodificado = encodeURIComponent(`Cartelas_${nomeCliente}.pdf`);
+            // VERIFICA ONDE O SISTEMA ESTÁ RODANDO
+            if (typeof window.AndroidTerminal !== 'undefined') {
+                // --- 1. ESTÁ NO APP ANDROID ---
+                bingoAlert("⏳ Abrindo WhatsApp...", 2000, '#0047AB');
+                const urlPdfCodificada = encodeURIComponent(urlCompleta);
+                const nomeCodificado = encodeURIComponent(`Cartelas_${nomeCliente}.pdf`);
         
-        window.location.href = `meuapp://enviarpdf?url=${urlPdfCodificada}&nome=${nomeCodificado}`;
+                window.location.href = `meuapp://enviarpdf?url=${urlPdfCodificada}&nome=${nomeCodificado}`;
     
-    } else {
-        // --- 2. ESTÁ NO COMPUTADOR (Navegador normal) ---
-        bingoAlert("⏳ Gerando PDF no navegador...", 2000, '#0047AB');
+            } else {
+                // --- 2. ESTÁ NO COMPUTADOR (Navegador normal) ---
+                bingoAlert("⏳ Gerando PDF no navegador...", 2000, '#0047AB');
         
-        // No PC, o mais seguro é abrir o PDF em uma nova aba.
-        // Assim, o caixa pode imprimir, salvar ou arrastar direto para o WhatsApp Web.
-        window.open(urlCompleta, '_blank');
+                // No PC, o mais seguro é abrir o PDF em uma nova aba.
+                // Assim, o caixa pode imprimir, salvar ou arrastar direto para o WhatsApp Web.
+                window.open(urlCompleta, '_blank');
         
-        // OPÇÃO EXTRA: Se quiser que o PC abra o WhatsApp Web com o link do PDF preenchido,
-        // comente a linha window.open acima e descomente as linhas abaixo:
-        // const msgWeb = encodeURIComponent(`Aqui estão as suas cartelas: ${urlCompleta}`);
-        // window.open(`https://web.whatsapp.com/send?text=${msgWeb}`, '_blank');
-    }
-}
+                // OPÇÃO EXTRA: Se quiser que o PC abra o WhatsApp Web com o link do PDF preenchido,
+                // comente a linha window.open acima e descomente as linhas abaixo:
+                // const msgWeb = encodeURIComponent(`Aqui estão as suas cartelas: ${urlCompleta}`);
+                // window.open(`https://web.whatsapp.com/send?text=${msgWeb}`, '_blank');
+            }
+        }
 
         // ==========================================
         // 🚀 O CORAÇÃO DA PÁGINA (Executado ao carregar)
@@ -1292,60 +1311,79 @@ async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, t
             }
         });
 
-function abrirMenuAcao(idVenda, idCliente, tipo) {
-    document.getElementById('temp-id-venda').value = idVenda;
-    document.getElementById('temp-id-cliente').value = idCliente;
-    document.getElementById('temp-tipo-acao').value = tipo;
+        function abrirMenuAcao(idVenda, idCliente, tipo) {
+            document.getElementById('temp-id-venda').value = idVenda;
+            document.getElementById('temp-id-cliente').value = idCliente;
+            document.getElementById('temp-tipo-acao').value = tipo;
     
-    document.getElementById('titulo-acao').innerText = (tipo === 'cupom' ? 'Cupom de Venda' : 'Cartelas do Cliente');
-    document.getElementById('acao-modal').style.display = 'flex';
-}
-
-
-async function executarAcao(formaEnvio) {
-    const idVenda = document.getElementById('temp-id-venda').value;
-    const idEvento = document.getElementById('input_id_evento').value;
-    const tipo = document.getElementById('temp-tipo-acao').value;
-    
-    document.getElementById('acao-modal').style.display = 'none';
-
-    if (tipo === 'cupom') {
-        const idCliente = document.getElementById('temp-id-cliente').value;
-        await executarReimpressao(idVenda, idCliente, formaEnvio);
-    } 
-    else if (tipo === 'cartelas') {
-        
-        // 1. BUSCA OS DADOS DA VENDA (Independente se vai imprimir ou enviar)
-        const response = await fetch('/api/buscar_dados_venda', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id_venda: idVenda, id_evento: idEvento })
-        });
-        
-        const dados = await response.json();
-        
-        if (dados.status === 'error') {
-            bingoAlert(dados.message, 3000, '#e74c3c');
-            return;
+            document.getElementById('titulo-acao').innerText = (tipo === 'cupom' ? 'Cupom de Venda' : 'Cartelas do Cliente');
+            document.getElementById('acao-modal').style.display = 'flex';
         }
 
-        // 2. DECIDE A AÇÃO
-        if (formaEnvio === 'imprimir') {
-            // Usa a função de impressão 58mm
-            imprimirCartelas58mm(dados);
-        } else {
-            // Usa a sua função handleGerarPdfLite pronta!
-            // Passamos os dados que acabamos de buscar no servidor
-            await handleGerarPdfLite(
-                dados.numero_inicial, 
-                dados.numero_final, 
-                dados.id_evento, 
-                dados.nome_cliente, 
-                dados.tipo_cartela
-            );
+        async function executarAcao(formaEnvio) {
+            const idVenda = document.getElementById('temp-id-venda').value;
+            const idEvento = document.getElementById('input_id_evento').value;
+            const tipo = document.getElementById('temp-tipo-acao').value;
+    
+            document.getElementById('acao-modal').style.display = 'none';
+
+            if (tipo === 'cupom') {
+                const idCliente = document.getElementById('temp-id-cliente').value;
+                await executarReimpressao(idVenda, idCliente, formaEnvio);
+            } 
+            else if (tipo === 'cartelas') {
+        
+                // 1. BUSCA OS DADOS DA VENDA (Independente se vai imprimir ou enviar)
+                const response = await fetch('/api/buscar_dados_venda', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_venda: idVenda, id_evento: idEvento })
+                });
+        
+                const dados = await response.json();
+        
+                if (dados.status === 'error') {
+                    bingoAlert(dados.message, 3000, '#e74c3c');
+                    return;
+                }
+
+                // 2. DECIDE A AÇÃO
+                if (formaEnvio === 'imprimir') {
+                    // Usa a função de impressão 58mm
+                    imprimirCartelas58mm(dados);
+                } else {
+                    // Usa a sua função handleGerarPdfLite pronta!
+                    // Passamos os dados que acabamos de buscar no servidor
+                    await handleGerarPdfLite(
+                        dados.numero_inicial, 
+                        dados.numero_final, 
+                        dados.id_evento, 
+                        dados.nome_cliente, 
+                        dados.tipo_cartela
+                    );
+                }
+            }
         }
-    }
-}
+
+        function irParaProximoCampo(event, input) {
+            // Verifica se a tecla pressionada foi o Enter
+            if (event.key === 'Enter') {
+                event.preventDefault(); // Evita que o Enter submeta o formulário antes da hora
+                
+                // Só avança se o campo não estiver vazio
+                if (input.value.trim() !== '') {
+                    const kitInput = document.getElementById('numero_kit_inicial');
+                    const qtdInput = document.getElementById('quantidade');
+                    
+                    // Direciona o foco dependendo do padrão de venda do evento (Numeração ou Quantidade)
+                    if (kitInput && !kitInput.disabled) {
+                        kitInput.focus();
+                    } else if (qtdInput && !qtdInput.disabled) {
+                        qtdInput.focus();
+                    }
+                }
+            }
+        }
 
     </script>
 </body>

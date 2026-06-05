@@ -91,6 +91,19 @@
             <div class="alert alert-danger">{{ error }}</div>
         {% endif %}
 
+        <div class="flex flex-col md:flex-row gap-3 mb-4 mt-2">
+            <div class="flex-grow relative">
+                <input type="text" id="searchInput" onkeyup="filtrarTabela()" placeholder="🔍 Buscar por Nome do Cliente ou N° da Cartela..." class="w-full p-2.5 border border-gray-300 rounded-lg shadow-sm focus:ring-2 focus:ring-green-500 outline-none text-gray-700">
+            </div>
+            <div class="w-full md:w-auto">
+                <select id="sortSelect" onchange="ordenarTabela()" class="w-full p-2.5 border border-gray-300 rounded-lg shadow-sm bg-white focus:ring-2 focus:ring-green-500 outline-none text-gray-700 font-bold cursor-pointer">
+                    <option value="data">🕒 Ordem de Cadastro</option>
+                    <option value="numero">🔢 Numeração da Cartela</option>
+                    <option value="nome">🔤 Nome do Cliente</option>
+                </select>
+            </div>
+        </div>
+
         <div class="table-wrapper">
             <table>
                 <thead>
@@ -108,10 +121,13 @@
                         <th>ID Venda</th> 
                     </tr>
                 </thead>
-                <tbody>
-                    {% for venda in vendas %}
-                        <tr class="hover:bg-green-200 cursor-pointer" 
-                            onclick="openReprintModal(
+                    <tbody id="tabela-vendas-body">
+                        {% for venda in vendas %}
+                            <tr class="hover:bg-green-200 cursor-pointer linha-venda" 
+                                data-ordem="{{ loop.index }}"
+                                data-numero="{{ venda.numero_inicial }}"
+                                data-nome="{{ venda.nome_cliente | lower }}"     
+                                onclick="openReprintModal(
                                 '{{ venda.id_venda }}', 
                                 '{{ venda.id_cliente }}', 
                                 '{{ info_evento_id }}',  
@@ -453,6 +469,52 @@
                 closeReprintModal();
             }
         }
+
+        // =======================================================
+        // 🚀 FUNÇÕES DE BUSCA E ORDENAÇÃO (FRONT-END)
+        // =======================================================
+        
+        function filtrarTabela() {
+            const termo = document.getElementById('searchInput').value.toLowerCase();
+            const linhas = document.querySelectorAll('.linha-venda');
+
+            linhas.forEach(linha => {
+                // A coluna 0 é a dos Números e a coluna 3 é a do Cliente
+                const textoNumeros = linha.cells[0].innerText.toLowerCase();
+                const textoCliente = linha.cells[3].innerText.toLowerCase();
+
+                // Se o termo existir nos números ou no nome, mostra a linha. Se não, oculta.
+                if (textoNumeros.includes(termo) || textoCliente.includes(termo)) {
+                    linha.style.display = '';
+                } else {
+                    linha.style.display = 'none';
+                }
+            });
+        }
+
+        function ordenarTabela() {
+            const criterio = document.getElementById('sortSelect').value;
+            const tbody = document.getElementById('tabela-vendas-body');
+            // Transforma as linhas HTML num Array de JavaScript para poder ordenar
+            const linhas = Array.from(document.querySelectorAll('.linha-venda'));
+
+            linhas.sort((a, b) => {
+                if (criterio === 'data') {
+                    // Ordena pelo índice original de carregamento (Ordem do DB)
+                    return parseInt(a.dataset.ordem) - parseInt(b.dataset.ordem);
+                } else if (criterio === 'numero') {
+                    // Ordena pelo número inicial da cartela
+                    return parseInt(a.dataset.numero) - parseInt(b.dataset.numero);
+                } else if (criterio === 'nome') {
+                    // Ordena alfabeticamente pelo nome
+                    return a.dataset.nome.localeCompare(b.dataset.nome);
+                }
+            });
+
+            // Remove as linhas antigas e anexa as ordenadas novamente
+            linhas.forEach(linha => tbody.appendChild(linha));
+        }
+
     </script>
 
 </body>
