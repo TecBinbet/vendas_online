@@ -352,3 +352,65 @@ function calcularRodadasCombo(numeroInicial, qtdCartelasCompradas, unidadeVenda,
     }
     return rodadas;
 }
+
+// ==========================================
+// FUNÇÕES GLOBAIS DE INTEGRAÇÃO COM WHATSAPP
+// ==========================================
+
+function abrirWhatsApp(textoParaEnviar, telefoneCliente) {
+    // Garante que não ocorra erro caso a variável global 'tempTelefone' não exista na página atual
+    var rawTelefone = telefoneCliente || (typeof tempTelefone !== 'undefined' ? tempTelefone : ""); 
+    var telefone = rawTelefone.replace(/\D/g, '');
+  
+    // Lógica do 55 (Brasil)
+    if (telefone && telefone.length > 0) {
+         if (telefone.length <= 9) {
+            telefone = "11" + telefone;
+        }
+         if (telefone.length <= 11) {
+            telefone = "55" + telefone;
+        }
+    } else {
+        telefone = "";
+    }
+
+    var mensagem = textoParaEnviar || "";
+    var mensagemCodificada = encodeURIComponent(mensagem);
+
+    var url = "https://wa.me/" + telefone + "?text=" + mensagemCodificada;
+
+    window.open(url, '_blank');
+}
+
+function abrirWhatsAppComPDF(urlDoPDF, telefoneCliente) {
+    // Garante que não ocorra erro caso a variável global 'tempTelefone' não exista na página atual
+    var rawTelefone = telefoneCliente || (typeof tempTelefone !== 'undefined' ? tempTelefone : ""); 
+    var telefone = rawTelefone.replace(/\D/g, '');
+  
+    // Lógica do 55 (Brasil)
+    if (telefone && telefone.length > 0) {
+         if (telefone.length <= 9) {
+            telefone = "11" + telefone;
+        }
+         if (telefone.length <= 11) {
+            telefone = "55" + telefone;
+        }
+    } else {
+        alert("Nenhum número de WhatsApp válido foi fornecido.");
+        return;
+    }
+
+    // Monta a mensagem com quebras de linha e emojis
+    var mensagem = "Olá! 🎟️ Aqui estão as suas cartelas.\n\n" +
+                   "👇 Clique no link abaixo para visualizar ou baixar o seu PDF:\n" + 
+                   urlDoPDF + "\n\n" +
+                   "Boa sorte!";
+                   
+    var mensagemCodificada = encodeURIComponent(mensagem);
+
+    // Gera o link da API do WhatsApp
+    var url = "https://wa.me/" + telefone + "?text=" + mensagemCodificada;
+
+    // Abre numa nova aba
+    window.open(url, '_blank');
+}

@@ -4173,7 +4173,7 @@ def consulta_vendas_detalhes():
             id_colab_busca = int(id_colaborador_logado) if str(id_colaborador_logado).isdigit() else id_colaborador_logado
             query_filter['id_colaborador'] = {'$in': [id_colab_busca, str(id_colab_busca)]}
         
-        elif nivel_usuario == 3 and id_colaborador_param and id_colaborador_param != 'ALL':
+        elif nivel_usuario >= 3 and id_colaborador_param and id_colaborador_param != 'ALL':
             id_colab_target = int(id_colaborador_param) if str(id_colaborador_param).isdigit() else id_colaborador_param
             query_filter['id_colaborador'] = {'$in': [id_colab_target, str(id_colab_target)]}
 

@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Detalhes da Venda</title>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script> 
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         body { background-color: #F7F7F7; }
@@ -183,18 +184,37 @@
             <hr class="my-2 border-gray-300">
 
             <p class="text-sm text-gray-600 mb-2 font-bold">Opções de PDF:</p>
-            <button id="modal-btn-pdf1" class="modal-btn text-white" 
-                    style="background-color: #D97706;" 
-                    onmouseover="this.style.backgroundColor='#B45309'" 
-                    onmouseout="this.style.backgroundColor='#D97706'">
-                Gerar PDF (Período: <span id="modal-pdf-periodo1">...</span>)
-            </button>            
+            
+            <div class="flex gap-2 mb-2">
+                <button id="modal-btn-pdf1" class="modal-btn text-white mb-0 flex-1" 
+                        style="background-color: #D97706;" 
+                        onmouseover="this.style.backgroundColor='#B45309'" 
+                        onmouseout="this.style.backgroundColor='#D97706'">
+                    PDF (<span id="modal-pdf-periodo1">...</span>)
+                </button>            
+                <button id="modal-btn-zap1" class="modal-btn text-white mb-0 flex-1 flex items-center justify-center gap-1" 
+                        style="background-color: #25D366; display: none;" 
+                        onmouseover="this.style.backgroundColor='#128C7E'" 
+                        onmouseout="this.style.backgroundColor='#25D366'">
+                    📱 WhatsApp
+                </button>
+            </div>
 
-            <button id="modal-btn-pdf2" class="modal-btn text-white" 
-                    style="background-color: #D97706; display: none;" onmouseover="this.style.backgroundColor='#B45309'" 
-                    onmouseout="this.style.backgroundColor='#D97706'">
-                Gerar PDF (Período: <span id="modal-pdf-periodo2">...</span>)
-            </button>          
+            <div class="flex gap-2 mb-2">
+                <button id="modal-btn-pdf2" class="modal-btn text-white mb-0 flex-1" 
+                        style="background-color: #D97706; display: none;" 
+                        onmouseover="this.style.backgroundColor='#B45309'" 
+                        onmouseout="this.style.backgroundColor='#D97706'">
+                    PDF (<span id="modal-pdf-periodo2">...</span>)
+                </button>          
+                <button id="modal-btn-zap2" class="modal-btn text-white mb-0 flex-1 flex items-center justify-center gap-1" 
+                        style="background-color: #25D366; display: none;" 
+                        onmouseover="this.style.backgroundColor='#128C7E'" 
+                        onmouseout="this.style.backgroundColor='#25D366'">
+                    📱 WhatsApp
+                </button>
+            </div>
+            
             <button class="modal-btn btn-cancel mt-2" onclick="closeReprintModal()">
                 Cancelar
             </button>
@@ -216,8 +236,12 @@
         
         const toast = document.getElementById('copy-toast');
 
+        const tipoCartelaAtual = "{{ info_tipo_cartela | default(15) }}";
+
         const btnPdf1 = document.getElementById('modal-btn-pdf1');
         const btnPdf2 = document.getElementById('modal-btn-pdf2');
+        const btnZap1 = document.getElementById('modal-btn-zap1'); 
+        const btnZap2 = document.getElementById('modal-btn-zap2');
         const spanPdf1 = document.getElementById('modal-pdf-periodo1');
         const spanPdf2 = document.getElementById('modal-pdf-periodo2');
 
@@ -255,18 +279,32 @@
             }
 
             // Lógica dos PDFs
+            // Lógica dos PDFs e WhatsApp
             if (btnPdf1 && spanPdf1) {
                 spanPdf1.textContent = `${tempNumInicial1} a ${tempNumFinal1}`;
                 btnPdf1.onclick = () => handleGerarPdf(tempNumInicial1, tempNumFinal1);
                 btnPdf1.style.display = 'block'; 
+                
+                // Lógica do WhatsApp Via 1
+                if (btnZap1) {
+                    btnZap1.onclick = () => enviarPdfViaWhatsApp(tempNumInicial1, tempNumFinal1, tempIdEvento, tempNomeCliente, tipoCartelaAtual, tempTelefone);
+                    btnZap1.style.display = 'flex';
+                }
             }
             if (btnPdf2 && spanPdf2) {
                 if (tempNumInicial2 > 0 && tempNumFinal2 > 0) {
                     spanPdf2.textContent = `${tempNumInicial2} a ${tempNumFinal2}`;
                     btnPdf2.onclick = () => handleGerarPdf(tempNumInicial2, tempNumFinal2);
                     btnPdf2.style.display = 'block'; 
+                    
+                    // Lógica do WhatsApp Via 2
+                    if (btnZap2) {
+                        btnZap2.onclick = () => enviarPdfViaWhatsApp(tempNumInicial2, tempNumFinal2, tempIdEvento, tempNomeCliente, tipoCartelaAtual, tempTelefone);
+                        btnZap2.style.display = 'flex';
+                    }
                 } else {
                     btnPdf2.style.display = 'none'; 
+                    if (btnZap2) btnZap2.style.display = 'none';
                 }
            }
             
@@ -354,9 +392,7 @@
             tempTextArea.style.opacity = '0';
             document.body.appendChild(tempTextArea);
             tempTextArea.select();
-            
-            // REMOVIDO: abrirWhatsApp(text) <-- Essa linha estava duplicada aqui fora
-            
+                      
             try {
                  if (document.execCommand('copy'))  {
                    abrirWhatsApp(text); // Mantém apenas esta chamada
@@ -368,31 +404,28 @@
             document.body.removeChild(tempTextArea);
         }
 
-        // Atualizei a função para receber o texto
-        function abrirWhatsApp(textoParaEnviar) {
-           // Garante que é uma string vazia se for null/undefined
-           var rawTelefone = tempTelefone || ""; 
-           var telefone = rawTelefone.replace(/\D/g, '');
-         
-           // Lógica do 55 (Brasil)
-           if (telefone && telefone.length > 0) {
-                if (telefone.length <= 9) {
-                   telefone = "11" + telefone;
-               }
-                if (telefone.length <= 11) {
-                   telefone = "55" + telefone;
-               }
-           } else {
-               telefone = "";
-           }
- 
-           var mensagem = textoParaEnviar || "";
-           var mensagemCodificada = encodeURIComponent(mensagem);
-
-           var url = "https://wa.me/" + telefone + "?text=" + mensagemCodificada;
-
-           window.open(url, '_blank');
+        // Função para montar o link do PDF e enviar para o WhatsApp
+        function enviarPdfViaWhatsApp(numInicial, numFinal, idEvento, nomeCliente, tipoCartela, telefoneCliente) {
+            
+            // 1. Define a rota base dinamicamente (15 ou 25)
+            const rotaBase = `/gerar_cartelas_pdf_${tipoCartela}`;
+            
+            // 2. Monta os parâmetros da URL (Query String)
+            const parametros = new URLSearchParams({
+                id_evento: idEvento,
+                numero_inicial: numInicial,
+                numero_final: numFinal,
+                nome_cliente: nomeCliente || "Cliente"
+            });
+            
+            // 3. Junta o domínio do seu site + rota + parâmetros
+            // window.location.origin pega o "https://seusite.com" automaticamente
+            const linkCompletoPDF = window.location.origin + rotaBase + "?" + parametros.toString();
+            
+            // 4. Chama a função de envio
+            abrirWhatsAppComPDF(linkCompletoPDF, telefoneCliente);
         }
+
         // --- FUNÇÃO DE EXCLUSÃO (SEGURA) ---
         async function handleExcluirVenda() {
             if (!btnExcluir) return; // Segurança extra

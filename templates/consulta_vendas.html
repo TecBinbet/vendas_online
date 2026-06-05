@@ -48,7 +48,7 @@
                 
                 <form method="GET" action="{{ url_for('consulta_vendas') }}" class="flex items-center bg-white px-3 py-1.5 rounded border border-gray-200 shadow-sm">
                     <label for="status_filtro" class="text-[10px] font-black text-gray-500 uppercase tracking-widest mr-2 mt-1">Filtro:</label>
-                    <select name="status_filtro" id="status_filtro" onchange="this.form.submit()" class="form-select py-1 px-2 border-0 bg-transparent text-sm font-bold cursor-pointer outline-none text-blue-700 w-auto">
+                    <select name="status_filtro" id="status_filtro" onchange="ativarSpinnerFiltro(this)" class="form-select py-1 px-2 border-0 bg-transparent text-sm font-bold cursor-pointer outline-none text-blue-700 w-auto">
                         <option value="ativos" {% if request.args.get('status_filtro', 'ativos') == 'ativos' %}selected{% endif %}>🟢 Ativos / ⏸️ Paralisados</option>
                         <option value="finalizados" {% if request.args.get('status_filtro') == 'finalizados' %}selected{% endif %}>🔴 Finalizados</option>
                     </select>
@@ -236,6 +236,21 @@
         {% endif %}
         
     </div>
+
+    <script>
+            function ativarSpinnerFiltro(selectElement) {
+                const loadingSpinner = document.getElementById('loading-spinner');
+                
+                // Se o spinner existir na página, ativa-o
+                if (loadingSpinner) {
+                    loadingSpinner.classList.remove('spinner-hidden');
+                    loadingSpinner.classList.add('spinner-visible');
+                }
+                
+                // Envia o formulário logo em seguida
+                selectElement.form.submit();
+            }
+    </script>
 
 </body>
 </html>
