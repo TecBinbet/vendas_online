@@ -110,9 +110,13 @@ def nova_venda_lite():
             # Tratamento também no evento selecionado
             selected_event['valor_de_venda_float'] = safe_float(selected_event.get('valor_de_venda', 0.0))
             
-            # Como herdamos o HTML, ele procura esse campo para exibir. Se não existir, criamos um substituto.
-            if 'numeracao_atual_display' not in selected_event:
-                selected_event['numeracao_atual_display'] = "Calculada na Gravação"
+            # 🚀 AJUSTE APLICADO: Busca o ponteiro real no controle_venda
+            if padrao_venda == 'quantidade':
+                controle = db.controle_venda.find_one({'id_evento': selected_event.get('id_evento')})
+                inicial_proxima_venda = controle.get('inicial_proxima_venda', 1) if controle else selected_event.get('numero_inicial', 1)
+                selected_event['numeracao_atual_display'] = inicial_proxima_venda
+            else:
+                selected_event['numeracao_atual_display'] = "Definida pelo Operador"
 
     # Puxa o histórico do operador logado
     colaborador_id = session.get('id_colaborador', 'N/A')
@@ -524,6 +528,8 @@ def processar_venda_lite():
     }
 
     return redirect(url_for('venda_lite.nova_venda_lite', id_evento=id_evento_string))
+
+
 
 
 # 4. Rota para Copiar Listagem de Vendas (Área de Transferência)

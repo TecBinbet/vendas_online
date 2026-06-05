@@ -141,7 +141,7 @@
                             )">
                             <td class="font-bold">
                                 {{ venda.numero_inicial }} a {{ venda.numero_final }}
-                                {% if venda.numero_inicial2 > 0 %}
+                                {% if venda.get('numero_inicial2', 0) > 0 %}
                                     <br> {{ venda.numero_inicial2 }} a {{ venda.numero_final2 }}
                                 {% endif %}
                             </td>

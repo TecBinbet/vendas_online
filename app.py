@@ -2714,6 +2714,293 @@ def processar_venda():
         return redirect(url_for('nova_venda', id_evento=id_evento_string))
 
 
+@app.route('/processar_venda_combo_quantidade', methods=['POST'])
+@login_required
+def processar_venda_combo_quantidade():
+    """
+    Processo de Venda COMBO por QUANTIDADE (Etapa 1 e Base da Etapa 2).
+    Distribui as cartelas de forma intercalada entre o evento Pai e os Filhos.
+    Utiliza insert_many para otimização de I/O no banco.
+    """
+    db = get_vendas_db()
+    if db is None: 
+        return redirect(url_for('venda_lite.nova_venda_lite', error="DB Offline. Transação Crítica Falhou."))
+
+    id_evento_string = request.form.get('id_evento') 
+    id_cliente_final_str = request.form.get('id_cliente_final') 
+    quantidade_str = request.form.get('quantidade', '0')
+    
+    # 🚀 GANCHO PARA A ETAPA 2 (Será ativado futuramente via checkbox no Front-end)
+    modo_aleatorio = request.form.get('modo_aleatorio') == 'true'
+    
+    log_prefix = f"[COMBO QTD REQ_COLAB:{session.get('nick', 'N/A')}_CLI:{id_cliente_final_str}_QTD:{quantidade_str}]"
+    
+    error_redirect_kwargs = {
+        'id_evento': id_evento_string,
+        'id_cliente_busca': f"CLI{id_cliente_final_str}" if id_cliente_final_str else '',
+    }
+
+    try:
+        id_cliente_final = int(id_cliente_final_str)
+        quantidade_combos = int(quantidade_str)
+        if quantidade_combos <= 0: raise ValueError("Quantidade de combos deve ser positiva.")
+    except (TypeError, ValueError) as e:
+        error_redirect_kwargs['error'] = f"Dados inválidos: {e}"
+        return redirect(url_for('venda_lite.nova_venda_lite', error_redirect_kwargs))
+
+    # =====================================================================
+    # PREPARAÇÃO E VALIDAÇÕES (CLIENTE E COMISSÃO)
+    # =====================================================================
+    cliente_db = db.clientes.find_one({'id_cliente': id_cliente_final}) if id_cliente_final > 0 else None
+    if cliente_db:
+        id_colab_comissao = int(cliente_db.get('id_colaborador', 0))
+        nick_colab_comissao = cliente_db.get('nick_colaborador', 'N/A')
+    else:
+        id_colab_comissao = int(session.get('id_colaborador', 0))
+        nick_colab_comissao = session.get('nick', 'N/A')
+
+    id_evento_mongo = try_object_id(id_evento_string)
+    evento_pai = db.eventos.find_one({'_id': id_evento_mongo})
+    
+    if not evento_pai or not cliente_db:
+        error_redirect_kwargs['error'] = "Evento ou Cliente não encontrado."
+        return redirect(url_for('venda_lite.nova_venda_lite', error_redirect_kwargs))
+
+    status_atual = evento_pai.get('status', '').lower()
+    if status_atual != 'ativo':
+        error_redirect_kwargs['error'] = "⛔ VENDA CANCELADA! O evento principal não está Ativo."
+        return redirect(url_for('venda_lite.nova_venda_lite', error_redirect_kwargs))
+
+    # =====================================================================
+    # MATEMÁTICA E MAPEAMENTO DA FAMÍLIA (COMBO)
+    # =====================================================================
+    id_evento_pai_int = evento_pai.get('id_evento') 
+    limite_maximo_cartelas = int(evento_pai.get('numero_maximo', 72000))
+    valor_unitario = safe_float(evento_pai.get('valor_de_venda', 0.00))
+    unidade_de_venda = int(evento_pai.get('unidade_de_venda', 15))
+    tipo_cartela = int(evento_pai.get('tipo_de_cartela', 15))
+    
+    # Monta a família inteira: Pai na posição 0, Filhos nas posições seguintes
+    filhos = list(db.eventos.find({'id_evento_principal_combo': id_evento_pai_int}).sort('id_evento', 1))
+    eventos_combo = [evento_pai] + filhos
+    
+    qtd_eventos = len(eventos_combo)
+    tamanho_do_combo_completo = qtd_eventos * unidade_de_venda
+    total_cartelas_consumidas = quantidade_combos * tamanho_do_combo_completo
+    valor_total_atual = valor_unitario * quantidade_combos
+
+    colaborador_id = session.get('id_colaborador', 'N/A')
+    nick_colaborador = session.get('nick', 'Colaborador') 
+    regional_operador = session.get('id_regional', 1)
+    
+    id_venda_formatado = None
+    
+    # ==============================================================================
+    # 🚀 MOTOR DE VENDAS (ETAPA 1: SEQUENCIAL INTERCALADA / BATCH INSERT)
+    # ==============================================================================
+    try:
+        # 1. Gera ID único da Transação (Uma única venda engloba todo o Combo)
+        novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
+        if novo_id_venda_int is None: raise Exception("Falha ao gerar o ID da venda.")
+        id_venda_formatado = f"VC{novo_id_venda_int:05d}" # VC = Venda Combo
+
+        # 2. Puxa o ponteiro numérico global (Reservando todo o bloco necessário)
+        numero_base_banco = get_next_bilhete_sequence(
+            db, id_evento_pai_int, 'inicial_proxima_venda', 
+            total_cartelas_consumidas, limite_maximo_cartelas
+        )
+        if numero_base_banco is None: raise Exception("Falha de concorrência na numeração.")
+
+        if numero_base_banco == 1: 
+            numero_base_banco = int(evento_pai.get('numero_inicial', 1))
+            db.controle_venda.update_one(
+                {'id_evento': id_evento_pai_int},
+                {'$set': {'inicial_proxima_venda': numero_base_banco + total_cartelas_consumidas}}
+            )
+
+        # 3. Base do Documento (Comum a todos os kits)
+        registro_base = {
+            "id_venda": id_venda_formatado,
+            "id_regional": regional_operador,
+            "id_cliente": id_cliente_final, 
+            "nome_cliente": cliente_db.get('nick'),
+            "telefone_cliente": cliente_db.get('telefone',''),
+            "id_colaborador": id_colab_comissao,
+            "nick_colaborador": nick_colaborador,
+            "id_vendedor": colaborador_id,
+            "data_venda": hora_brasil(),
+            "tipo_cartela": tipo_cartela,  
+            "quantidade_unidades": 1, # Cada linha fatiada representa 1 unidade do combo daquele evento
+            "numero_inicial2": 0,
+            "numero_final2": 0,
+            "quantidade_cartelas": unidade_de_venda,
+            "valor_unitario": Decimal128("0.00"), # Financeiro concentrado no Pai (ou rateado)
+            "valor_total": Decimal128("0.00"),
+            "origem": "terminal_combo_qtd",
+            "id_transacao_combo": id_venda_formatado
+        }
+
+        # 4. Distribuição Fatiada e Gravação em Lote
+        for indice_evento, evento_atual in enumerate(eventos_combo):
+            id_evt = evento_atual['id_evento']
+            nome_colecao_venda = f"vendas{id_evt}"
+            deslocamento_do_evento = indice_evento * unidade_de_venda
+            documentos_inserir = []
+
+            for indice_combo in range(quantidade_combos):
+                # ETAPA 2 ENTRARÁ AQUI NO FUTURO
+                if modo_aleatorio:
+                    pass 
+                else:
+                    # ETAPA 1: Matemática Sequencial
+                    salto_do_combo = indice_combo * tamanho_do_combo_completo
+                    num_inicial = numero_base_banco + salto_do_combo + deslocamento_do_evento
+                    num_final = num_inicial + unidade_de_venda - 1
+                
+                # Prepara a fatia
+                nova_fatia = registro_base.copy()
+                nova_fatia['id_evento_ObjectId'] = evento_atual.get('_id')
+                nova_fatia['id_evento'] = id_evt
+                nova_fatia['descricao_evento'] = evento_atual.get('descricao')
+                nova_fatia['numero_inicial'] = num_inicial
+                nova_fatia['numero_final'] = num_final
+                
+                # Se for o Pai e for o primeiro kit do loop, carrega o valor financeiro total
+                if indice_evento == 0:
+                    # A quantidade de unidades já é 1 (herdado do registro_base)
+                    nova_fatia['valor_unitario'] = Decimal128(str(valor_unitario))
+                    nova_fatia['valor_total'] = Decimal128(str(valor_unitario))
+
+                documentos_inserir.append(nova_fatia)
+
+            # Executa o BATCH INSERT (Otimização máxima)
+            if documentos_inserir:
+                db[nome_colecao_venda].insert_many(documentos_inserir)
+                
+            # Sincroniza o ponteiro de todos os irmãos para ficarem alinhados com o Pai
+            novo_ponteiro_geral = numero_base_banco + total_cartelas_consumidas
+            print(f"🛠️ [DEBUG VENDA COMBO QTDE] novo_ponteiro_geral:    '{novo_ponteiro_geral}'")
+  
+
+        # ==========================================================
+        # 🚀 SINCRONIZAÇÃO DO PONTEIRO (FORA DO LOOP)
+        # ==========================================================
+        if not modo_aleatorio:
+            # Pega o ponteiro inicial e soma o bloco total do combo
+            novo_ponteiro_geral = numero_base_banco + total_cartelas_consumidas
+            print(f"🛠️ [DEBUG VENDA COMBO QTDE] >> numero_base_banco:    '{numero_base_banco}'")
+            print(f"🛠️ [DEBUG VENDA COMBO QTDE] >> total_cartelas_consumidas:    '{total_cartelas_consumidas}'")
+            print(f"🛠️ [DEBUG VENDA COMBO QTDE] >> novo_ponteiro_geral:    '{novo_ponteiro_geral}'") 
+            # Cria uma lista apenas com os números dos IDs de todos os eventos (Pai e Filhos)
+            ids_eventos_atualizar = [e['id_evento'] for e in eventos_combo]
+            
+            # Atualiza o controle de todos de uma única vez!
+            db.controle_venda.update_many(
+                {'id_evento': {'$in': ids_eventos_atualizar}},
+                {'$set': {'inicial_proxima_venda': novo_ponteiro_geral}}
+            )
+
+        # 5. Financeiro e Comissões
+        db.clientes.update_one(
+            {"id_cliente": id_cliente_final}, 
+            {"$set": {"data_ultimo_compra": hora_brasil()}}
+        )
+        
+        db.eventos.update_one(
+            {"id_evento": id_evento_pai_int},
+            {"$inc": {"valor_pendente_telemovel": float(valor_total_atual)}}
+        )
+
+        valor_debito = 0.0
+        saldo_verificacao = safe_float(cliente_db.get('saldo_atual', 0.0))
+        if saldo_verificacao > 0:
+            desconto_real = min(abs(valor_total_atual), saldo_verificacao)
+            valor_debito = -abs(desconto_real)
+        
+        if valor_debito != 0.0:
+            desc_transacao = f"Compra Combo QTD {quantidade_combos} -( {colaborador_id}: {nick_colaborador} )- {evento_pai.get('descricao')}"
+            registrar_transacao_cliente(
+                db=db, id_cliente=id_cliente_final, valor=valor_debito,
+                tipo='compra_cartela', descricao=desc_transacao,
+                id_evento=id_evento_pai_int, id_venda=id_venda_formatado
+            )
+
+        # Comissões
+        taxa_operador = g.parametros_globais.get('perc_venda_direta', 15.0) 
+        registrar_comissao_vendedor(
+            db=db, id_colaborador=colaborador_id, valor=valor_total_atual * (taxa_operador / 100),
+            tipo='vd', id_evento=id_evento_pai_int, id_venda=id_venda_formatado,
+            taxa_aplicada=taxa_operador, descricao=f"Comissão Direta Venda Combo {id_venda_formatado}"
+        )
+
+        id_indicador = cliente_db.get('id_colaborador')
+        if id_indicador and int(id_indicador) != int(colaborador_id):
+            taxa_indicador = g.parametros_globais.get('perc_venda_indireta_b', 10.0) 
+            registrar_comissao_vendedor(
+                db=db, id_colaborador=id_indicador, valor=valor_total_atual * (taxa_indicador / 100),
+                tipo='ind_b', id_evento=id_evento_pai_int, id_venda=id_venda_formatado,
+                taxa_aplicada=taxa_indicador, descricao=f"Comissão Indireta Venda Combo {id_venda_formatado}"
+            )
+
+    except Exception as e:
+        print(f"{log_prefix} ERRO CRÍTICO (COMBO QTD): {e}")
+        import traceback; traceback.print_exc()
+        error_redirect_kwargs['error'] = "Erro interno no DB: Falha ao gravar a transação Combo."
+        return redirect(url_for('venda_lite.nova_venda_lite', error_redirect_kwargs))
+
+    # ==============================================================================
+    # 🚀 MONTAGEM DO RECIBO
+    # ==============================================================================
+    try:
+        nome_sala = g.parametros_globais.get('nome_sala', '')
+        data_evento_str = evento_pai.get('data_evento', 'N/A')
+        hora_evento_str = evento_pai.get('hora_evento', 'N/A')
+        
+        # HTML dos fatiamentos
+        html_fatiamento = ""
+        for i_combo in range(quantidade_combos):
+            html_fatiamento += f"<div style='margin-top: 5px; border-top: 1px dashed #ccc;'>"
+            html_fatiamento += f"<strong>Combo {i_combo + 1}:</strong><br>"
+            salto = i_combo * tamanho_do_combo_completo
+            for i_evento in range(qtd_eventos):
+                n_ini = numero_base_banco + salto + (i_evento * unidade_de_venda)
+                n_fim = n_ini + unidade_de_venda - 1
+                prefixo = "PAI" if i_evento == 0 else f"F{i_evento}"
+                html_fatiamento += f"<span style='font-size: 0.85rem;'>[{prefixo}] {n_ini} a {n_fim}</span><br>"
+            html_fatiamento += "</div>"
+
+        http_apk = g.parametros_globais.get('http_apk', '')
+        link_final = f"{http_apk}?idcliente={id_cliente_final}"
+        
+        success_msg = (
+            f"<strong>✅ COMBO COMPRADO COM SUCESSO</strong><br>"
+            f"  <span style='font-size: 1.2rem; color: #B91C1C;'>{nome_sala}</span><br>"
+            f"</strong>     >  {id_venda_formatado}  < </strong><br>"
+            f"----------------------------<br>"
+            f"Cliente: <strong>{cliente_db.get('nick')}</strong><br>"
+            f"Combo: {evento_pai.get('descricao')}<br>"
+            f"<strong>Data: {data_evento_str} às {hora_evento_str}</strong><br>"
+            f"----------------------------<br>"
+            f"{html_fatiamento}"
+            f"----------------------------<br>"
+            f"Qtd Combos: <strong>{quantidade_combos}</strong><br>"
+            f"  VALOR TOTAL: <span style='font-size: 1.2rem; color: #B91C1C;'>R$ {valor_total_atual:.2f}</span><br>"
+            f"<br>"
+            f"CLIQUE NO <strong>LINK</strong> PARA ACESSAR<br>"
+            f"<strong> {link_final} </strong>"
+        )
+        
+        session['success_message'] = success_msg 
+        
+        return redirect(url_for('venda_lite.nova_venda_lite', id_evento=id_evento_string))
+
+    except Exception as e:
+        print(f"{log_prefix} Erro ao montar comprovante Combo: {e}")
+        session['success_message'] = f"<strong>VENDA {id_venda_formatado} GRAVADA!</strong> (Erro no recibo visual)."
+        return redirect(url_for('venda_lite.nova_venda_lite', id_evento=id_evento_string))
+
+
+
 # --- ROTAS DE CADASTRO DE CLIENTE ---
 # No seu arquivo app.py
 
