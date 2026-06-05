@@ -1077,16 +1077,24 @@ async function openUltimasVendas() {
                     } 
                     else if (acao === 'whatsapp') {
                         const textoRecibo = result.receipt_text;
-    
-                        // Codifica o texto para ser enviado numa URL
-                        const mensagemCodificada = encodeURIComponent(textoRecibo);
-                        const urlWhatsApp = `https://wa.me/?text=${mensagemCodificada}`;
-    
-                        // Abre o WhatsApp diretamente
-                        // window.open(urlWhatsApp, '_blank');
-                        window.location.href = urlWhatsApp; 
-    
+                          
+                        // Captura o telefone do cliente da API (se disponível no retorno do backend)
+                        // Caso não venha no result, tenta puxar do input da tela Lite
+                        let telCliente = result.telefone_cliente || result.telefone || "";
+                        if (!telCliente) {
+                            const inputTel = document.getElementById('telefone_cliente_lite');
+                            if (inputTel) telCliente = inputTel.value;
+                        }
+
                         bingoAlert("✅ Abrindo WhatsApp para envio...", 3000, '#27ae60');
+                        
+                        // Usa a sua função global para tratar o número, formatar o DDI/DDD e abrir a janela
+                        abrirWhatsApp(textoRecibo, telCliente);
+
+                        //const mensagemCodificada = encodeURIComponent(textoRecibo);
+                        //const urlWhatsApp = `https://wa.me/?text=${mensagemCodificada}`;
+                        //window.location.href = urlWhatsApp; 
+                        //bingoAlert("✅ Abrindo WhatsApp para envio...", 3000, '#27ae60');
                     }
                 } else {
                     bingoAlert(`❌ Erro: ${result.message}`, 4000, '#e74c3c');
@@ -1354,17 +1362,48 @@ async function openUltimasVendas() {
                     // Usa a função de impressão 58mm
                     imprimirCartelas58mm(dados);
                 } else {
-                    // Usa a sua função handleGerarPdfLite pronta!
-                    // Passamos os dados que acabamos de buscar no servidor
-                    await handleGerarPdfLite(
+                    // Usa a função padronizada para gerar o link e abrir no WhatsApp
+                    enviarPdfViaWhatsApp(
                         dados.numero_inicial, 
                         dados.numero_final, 
                         dados.id_evento, 
                         dados.nome_cliente, 
-                        dados.tipo_cartela
+                        dados.tipo_cartela,
+                        dados.telefone_cliente || dados.telefone || "" // Captura o telefone da API
                     );
+                    //await handleGerarPdfLite(
+                    //    dados.numero_inicial, 
+                    //    dados.numero_final, 
+                    //    dados.id_evento, 
+                    //    dados.nome_cliente, 
+                    //    dados.tipo_cartela
+                    //);
                 }
             }
+        }
+
+        // Função para montar o link do PDF das Cartelas e enviar para o WhatsApp
+        function enviarPdfViaWhatsApp(numInicial, numFinal, idEvento, nomeCliente, tipoCartela, telefoneCliente) {
+            
+            // 1. Define a rota base dinamicamente (15 ou 25)
+            const rotaBase = `/gerar_cartelas_pdf_${tipoCartela}`;
+
+            const idSala = "{{ session.get('id_sala', 1) }}".padStart(3, '0');
+            
+            // 2. Monta os parâmetros da URL (Query String)
+            const parametros = new URLSearchParams({
+                id_evento: idEvento,
+                numero_inicial_pdf: numInicial,  
+                numero_final_pdf: numFinal,      
+                nome_cliente: nomeCliente || "Cliente",
+                id_sala: idSala
+            });
+            
+            // 3. Junta o domínio do site + rota + parâmetros
+            const linkCompletoPDF = window.location.origin + rotaBase + "?" + parametros.toString();
+            
+            // 4. Usa a sua função global para abrir o link perfeitamente!
+            abrirWhatsApp(linkCompletoPDF, telefoneCliente);
         }
 
         function irParaProximoCampo(event, input) {

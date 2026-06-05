@@ -174,11 +174,16 @@
             <button id="modal-btn-cliente" class="modal-btn btn-secondary">
                 Reimprimir TODAS as Vendas do Cliente
             </button>
-
-            {% if session.get('nivel') == 3 %}
+            < !-- comentarios -- >
+            {% if not is_evento_filho and (g.parametros_globais.get('venda_lite') == True or session.get('nivel', 1) >= 3) %}
             <button id="modal-btn-excluir" class="modal-btn btn-danger mt-2">
                 🗑️ Excluir Venda Permanente
             </button>
+            
+            {% elif is_evento_filho %}
+            <div class="text-xs text-center text-red-600 bg-red-100 p-2 rounded mt-2 border border-red-300">
+                ⚠️ <strong>Atenção:</strong> Esta é uma venda vinculada a um COMBO. Para excluir, acesse os detalhes do Evento Principal.
+            </div>
             {% endif %}
            
             <hr class="my-2 border-gray-300">
@@ -231,7 +236,7 @@
         const btnVendaUnica = document.getElementById('modal-btn-unica');
         const btnVendasCliente = document.getElementById('modal-btn-cliente');
         
-        // Tenta pegar o botão (pode ser null se o usuário não for nível 3)
+        // Tenta pegar o botão (pode ser null se o usuário não for nível >= 3)
         const btnExcluir = document.getElementById('modal-btn-excluir');
         
         const toast = document.getElementById('copy-toast');
@@ -409,13 +414,16 @@
             
             // 1. Define a rota base dinamicamente (15 ou 25)
             const rotaBase = `/gerar_cartelas_pdf_${tipoCartela}`;
+
+            const idSala = "{{ session.get('id_sala', 1) }}".padStart(3, '0');
             
             // 2. Monta os parâmetros da URL (Query String)
             const parametros = new URLSearchParams({
                 id_evento: idEvento,
-                numero_inicial_pdf: numInicial,  // <-- Ajustado aqui
-                numero_final_pdf: numFinal,      // <-- Ajustado aqui
-                nome_cliente: nomeCliente || "Cliente"
+                numero_inicial_pdf: numInicial,  
+                numero_final_pdf: numFinal,      
+                nome_cliente: nomeCliente || "Cliente",
+                id_sala: idSala
             });
             
             // 3. Junta o domínio do seu site + rota + parâmetros

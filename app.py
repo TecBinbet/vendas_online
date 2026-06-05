@@ -4452,6 +4452,9 @@ def consulta_vendas_detalhes():
         if not selected_event:
             return render_template('consulta_vendas_detalhes.html', error="Evento não encontrado.", vendas=[])
 
+        # 🚀 NOVO: Verifica se o evento é FILHO de um combo
+        is_evento_filho = 'id_evento_principal_combo' in selected_event and bool(selected_event['id_evento_principal_combo'])
+
         id_evento_int = selected_event.get('id_evento')
         nome_colecao_venda = f"vendas{id_evento_int}"
         
@@ -4469,7 +4472,7 @@ def consulta_vendas_detalhes():
 
         # --- 3. BUSCA NA COLEÇÃO DINÂMICA ---
         if nome_colecao_venda not in db.list_collection_names():
-            return render_template('consulta_vendas_detalhes.html', error="Nenhuma venda registrada para este evento.", vendas=[])
+            return render_template('consulta_vendas_detalhes.html', error="Nenhuma venda registrada para este evento.", vendas=[], is_evento_filho=is_evento_filho)
 
         vendas_cursor = db[nome_colecao_venda].find(query_filter).sort('data_venda', pymongo.DESCENDING)
         
@@ -4492,154 +4495,19 @@ def consulta_vendas_detalhes():
             error = "Nenhuma venda detalhada encontrada para os filtros selecionados."
 
     except Exception as e:
+        import traceback
         print(f"Erro em consulta_vendas_detalhes: {e}")
         traceback.print_exc()
         error = f"Erro interno ao listar detalhes."
+        is_evento_filho = False # Fallback de segurança
 
     return render_template('consulta_vendas_detalhes.html',
                            g=g, error=error, vendas=vendas_detalhadas,
                            info_evento=selected_event.get('descricao'), 
                            info_evento_id=id_evento_int, 
                            info_colaborador="TODOS" if id_colaborador_param == 'ALL' else session.get('nick'),
-                           info_tipo_cartela=selected_event.get('tipo_de_cartela', 25))
-
-
-@app.route('/consulta_vendas/detalhes2', methods=['GET'])
-@login_required
-def consulta_vendas_detalhes2():
-    """Mostra a lista detalhada de vendas com cálculo de comissão mista (Auto vs Colab)."""
-    db = get_vendas_db()
-    if db is None: return redirect(url_for('login')) 
-
-    nivel_usuario = session.get('nivel', 1)
-    id_colaborador_logado = session.get('id_colaborador', 'N/A')
-    
-    id_evento_param = request.args.get('id_evento')
-    id_colaborador_param = request.args.get('id_colaborador') 
-
-    vendas_detalhadas = []
-    error = None
-    info_evento_nome = None
-    info_evento_id = None 
-    info_colaborador = "N/A"
-    info_tipo_cartela = 25 
-    info_telefone_cliente = ''
-
-    # --- 1. PREPARA AS TAXAS ---
-    default_comissao = g.parametros_globais.get('comissao_padrao', 0)
-    comissao_autoatendimento = g.parametros_globais.get('comissao_autoatendimento', 0)
-    comissao_map = {} 
-
-    try:
-        selected_event = None
-        if id_evento_param:
-            if str(id_evento_param).isdigit():
-                selected_event = db.eventos.find_one({'id_evento': int(id_evento_param)})
-            else:
-                selected_event = db.eventos.find_one({'_id': try_object_id(id_evento_param)})
-        
-        if not selected_event:
-            error = "Evento não encontrado."
-            return render_template('consulta_vendas_detalhes.html', error=error, g=g, vendas=[])
-
-        id_evento_int = selected_event.get('id_evento')
-        info_evento_nome = selected_event.get('descricao')
-        info_evento_id = id_evento_int 
-        info_tipo_cartela = selected_event.get('tipo_de_cartela', 25) 
-        nome_colecao_venda = f"vendas{id_evento_int}"
-        
-        query_filter = {'id_evento': id_evento_int}
-        colab_ids_para_buscar_comissao = []
-        
-        # --- LÓGICA DE FILTROS DE USUÁRIO ---
-        if nivel_usuario < 3:
-            query_filter['id_colaborador'] = id_colaborador_logado
-            info_colaborador = session.get('nick', 'N/A')
-            info_telefone_cliente = session.get('telefone_cliente','')
-            if isinstance(id_colaborador_logado, int):
-                 colab_ids_para_buscar_comissao.append(id_colaborador_logado)        
-        
-        elif nivel_usuario == 3:
-            if id_colaborador_param and id_colaborador_param != 'ALL':
-                try:
-                    id_colab_int = int(id_colaborador_param)
-                except ValueError:
-                    id_colab_int = id_colaborador_param 
-
-                query_filter['id_colaborador'] = id_colab_int
-                colab_ids_para_buscar_comissao.append(id_colab_int)
-                
-                colab_doc = db.colaboradores.find_one({'id_colaborador': id_colab_int}, {'nick': 1})
-                info_colaborador = colab_doc.get('nick') if colab_doc else f"ID {id_colab_int}"
-                info_telefone_cliente = session.get('telefone_cliente','')
-                
-            elif id_colaborador_param == 'ALL':
-                info_colaborador = "TODOS"
-                todos_colabs = db.colaboradores.find({}, {'id_colaborador': 1, 'comissao': 1})
-                for c in todos_colabs:
-                    taxa = c.get('comissao')
-                    if isinstance(taxa, (int, float)):
-                        comissao_map[c['id_colaborador']] = taxa
-        
-        # Busca taxas específicas dos colaboradores filtrados
-        if colab_ids_para_buscar_comissao:
-             colab_docs = db.colaboradores.find(
-                 {'id_colaborador': {'$in': colab_ids_para_buscar_comissao}},
-                 {'id_colaborador': 1, 'comissao': 1}
-             )
-             for colab_doc in colab_docs:
-                 if colab_doc:
-                     taxa = colab_doc.get('comissao')
-                     if isinstance(taxa, (int, float)):
-                         comissao_map[colab_doc['id_colaborador']] = taxa
-                 
-        vendas_cursor = db[nome_colecao_venda].find(query_filter).sort('data_venda', pymongo.DESCENDING)
-        
-        for venda in vendas_cursor:
-            venda['valor_total_float'] = safe_float(venda.get('valor_total'))
-            
-            # Identifica quem ganha a comissão e a origem
-            colab_id = venda.get('id_colaborador')
-            # Se você estiver usando 'id_colaborador_indicacao' para auto-atendimento, 
-            # pode ser necessário ajustar a linha acima para:
-            # colab_id = venda.get('id_colaborador_indicacao') or venda.get('id_colaborador')
-
-            origem_venda = venda.get('origem', 'terminal_colaborador')
-
-            # DECISÃO DA TAXA
-            if origem_venda == 'terminal_cliente':
-                # Venda Auto-Atendimento -> Usa taxa Fixa Auto
-                taxa_final = comissao_autoatendimento
-                venda['tipo_taxa'] = 'AUTO' # Opcional: para debug ou mostrar na tela
-            else:
-                # Venda Normal -> Usa taxa do Colaborador (ou padrão)
-                taxa_final = comissao_map.get(colab_id, default_comissao)
-                venda['tipo_taxa'] = 'NORMAL'
-
-            venda['valor_comissao_float'] = (venda['valor_total_float'] * taxa_final) / 100.0
-            
-            # Grava a taxa aplicada para exibir na tabela se quiser
-            venda['taxa_comissao_aplicada'] = taxa_final
-            
-            vendas_detalhadas.append(venda)
-
-        if not vendas_detalhadas:
-            error = "Nenhuma venda detalhada encontrada."
-    except Exception as e:
-        print(f"Erro em consulta_vendas_detalhes: {e}")
-        error = f"Erro interno: {e}"
-        traceback.print_exc()
-    return render_template('consulta_vendas_detalhes.html',
-                           g=g,
-                           error=error,
-                           vendas=vendas_detalhadas,
-                           info_evento=info_evento_nome, 
-                           info_evento_id=info_evento_id, 
-                           info_colaborador=info_colaborador,
-                           info_tipo_cartela=info_tipo_cartela,
-                           info_telefone_cliente=info_telefone_cliente)
-
-
+                           info_tipo_cartela=selected_event.get('tipo_de_cartela', 25),
+                           is_evento_filho=is_evento_filho) # 🚀 ENVIADO PARA O JINJA (HTML)
 
 # Minha Conta xxx
 # --- ATUALIZAÇÃO DA ROTA MINHA CONTA ---
@@ -5128,6 +4996,7 @@ def api_buscar_dados_venda():
     return jsonify({
         'id_evento': id_evento_int,
         'nome_cliente': venda.get('nome_cliente'),
+        'telefone_cliente': venda.get('telefone_cliente', ''),  
         'numero_inicial': venda.get('numero_inicial'),
         'numero_final': venda.get('numero_final'),
         'tipo_cartela': venda.get('tipo_cartela', 25)
@@ -5186,7 +5055,9 @@ def reimprimir_comprovante_txt():
 
         receipt_html = "" 
         
-        if id_cliente_int > 0:
+        venda_lite_ativa = g.parametros_globais.get('venda_lite') == True   
+
+        if id_cliente_int > 0 and not venda_lite_ativa:
            link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
         else:
            link_final_limpo = f"{url_canal_live}" 
@@ -5382,8 +5253,10 @@ def reimprimir_comprovante_json():
         data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
         
         nome_colecao_venda = f"vendas{id_evento_int}"
-        
-        if id_cliente_int > 0:
+
+        venda_lite_ativa = g.parametros_globais.get('venda_lite') == True
+
+        if id_cliente_int > 0 and not venda_lite_ativa:
            link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
         else:
            link_final_limpo = f"{url_canal_live}" 
