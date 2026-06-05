@@ -5,6 +5,7 @@ import threading
 import traceback
 import pymongo
 from zoneinfo import ZoneInfo
+import random
 
 from flask import Blueprint, Flask, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response, send_file, render_template_string
 #from flask_login import login_required, current_user
@@ -275,6 +276,67 @@ def configurar_indices_da_sala(db):
     except Exception as e:
         print(f"[ALERTA] ❌ Erro ao configurar índices na inicialização: {e}")
 
+def sortear_combos_livres(db, id_evento_pai, limite_maximo_cartelas, unidade_de_venda, combo_qtde, quantidade_comprada):
+    """
+    Motor de Sorteio Anti-Colisão para Combos com RANGE CUSTOMIZADO.
+    Retorna uma lista de 'numeros_iniciais' totalmente livres para venda.
+    """
+    # 1. Puxa as travas do banco de dados (se existirem)
+    parametros = db.parametros.find_one({}) or {}
+    
+    try:
+        inicial_randon = int(parametros.get('inicial_randon', 1))
+    except (ValueError, TypeError):
+        inicial_randon = 1
+        
+    try:
+        final_randon = int(parametros.get('final_randon', limite_maximo_cartelas))
+    except (ValueError, TypeError):
+        final_randon = limite_maximo_cartelas
+
+    # Trava de segurança: Garante que o range não faça loucuras
+    if final_randon > limite_maximo_cartelas or final_randon <= 0:
+        final_randon = limite_maximo_cartelas
+    if inicial_randon < 1:
+        inicial_randon = 1
+
+    # 2. Define o tamanho do bloco indivisível
+    tamanho_bloco = unidade_de_venda * combo_qtde
+    
+    # 3. Matemática de Slots (Vagas): Garante que o bloco inteiro caiba no Range
+    # Arredonda para cima para garantir que a cartela inicial do slot seja >= inicial_randon
+    slot_inicial = (inicial_randon - 1 + tamanho_bloco - 1) // tamanho_bloco
+    # Arredonda para baixo para garantir que a última cartela do slot seja <= final_randon
+    slot_final = (final_randon - tamanho_bloco) // tamanho_bloco
+    
+    # 4. Busca APENAS os números iniciais vendidos no evento Pai para cruzar dados
+    nome_colecao = f"vendas{id_evento_pai}"
+    vendas_existentes = db[nome_colecao].find({'numero_inicial': {'$exists': True}}, {'numero_inicial': 1, '_id': 0})
+    
+    # 5. Mapeia quais Slots já estão ocupados no banco
+    slots_ocupados = set()
+    for venda in vendas_existentes:
+        num_ini = venda.get('numero_inicial')
+        if num_ini:
+            indice_slot = (num_ini - 1) // tamanho_bloco
+            slots_ocupados.add(indice_slot)
+            
+    # 6. Cria a lista de Slots 100% livres e validados dentro do Range
+    todos_slots_no_range = set(range(slot_inicial, slot_final + 1))
+    slots_livres = list(todos_slots_no_range - slots_ocupados)
+    
+    # 7. Trava de Esgotamento: Tem vaga suficiente no Range para o que o cliente quer?
+    if len(slots_livres) < quantidade_comprada:
+        return None  # Retorna None avisando a rota que esgotou
+        
+    # 8. Sorteia aleatoriamente e em lote (MUITO RÁPIDO)
+    slots_sorteados = random.sample(slots_livres, quantidade_comprada)
+    
+    # 9. Converte os índices sorteados de volta para os números iniciais verdadeiros das cartelas
+    numeros_iniciais_sorteados = [ (slot * tamanho_bloco) + 1 for slot in slots_sorteados ]
+    
+    # Retorna os números ordenados para a impressão do recibo ficar bonita
+    return sorted(numeros_iniciais_sorteados)
 
 @app.route('/api/dashboard_faturamento_regional')
 @login_required
@@ -1182,9 +1244,83 @@ def calcular_comissoes_colaborador(db, id_colaborador, id_evento, id_regional_fi
         return {"direta": 0, "indireta_a": 0, "indireta_b": 0, "total": 0, "volume": 0}
 
 
-# --- HOOKS DA APLICAÇÃO ---@app.before_request
+# --- HOOKS DA APLICAÇÃO ---
 @app.before_request
 def before_request():
+    global client_control, db_control
+
+    # 1. Setup Básico de Contexto
+    if not hasattr(g, 'client_control'): g.client_control = client_control
+    if not hasattr(g, 'parametros_globais'): g.parametros_globais = {}
+    g.db_status = True if db_control is not None else False
+
+    # 2. DEFINIÇÃO PERSISTENTE DO ID_SALA (Sticky Session)
+    # Tenta obter da URL -> Tenta da Sessão -> Se não, assume '000'
+    id_sala_url = request.args.get('id_sala')
+    id_sala_sessao = session.get('id_sala')
+    
+    if id_sala_url:
+        g.id_sala = id_sala_url
+        session['id_sala'] = id_sala_url # Grava na sessão para manter nas próximas requisições
+    elif id_sala_sessao:
+        g.id_sala = id_sala_sessao
+    else:
+        g.id_sala = "000"
+        session['id_sala'] = "000"
+
+    # 3. Carrega Parâmetros
+    if g.db_status:
+        try:
+            db = get_vendas_db() 
+            if db is not None:
+                # Busca parametros
+                params = db.parametros.find_one({'id_sala': g.id_sala})
+                if not params:
+                    params = db.parametros.find_one({'id_sala': f"SALA{g.id_sala}"})
+
+                if params:
+                    val_limite_bruto = params.get('limite_de_credito', 100) 
+                    
+                    # 🚀 TRATAMENTO SEGURO PARA OS LIMITES DO MOTOR V8 (FREIO)
+                    try:
+                        inicial_r = int(params.get('inicial_randon', 1))
+                    except (ValueError, TypeError):
+                        inicial_r = 1
+                        
+                    try:
+                        final_r = int(params.get('final_randon', 90000))
+                    except (ValueError, TypeError):
+                        final_r = 90000
+
+                    g.parametros_globais = {
+                        'url_live': params.get('url_live', '#'),
+                        'url_canal_live': params.get('url_canal_live', ''), # 🚀 NOVO
+                        'nome_sala': params.get('nome_sala', 'SALA PADRÃO').strip(),
+                        'http_apk': params.get('http_apk', 'http://localhost:5000'),
+                        'id_sala_param': g.id_sala,
+                        'venda_lite': params.get('venda_lite', False),
+                        'limite_de_credito': float(str(val_limite_bruto)),
+                        'inicial_randon': inicial_r,  # 🚀 RANGE INICIAL
+                        'final_randon': final_r,      # 🚀 RANGE FINAL
+                        'tipo_cadastro_cliente': params.get('tipo_cadastro_cliente', {
+                            "nome_cliente": True, "nick": True, "telefone": True, 
+                            "cpf": False, "cidade": True, "chave_pix": True, "senha": True
+                        })
+                    }
+                else:
+                    # Fallback de emergência
+                    g.parametros_globais = {
+                        'nome_sala': 'SALA (DEFAULT)', 
+                        'id_sala_param': g.id_sala, 
+                        'limite_de_credito': 100.0,
+                        'inicial_randon': 1,
+                        'final_randon': 90000
+                    }
+        except Exception as e:
+            print(f"Erro ao carregar parâmetros no before_request: {e}")
+
+#@app.before_request
+def before_requestB2():
     global client_control, db_control
 
     # 1. Setup Básico de Contexto
@@ -4509,7 +4645,7 @@ def consulta_vendas_detalhes():
                            info_tipo_cartela=selected_event.get('tipo_de_cartela', 25),
                            is_evento_filho=is_evento_filho) # 🚀 ENVIADO PARA O JINJA (HTML)
 
-# Minha Conta xxx
+# Minha Conta 
 # --- ATUALIZAÇÃO DA ROTA MINHA CONTA ---
 @app.route('/minha_conta', methods=['GET'])
 @login_required
@@ -5019,8 +5155,8 @@ def reimprimir_comprovante_txt():
         data = request.json
         tipo_reimpressao = data.get('tipo_reimpressao') 
         id_venda_str = data.get('id_venda')            
-        id_cliente_int = int(data.get('id_cliente'))
- 
+        id_cliente_int = int(data.get('id_cliente', 0)) # Garante o zero se vier nulo
+
         valor_id_evento = str(data.get('id_evento'))
    
         # --- BLINDAGEM DO EVENTO ---
@@ -5044,9 +5180,13 @@ def reimprimir_comprovante_txt():
         combo_qtde = int(evento.get('combo_qtde', 1))
         unidade_de_venda = int(evento.get('unidade_de_venda', 1))
 
-        http_apk = g.parametros_globais.get('http_apk', '')
-        url_canal_live = g.parametros_globais.get('url_canal_live', '')
-        nome_sala = g.parametros_globais.get('nome_sala', '')
+        # 🚀 BUSCA SEGURA DOS PARÂMETROS DIRETO DO DB (Evita falhas do "g")
+        parametros = db.parametros.find_one({}) or {}
+        http_apk = parametros.get('http_apk', '')
+        url_canal_live = parametros.get('url_canal_live', '')
+        nome_sala = parametros.get('nome_sala', '')
+        venda_lite_ativa = parametros.get('venda_lite', False)
+
         data_evento_str = evento.get('data_evento', 'N/A')
         hora_evento_str = evento.get('hora_evento', 'N/A')
         data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
@@ -5055,13 +5195,17 @@ def reimprimir_comprovante_txt():
 
         receipt_html = "" 
         
-        venda_lite_ativa = g.parametros_globais.get('venda_lite') == True   
-
+        # 🚀 LÓGICA DO LINK COM FALLBACK (Plano B)
         if id_cliente_int > 0 and not venda_lite_ativa:
-           link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
+            link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
         else:
-           link_final_limpo = f"{url_canal_live}" 
-           
+            link_final_limpo = f"{url_canal_live}"
+            # Fallback Inteligente: Se é Lite, mas não tem Live configurada, manda o APK se houver cliente
+            if not link_final_limpo.strip() and id_cliente_int > 0:
+                link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
+            elif not link_final_limpo.strip():
+                link_final_limpo = "Boa sorte!" # Mensagem padrão caso tudo falhe
+            
         if tipo_reimpressao == 'unica':
             venda = db[nome_colecao_venda].find_one({'id_venda': id_venda_str})
             if not venda:
@@ -5099,7 +5243,9 @@ def reimprimir_comprovante_txt():
                 f"     (Cartelas: {venda['quantidade_cartelas']})<br>"
                 f"<strong> >  Período de Cartelas  <<strong><br>"
                 f"{detalhes_rodadas_html}"
-                f"  VALOR: R$ {safe_float(venda['valor_total']):.2f}<br>"
+                f"  VALOR: R$ {venda.get('valor_total', 0.00)}<br>"
+                f"<br>" 
+                # (A injeção do link que estava aqui repetida foi removida)
             )
 
         elif tipo_reimpressao == 'cliente':
@@ -5131,7 +5277,10 @@ def reimprimir_comprovante_txt():
             for venda in vendas_cliente:
                 total_unidades += venda['quantidade_unidades']
                 total_cartelas += venda['quantidade_cartelas']
-                total_valor += safe_float(venda['valor_total'])
+                
+                # Conversão segura do Decimal128 para float (simulando a função safe_float)
+                valor = str(venda.get('valor_total', 0))
+                total_valor += float(valor) if valor.replace('.', '', 1).isdigit() else 0.0
                 
                 # 🚀 MOTOR DO COMBO PARA CADA VENDA NO RESUMO DO CLIENTE
                 qtd_cartelas = (venda['numero_final'] - venda['numero_inicial']) + 1
@@ -5179,6 +5328,7 @@ def reimprimir_comprovante_txt():
         else:
             return jsonify({'status': 'error', 'message': 'Tipo de reimpressão inválido.'})
         
+        # 🚀 AQUI O LINK ENTRA APENAS UMA VEZ PARA QUALQUER UM DOS CASOS
         receipt_html += f"<br><strong> {link_final_limpo} </strong>"
 
         def clean_html_to_txt(html_str):
@@ -5417,21 +5567,25 @@ def reimprimir_comprovante_json():
         return jsonify({'status': 'error', 'message': f'Erro interno: {e}'})
 
 
-# --- EXCLUIR VENDA
+# --- EXCLUIR VENDA ---
 @app.route('/excluir_venda', methods=['POST'])
 @login_required
 def excluir_venda():
     """
-    Exclui uma venda específica baseada no ID e Evento fornecidos.
-    Requer nível de acesso 3 (Administrador) para segurança.
+    Exclui uma venda específica. Se for um COMBO, executa a exclusão 
+    em cascata em todos os eventos filhos vinculados.
     """
     db = get_vendas_db()
     if db is None:
         return jsonify({'status': 'error', 'message': 'DB Offline'})
 
-    # Verifica permissão (Nível 3 Obrigatório para exclusão)
-    if session.get('nivel', 0) < 3:
-        return jsonify({'status': 'error', 'message': 'Acesso Negado. Apenas administradores podem excluir vendas.'})
+    # Sincroniza a trava de segurança com a regra do Front-end (Lite ou Admin)
+    parametros = db.parametros.find_one({}) or {}
+    venda_lite_ativa = parametros.get('venda_lite') == True
+    nivel_usuario = session.get('nivel', 0)
+
+    if not venda_lite_ativa and nivel_usuario < 3:
+        return jsonify({'status': 'error', 'message': 'Acesso Negado. Sem permissão para excluir vendas.'})
 
     try:
         data = request.json
@@ -5441,26 +5595,46 @@ def excluir_venda():
         if not id_venda_str or not id_evento_int:
             return jsonify({'status': 'error', 'message': 'Dados incompletos para exclusão.'})
 
+        # 1. Busca o evento para acessar a árvore de filhos
+        evento = db.eventos.find_one({'id_evento': id_evento_int})
+        if not evento:
+            return jsonify({'status': 'error', 'message': 'Evento não encontrado.'})
+
         nome_colecao_venda = f"vendas{id_evento_int}"
         
-        # Verifica se a venda existe antes de excluir
+        # 2. Verifica se a venda existe e captura o rastreador do combo
         venda = db[nome_colecao_venda].find_one({'id_venda': id_venda_str})
         if not venda:
             return jsonify({'status': 'error', 'message': 'Venda não encontrada.'})
 
-        # Executa a exclusão
+        id_transacao_combo = venda.get('id_transacao_combo')
+
+        # 3. Executa a exclusão na raiz (Evento Pai)
         result = db[nome_colecao_venda].delete_one({'id_venda': id_venda_str})
 
         if result.deleted_count == 1:
-            # Opcional: Logar quem excluiu (pode ser útil para auditoria)
-            #print(f"[AUDITORIA] Venda {id_venda_str} excluída por {session.get('nick')} em {hora_brasil()}")
+            # ==========================================================
+            # 🚀 MOTOR DE EXCLUSÃO EM CASCATA (COMBO)
+            # ==========================================================
+            eventos_relacionados = evento.get('eventos_combo_relacionados', [])
+            
+            # Se a venda faz parte de um combo e existem eventos filhos configurados
+            if id_transacao_combo and eventos_relacionados:
+                for id_filho in eventos_relacionados:
+                    colecao_filho = f"vendas{id_filho}"
+                    if colecao_filho in db.list_collection_names():
+                        # Elimina todas as fatias que compartilham o mesmo ID de Transação
+                        db[colecao_filho].delete_many({'id_transacao_combo': id_transacao_combo})
+            
             return jsonify({'status': 'success', 'message': 'Venda excluída com sucesso.'})
         else:
             return jsonify({'status': 'error', 'message': 'Não foi possível excluir o registro.'})
 
     except Exception as e:
         print(f"Erro ao excluir venda: {e}")
-        return jsonify({'status': 'error', 'message': f'Erro interno: {e}'})
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': f'Erro interno.'})
 
 
 # --- ROTA GERAR LISTA (MULTIPLOS DOWNLOADS COM TEMPORIZADOR) ---

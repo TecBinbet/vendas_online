@@ -524,7 +524,10 @@ def processar_venda_lite():
         'nome_cliente': nick_cliente_lite,
         'numero_inicial': numero_inicial_atual,
         'numero_final': numero_final_atual,
-        'tipo_cartela': int(selected_event.get('tipo_de_cartela', 25))
+        'tipo_cartela': int(selected_event.get('tipo_de_cartela', 25)),
+        'id_venda_recente': id_venda_formatado,
+        'id_cliente_recente': id_cliente_final,
+        'telefone_cliente': telefone_limpo
     }
 
     return redirect(url_for('venda_lite.nova_venda_lite', id_evento=id_evento_string))

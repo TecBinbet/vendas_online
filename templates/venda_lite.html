@@ -149,42 +149,6 @@
             <div class="alert alert-danger">{{ error }}</div>
         {% endif %}
         
-       {% if success %}
-          <div id="success-block">
-            <div class="alert alert-success text-center transition-opacity duration-500">
-                <h3 class="text-lg font-bold -mt-2">Venda Registrada com Sucesso!</h3>
-                <div id="receipt-content" style="display: none;">{{ success | safe }}</div>
-            </div>
-            <div class="flex justify-center mb-1 gap-3 flex-wrap">
-                <button onclick="copyReceiptText()" class="btn btn-primary shadow-lg">📋 Copiar Texto</button>
-                <button onclick="shareReceiptImage()" class="btn btn-warning shadow-lg">🖼️ Gerar Imagem</button>
-                <button id="btn-toggle-cupom" onclick="toggleReceipt()" class="btn bg-green-500 text-white hover:bg-green-700 shadow-lg">👁️ Mostrar Cupom</button>
-            </div>
-          </div>
-
-          <script>
-            (function() {
-                const block = document.getElementById('success-block');
-                if (!block) return;
-                
-                // Inicia a contagem de 8 segundos
-                let autoHideTimer = setTimeout(() => {
-                    block.style.transition = "opacity 0.5s ease";
-                    block.style.opacity = '0';
-                    setTimeout(() => { block.style.display = 'none'; }, 500);
-                }, 8000);
-
-                // Trava inteligente: Só cancela o sumiço se o operador clicar especificamente em um dos BOTÕES
-                const botoes = block.querySelectorAll('button');
-                botoes.forEach(btn => {
-                    btn.addEventListener('click', () => {
-                        clearTimeout(autoHideTimer);
-                        console.log("Temporizador cancelado para o operador ver o recibo.");
-                    });
-                });
-            })();
-          </script>
-        {% endif %}
 
         <form method="GET" action="{{ url_for('venda_lite.nova_venda_lite') }}" class="form-venda" id="main-form">
             <input type="hidden" name="id_evento" id="input_id_evento" 
@@ -1427,5 +1391,125 @@ async function openUltimasVendas() {
         }
 
     </script>
+
+    {% if success and print_data %}
+    <div id="modal-sucesso-lite" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+        <div class="bg-gray-300 rounded-xl shadow-2xl p-4 w-11/12 max-w-md border-t-4 border-green-500 transform transition-all scale-100">
+            
+            <div class="text-center mb-4">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-2">
+                    <span class="text-green-600 text-2xl">✓</span>
+                </div>
+                <h2 class="text-xl font-bold text-gray-800">Venda Registrada!</h2>
+                <div class="text-sm text-gray-700 mt-3 bg-gray-50 p-3 rounded border max-h-52 overflow-y-auto text-left shadow-inner">
+                    {{ success | safe }}
+                </div>
+
+            </div>
+
+            <input type="hidden" id="sucesso-id-venda" value="{{ print_data.id_venda_recente }}">
+            <input type="hidden" id="sucesso-id-cliente" value="{{ print_data.id_cliente_recente }}">
+            <input type="hidden" id="sucesso-id-evento" value="{{ print_data.id_evento }}">
+            <input type="hidden" id="sucesso-num-ini" value="{{ print_data.numero_inicial }}">
+            <input type="hidden" id="sucesso-num-fin" value="{{ print_data.numero_final }}">
+            <input type="hidden" id="sucesso-nome-cli" value="{{ print_data.nome_cliente }}">
+            <input type="hidden" id="sucesso-tipo-cart" value="{{ print_data.tipo_cartela }}">
+            <input type="hidden" id="sucesso-tel-cli" value="{{ print_data.telefone_cliente }}">
+
+            <div class="mb-2 -mt-3 border border-gray-200 rounded-lg p-2">
+                <h3 class="text-xl font-bold text-gray-500 uppercase tracking-wider -mt-2 mb-0">Recibo (Cupom)</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="dispararAcaoModalSucesso('cupom', 'imprimir')" class="bg-blue-50 text-blue-700 hover:bg-blue-100 py-2 rounded text-sm font-semibold  transition-colors border border-blue-200">
+                        🖨️ Imprimir
+                    </button>
+                    <button onclick="dispararAcaoModalSucesso('cupom', 'whatsapp')" class="bg-green-50 text-green-700 hover:bg-green-100 py-2 rounded text-sm font-semibold transition-colors border border-green-200">
+                        💬 WhatsApp
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-3 border border-gray-200 rounded-lg p-2">
+                <h3 class="text-xl font-bold text-gray-500 uppercase tracking-wider mb-0">Cartelas Compradas</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="dispararAcaoModalSucesso('cartelas', 'imprimir')" class="bg-blue-50 text-blue-700 hover:bg-blue-100 py-2 rounded text-sm font-semibold transition-colors border border-blue-200">
+                        🖨️ Imprimir (58mm)
+                    </button>
+                    <button onclick="dispararAcaoModalSucesso('cartelas', 'whatsapp')" class="bg-green-50 text-green-700 hover:bg-green-100 py-2 rounded text-sm font-semibold transition-colors border border-green-200">
+                        📄 Enviar PDF
+                    </button>
+                </div>
+            </div>
+
+            <button id="btn-fechar-modal-sucesso" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-colors text-lg flex items-center justify-center">
+                <span>➕ Nova Venda (Enter)</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        // Foca automaticamente no botão "Nova Venda" para o operador fechar rápido com Enter
+        document.addEventListener('DOMContentLoaded', function() {
+            const btnFechar = document.getElementById('btn-fechar-modal-sucesso');
+            if (btnFechar) {
+                // Um pequeno setTimeout (100ms) garante que o navegador terminou de desenhar a modal antes de forçar o foco
+                setTimeout(() => { btnFechar.focus(); }, 100);
+                
+                btnFechar.addEventListener('click', function() {
+                    // Esconde a modal
+                    document.getElementById('modal-sucesso-lite').style.display = 'none';
+                    
+                    // Lógica inteligente para devolver o foco ao campo correto (Kit ou Quantidade)
+                    const kitInput = document.getElementById('numero_kit_inicial');
+                    const qtdInput = document.getElementById('quantidade');
+                    
+                    // Verifica qual dos campos está ativo e visível na tela
+                    // offsetParent !== null é a forma mais segura do JavaScript saber se o elemento não está com display:none
+                    if (kitInput && !kitInput.disabled && kitInput.offsetParent !== null) {
+                        kitInput.focus();
+                    } else if (qtdInput && !qtdInput.disabled && qtdInput.offsetParent !== null) {
+                        qtdInput.focus();
+                    } else {
+                        // Fallback de segurança: foca no nome do cliente se não achar os outros
+                        const inputNome = document.getElementById('nick_cliente_lite');
+                        if (inputNome) inputNome.focus();
+                    }
+                });
+            }
+        });
+
+        // O Motor que liga os botões da modal com as suas funções de ouro já existentes
+        async function dispararAcaoModalSucesso(tipo, acao) {
+            const idVenda = document.getElementById('sucesso-id-venda').value;
+            const idCliente = document.getElementById('sucesso-id-cliente').value;
+            
+            if (tipo === 'cupom') {
+                // Chama a função que já criamos para o Cupom!
+                await executarReimpressao(idVenda, idCliente, acao);
+            } 
+            else if (tipo === 'cartelas') {
+                const idEvento = document.getElementById('sucesso-id-evento').value;
+                const numIni = document.getElementById('sucesso-num-ini').value;
+                const numFin = document.getElementById('sucesso-num-fin').value;
+                const nomeCli = document.getElementById('sucesso-nome-cli').value;
+                const tipoCart = document.getElementById('sucesso-tipo-cart').value;
+                const telCli = document.getElementById('sucesso-tel-cli').value;
+
+                if (acao === 'imprimir') {
+                    // Como não queremos buscar de novo no banco, simulamos o pacote "dados"
+                    imprimirCartelas58mm({
+                        id_evento: idEvento,
+                        numero_inicial: numIni,
+                        numero_final: numFin,
+                        tipo_cartela: tipoCart
+                    });
+                } else if (acao === 'whatsapp') {
+                    // Chama a sua função padronizada de PDF
+                    enviarPdfViaWhatsApp(numIni, numFin, idEvento, nomeCli, tipoCart, telCli);
+                }
+            }
+        }
+    </script>
+    {% endif %}
+
 </body>
 </html>

@@ -438,7 +438,7 @@
         async function handleExcluirVenda() {
             if (!btnExcluir) return; // Segurança extra
 
-            const confirmacao = confirm(`ATENÇÃO CRÍTICA!\n\nVocê está prestes a excluir a venda ID: ${tempIdVenda} do cliente ${tempNomeCliente}.\n\nEssa ação NÃO pode ser desfeita.\n\nDeseja realmente continuar?`);
+            const confirmacao = confirm(`ATENÇÃO CRÍTICA!\n\nVocê está prestes a excluir a venda ID: ${tempIdVenda} do cliente ${tempNomeCliente}.\n\nSe esta venda for um COMBO, todas as rodadas filhas também serão apagadas simultaneamente.\n\nEssa ação NÃO pode ser desfeita.\nDeseja realmente continuar?`);
             
             if (!confirmacao) return;
 
