@@ -1299,6 +1299,7 @@ def before_request():
                         'http_apk': params.get('http_apk', 'http://localhost:5000'),
                         'id_sala_param': g.id_sala,
                         'venda_lite': params.get('venda_lite', False),
+                        'venda_aleatoria' :params.get('venda_aleatoria', False),     
                         'limite_de_credito': float(str(val_limite_bruto)),
                         'inicial_randon': inicial_r,  # 🚀 RANGE INICIAL
                         'final_randon': final_r,      # 🚀 RANGE FINAL
@@ -5221,7 +5222,7 @@ def reimprimir_comprovante_txt():
                 ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
                 fim_atual = ini_atual + qtd_cartelas - 1
                 
-                texto_r = f"Rodada {rodada:02d}"
+                texto_r = f"Rod. {rodada:02d}"
                 if unidade_de_venda > 1:
                      texto_r += f" (Kit {kit_atual})"
                 detalhes_rodadas_html += f"   > {texto_r}: {ini_atual} a {fim_atual}<br>"

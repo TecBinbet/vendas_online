@@ -1430,12 +1430,16 @@ async function openUltimasVendas() {
 
             <div class="mb-3 border border-gray-200 rounded-lg p-2">
                 <h3 class="text-xl font-bold text-gray-500 uppercase tracking-wider mb-0">Cartelas Compradas</h3>
-                <div class="grid grid-cols-2 gap-2">
+                <div class="grid grid-cols-3 gap-2">
                     <button onclick="dispararAcaoModalSucesso('cartelas', 'imprimir')" class="bg-blue-50 text-blue-700 hover:bg-blue-100 py-2 rounded text-sm font-semibold transition-colors border border-blue-200">
-                        🖨️ Imprimir (58mm)
+                        🖨️ Imprimir
                     </button>
+                    <button onclick="dispararAcaoModalSucesso('cartelas', 'empdf')" class="bg-green-50 text-green-700 hover:bg-green-100 py-2 rounded text-sm font-semibold transition-colors border border-green-200">
+                        👁️ Enviar PDF
+                    </button>
+
                     <button onclick="dispararAcaoModalSucesso('cartelas', 'whatsapp')" class="bg-green-50 text-green-700 hover:bg-green-100 py-2 rounded text-sm font-semibold transition-colors border border-green-200">
-                        📄 Enviar PDF
+                        📄 Enviar LINK
                     </button>
                 </div>
             </div>
@@ -1505,6 +1509,9 @@ async function openUltimasVendas() {
                 } else if (acao === 'whatsapp') {
                     // Chama a sua função padronizada de PDF
                     enviarPdfViaWhatsApp(numIni, numFin, idEvento, nomeCli, tipoCart, telCli);
+                } else if (acao === 'empdf') {
+                    // Chama a função existente para gerar PDF nativo (Android ou nova aba)
+                    await handleGerarPdfLite(numIni, numFin, idEvento, nomeCli, tipoCart);
                 }
             }
         }
