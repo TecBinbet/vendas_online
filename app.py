@@ -6112,19 +6112,32 @@ def gerar_pdf_lote_hibrido():
 
     try:
         id_venda = request.args.get('id_venda')
-        id_evento = int(request.args.get('id_evento', 0))
+        valor_id_evento = str(request.args.get('id_evento', '0'))
         tipo_cartela_str = request.args.get('tipo_cartela', '15')
         nome_cliente = request.args.get('nome_cliente', 'cliente')
         
-        if not id_venda or not id_evento:
+        if not id_venda or valor_id_evento == '0':
             return "Erro: id_venda e id_evento são obrigatórios."
             
         TIPO_CARTELA = int(tipo_cartela_str)
 
-        # 1. Busca os Dados do Evento
-        evento = db.eventos.find_one({'id_evento': id_evento})
+        # 1. Busca os Dados do Evento (BLINDAGEM CONTRA OBJECTID E INT)
+        if len(valor_id_evento) == 24:
+            from bson.objectid import ObjectId
+            evento = db.eventos.find_one({
+                '$or': [
+                    {'_id': ObjectId(valor_id_evento)},
+                    {'id_evento_ObjectId': ObjectId(valor_id_evento)}
+                ]
+            })
+        else: 
+            evento = db.eventos.find_one({'id_evento': int(valor_id_evento)})
+
         if not evento:
             return "Erro: Evento não encontrado."
+
+        # 🚀 VARIÁVEL CRUCIAL: O ID NUMÉRICO REAL DO EVENTO
+        id_evento_int = evento.get('id_evento')
 
         combo_qtde = int(evento.get('combo_qtde', 1))
         unidade_de_venda = int(evento.get('unidade_de_venda', 1))
@@ -6148,7 +6161,7 @@ def gerar_pdf_lote_hibrido():
              return f"Erro: Arquivo 'cartelas.{TIPO_CARTELA}' não encontrado no servidor."
 
         # 3. Busca todas as fatias da venda (Kits) no Banco de Dados
-        nome_colecao_venda = f"vendas{id_evento}"
+        nome_colecao_venda = f"vendas{id_evento_int}" # 🚀 CORREÇÃO AQUI
         fatias_venda = list(db[nome_colecao_venda].find({'id_venda': id_venda}).sort('numero_inicial', 1))
         
         if not fatias_venda:
@@ -6170,7 +6183,6 @@ def gerar_pdf_lote_hibrido():
             altura_cartela_total = 38 
             espaco_horizontal = 10
             espaco_vertical = 6 
-            # 10 posições (2 colunas x 5 linhas)
             posicoes = [(margem_x + (col * (largura_cartela + espaco_horizontal)), margem_top_inicial + (linha * (altura_cartela_total + espaco_vertical))) for linha in range(5) for col in range(2)]
         else:
             margem_top_inicial = 30
@@ -6178,7 +6190,6 @@ def gerar_pdf_lote_hibrido():
             altura_cartela_total = 64 
             espaco_horizontal = 10
             espaco_vertical = 12 
-            # 6 posições (2 colunas x 3 linhas)
             posicoes = [(margem_x + (col * (largura_cartela + espaco_horizontal)), margem_top_inicial + (linha * (altura_cartela_total + espaco_vertical))) for linha in range(3) for col in range(2)]
 
         # ==============================================================================
@@ -6186,15 +6197,12 @@ def gerar_pdf_lote_hibrido():
         # ==============================================================================
         for rodada in range(1, combo_qtde + 1):
             
-            # Sempre que muda a rodada, queremos que ela comece numa página nova limpa
             cartela_idx_na_pagina = 0
             
             for num_inicial_base in numeros_iniciais_base:
-                # Descobre qual kit estamos a processar
                 kit_base = ((num_inicial_base - 1) // unidade_de_venda) + 1
                 kit_atual = kit_base + (rodada - 1)
                 
-                # Descobre a faixa de cartelas deste kit na rodada atual
                 ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
                 fim_atual = ini_atual + unidade_de_venda - 1
 
@@ -6203,20 +6211,17 @@ def gerar_pdf_lote_hibrido():
                     if cartela_idx_na_pagina == 0:
                         pdf.add_page()
                         
-                        # INJETA O CABEÇALHO DA RODADA
                         pdf.set_font('Arial', 'B', 12)
                         pdf.set_text_color(180, 0, 0)
                         
                         texto_destaque = f"RODADA: {rodada:02d}"
-                        # Mostra o kit apenas se as cartelas não forem vendidas à unidade
                         if unidade_de_venda > 1:
                             texto_destaque += f"   |   KIT: {kit_atual}"
                             
-                        pdf.set_y(22 if TIPO_CARTELA == 15 else 22) # Altura padrão abaixo do header
+                        pdf.set_y(22)
                         pdf.cell(0, 5, texto_destaque, 0, 1, 'C')
                         pdf.set_text_color(0, 0, 0)
 
-                    # Busca e desenha a cartela
                     dados_cartela = buscar_dados_cartela_2d(num_cartela, TIPO_CARTELA)
                     
                     if not dados_cartela:
@@ -6239,8 +6244,8 @@ def gerar_pdf_lote_hibrido():
         pdf_output = bytes(pdf.output()) 
         
         nick_limpo = clean_for_filename(nome_cliente)
-        # Nome do ficheiro mais genérico já que pode conter múltiplos kits dispersos
-        nome_arquivo = f'{nick_limpo}_eve{id_evento}_{TIPO_CARTELA}nums_Lote.pdf'
+        # 🚀 CORREÇÃO AQUI TAMBÉM: Usa a variável inteira
+        nome_arquivo = f'{nick_limpo}_eve{id_evento_int}_{TIPO_CARTELA}nums_Lote.pdf'
         
         response = make_response(pdf_output)
         response.headers['Content-Type'] = 'application/pdf'
@@ -8231,6 +8236,60 @@ def gravar_parametros():
     except Exception as e:
         print(f"Erro Crítico: {e}")
         return redirect(url_for('parametros', error=f"Erro interno: {e}"))
+
+@app.route('/configuracoes_sistema', methods=['GET', 'POST'])
+@login_required
+def configuracoes_sistema():
+    from flask import flash  # 🚀 CORREÇÃO: Importando o flash aqui!
+    
+    db = get_vendas_db()
+    if db is None:
+        return "DB Offline", 500
+
+    # 🚀 BLINDAGEM MULTI-SALA: Garante que edita apenas os parâmetros desta sala
+    id_sala = session.get('id_sala', '000')
+    query_sala = {'id_sala': id_sala}
+    
+    # Se não achar com '000', tenta com 'SALA000' para retrocompatibilidade
+    parametros_atuais = db.parametros.find_one(query_sala)
+    if not parametros_atuais:
+        query_sala = {'id_sala': f"SALA{id_sala}"}
+        parametros_atuais = db.parametros.find_one(query_sala) or {}
+
+    if request.method == 'POST':
+        try:
+            # Captura e converte os dados do formulário
+            url_canal_live = request.form.get('url_canal_live', '').strip()
+            venda_lite = request.form.get('venda_lite') == 'on' # Checkbox retorna 'on' se marcado
+            padrao_registro = request.form.get('padrao_registro_vendas', 'quantidade')
+            venda_aleatoria = request.form.get('venda_aleatoria') == 'on'
+            
+            # Converte com segurança para int32
+            inicial_randon = int(request.form.get('inicial_randon', 0) or 0)
+            final_randon = int(request.form.get('final_randon', 0) or 0)
+
+            # Prepara o dicionário de atualização
+            novos_dados = {
+                'url_canal_live': url_canal_live,
+                'venda_lite': venda_lite,
+                'padrao_registro_vendas': padrao_registro,
+                'venda_aleatoria': venda_aleatoria,
+                'inicial_randon': inicial_randon,
+                'final_randon': final_randon
+            }
+
+            # Atualiza no MongoDB (upsert=True cria o documento se a sala for nova)
+            db.parametros.update_one(query_sala, {'$set': novos_dados}, upsert=True)
+            
+            flash('✅ Configurações do sistema atualizadas com sucesso!', 'success')
+            return redirect(url_for('menu_operacoes'))
+            
+        except Exception as e:
+            flash(f'❌ Erro ao salvar configurações: {str(e)}', 'error')
+            return redirect(url_for('configuracoes_sistema'))
+
+    # Para requisições GET, renderiza a tela enviando os parâmetros atuais
+    return render_template('configuracoes_sistema.html', p=parametros_atuais)
 
 
 def motor_background_premios():

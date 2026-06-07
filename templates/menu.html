@@ -152,6 +152,9 @@
                     <a href="{{ url_for('gerenciar_regionais') }}" onclick="activarSpinner('Acessando Painel Master...')" class="menu-item" style="background-color: #1e293b; color: #f8fafc; border-left: 5px solid #3b82f6; margin:0;">
                         🌎 Master: Gestão de Regionais
                     </a>
+                    <a href="{{ url_for('parametros') }}" onclick="activarSpinner('Acessando Configurações...')" class="menu-item" style="background-color: #1e293b; color: #f8fafc; border-left: 5px solid #8b5cf6; margin:0;">
+                        ⚙️ Configurações do Sistema
+                    </a>
                 {% endif %}
             </div>
             {% endif %}
@@ -210,7 +213,7 @@
             if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'c') {
                 event.preventDefault();
                 activarSpinner("A aceder ao painel técnico...");
-                window.location.href = "{{ url_for('parametros') }}";
+                window.location.href = "{{ url_for('configuracoes_sistema') }}";
             }
         });
     </script>

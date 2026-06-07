@@ -1347,7 +1347,7 @@ async function openUltimasVendas() {
                 } 
                 else if (formaEnvio === 'empdf') {
                     // 🚀 NOVA AÇÃO: Gera o PDF e abre na nova aba
-                    await handleGerarPdfLite(
+                    abrirPdfHibrido(
                         idVenda, 
                         idEvento, 
                         dados.nome_cliente, 
@@ -1364,6 +1364,34 @@ async function openUltimasVendas() {
                         dados.telefone_cliente || dados.telefone || "" // Captura o telefone da API
                     );
                 }
+            }
+        }
+
+        // 🚀 NOVA FUNÇÃO: Exclusiva para o Motor Híbrido (Kits Espalhados)
+        function abrirPdfHibrido(idVenda, idEvento, nomeCliente, tipoCartela) {
+            console.log("Iniciando geração de PDF Híbrido para a Venda:", idVenda);
+            
+            // Captura a sala
+            const idSalaInput = document.getElementById('id_sala');
+            const idSala = idSalaInput ? idSalaInput.value : '001';
+
+            const baseUrl = `/gerar_pdf_lote_hibrido`;
+            const params = new URLSearchParams({
+                id_venda: idVenda,
+                id_evento: idEvento,
+                tipo_cartela: tipoCartela,
+                nome_cliente: nomeCliente,
+                id_sala: idSala
+            });
+
+            const urlCompleta = window.location.origin + baseUrl + '?' + params.toString();
+            
+            // Abre o PDF diretamente na nova aba!
+            const novaAba = window.open(urlCompleta, '_blank');
+            
+            // Alerta caso o navegador do operador tenha bloqueado o Pop-up
+            if (!novaAba || novaAba.closed || typeof novaAba.closed === 'undefined') {
+                bingoAlert("⚠️ O navegador bloqueou o PDF! Permita os pop-ups para este site.", 4000, '#e67e22');
             }
         }
 

@@ -1,0 +1,3 @@
+Testar PDFs de vendas agrupadas
+
+usar como referencia esta função da consulta detalhada e por no venda lite no envio de pdfs
