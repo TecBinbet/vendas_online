@@ -172,13 +172,13 @@
                     <p>Data: <strong>{{ selected_event.data_evento }}</strong> - | - Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
                     <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
 
-                     {% if padrao_venda == 'quantidade' %}
+                     {% if padrao_venda == 'quantidade' and not venda_aleatoria %}
                     <p class="text-lg text-red-600 -mt-1.5 -mb-2.5 ">  Numeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
                      {% endif %}
                 </div>
             </form> <hr class="my-4 border-gray-300">
 
-            {% set rota_destino = url_for('processar_venda_combo_quantidade') if padrao_venda == 'quantidade' else url_for('venda_lite.processar_venda_lite') %}
+            {% set rota_destino = url_for('venda_lite.processar_venda_lite') %}
             
             <form method="POST" action="{{ rota_destino }}" id="confirm-form">
                 <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
@@ -1162,13 +1162,12 @@ async function openUltimasVendas() {
             }, 2000);
         }
 
-        async function handleGerarPdfLite(numInicial, numFinal, idEvento, nomeCliente, tipoCartela) {
-            const baseUrl = `/gerar_cartelas_pdf_${tipoCartela}`;
+        async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
+            const baseUrl = `/gerar_pdf_lote_hibrido`;
             const params = new URLSearchParams({
-                numero_inicial_pdf: numInicial,
-                numero_final_pdf: numFinal,
+                id_venda: idVenda,
                 id_evento: idEvento,
-                id_cliente: 0,
+                tipo_cartela: tipoCartela,
                 nome_cliente: nomeCliente
             });
     
@@ -1326,49 +1325,61 @@ async function openUltimasVendas() {
                     // Usa a função de impressão 58mm
                     imprimirCartelas58mm(dados);
                 } else {
-                    // Usa a função padronizada para gerar o link e abrir no WhatsApp
+                    // 🚀 CORREÇÃO: Usa a função híbrida atualizada, passando idVenda no lugar de numIni/numFin
                     enviarPdfViaWhatsApp(
-                        dados.numero_inicial, 
-                        dados.numero_final, 
-                        dados.id_evento, 
+                        idVenda, 
+                        idEvento, 
                         dados.nome_cliente, 
                         dados.tipo_cartela,
                         dados.telefone_cliente || dados.telefone || "" // Captura o telefone da API
                     );
-                    //await handleGerarPdfLite(
-                    //    dados.numero_inicial, 
-                    //    dados.numero_final, 
-                    //    dados.id_evento, 
-                    //    dados.nome_cliente, 
-                    //    dados.tipo_cartela
-                    //);
                 }
             }
         }
 
         // Função para montar o link do PDF das Cartelas e enviar para o WhatsApp
-        function enviarPdfViaWhatsApp(numInicial, numFinal, idEvento, nomeCliente, tipoCartela, telefoneCliente) {
-            
-            // 1. Define a rota base dinamicamente (15 ou 25)
-            const rotaBase = `/gerar_cartelas_pdf_${tipoCartela}`;
+        function enviarPdfViaWhatsApp(idVenda, idEvento, nomeCliente, tipoCartela, telefoneCliente) {
+            console.log("--- LOG: Iniciando envio PDF WhatsApp ---");
+            console.log("Params recebidos:", { idVenda, idEvento, nomeCliente, tipoCartela, telefoneCliente });
 
-            const idSala = "{{ session.get('id_sala', 1) }}".padStart(3, '0');
-            
-            // 2. Monta os parâmetros da URL (Query String)
-            const parametros = new URLSearchParams({
+            // 1. Captura do idSala - Logs para ver se está a vir undefined
+            const idSalaInput = document.getElementById('id_sala');
+            const idSala = idSalaInput ? idSalaInput.value : '001';
+            console.log("ID da Sala capturado:", idSala);
+
+            // 2. Constrói o novo link
+            const baseUrl = `/gerar_pdf_lote_hibrido`;
+            const params = new URLSearchParams({
+                id_venda: idVenda,
                 id_evento: idEvento,
-                numero_inicial_pdf: numInicial,  
-                numero_final_pdf: numFinal,      
-                nome_cliente: nomeCliente || "Cliente",
+                tipo_cartela: tipoCartela,
+                nome_cliente: nomeCliente,
                 id_sala: idSala
             });
             
-            // 3. Junta o domínio do site + rota + parâmetros
-            const linkCompletoPDF = window.location.origin + rotaBase + "?" + parametros.toString();
-            
-            // 4. Usa a sua função global para abrir o link perfeitamente!
-            abrirWhatsApp(linkCompletoPDF, telefoneCliente);
-        }
+            const urlCompleta = window.location.origin + baseUrl + '?' + params.toString();
+            console.log("URL Final gerada:", urlCompleta);
+
+            // 3. Monta a mensagem
+            const textoMensagem = `Olá, ${nomeCliente}! 🎟️\n\nAcesse o link abaixo para visualizar e baixar o PDF das suas cartelas:\n\n🔗 ${urlCompleta}`;
+
+            bingoAlert("⏳ Abrindo WhatsApp...", 2000, '#27ae60');
+
+            // 4. Teste de execução
+            if (typeof abrirWhatsApp === 'function') {
+                console.log("Executando abrirWhatsApp global...");
+                abrirWhatsApp(textoMensagem, telefoneCliente);
+            } else {
+                console.warn("Função 'abrirWhatsApp' não encontrada! Usando fallback...");
+                const numeroLimpo = telefoneCliente.replace(/\D/g, '');
+                const ddi = (numeroLimpo.length === 10 || numeroLimpo.length === 11) ? '55' : '';
+                const msgCodificada = encodeURIComponent(textoMensagem);
+                
+                const finalUrl = `https://wa.me/${ddi}${numeroLimpo}?text=${msgCodificada}`;
+                console.log("Abrindo link direto:", finalUrl);
+                window.open(finalUrl, '_blank');
+            }
+        } 
 
         function irParaProximoCampo(event, input) {
             // Verifica se a tecla pressionada foi o Enter
@@ -1508,10 +1519,10 @@ async function openUltimasVendas() {
                     });
                 } else if (acao === 'whatsapp') {
                     // Chama a sua função padronizada de PDF
-                    enviarPdfViaWhatsApp(numIni, numFin, idEvento, nomeCli, tipoCart, telCli);
+                    enviarPdfViaWhatsApp(idVenda, idEvento, nomeCli, tipoCart, telCli);
                 } else if (acao === 'empdf') {
                     // Chama a função existente para gerar PDF nativo (Android ou nova aba)
-                    await handleGerarPdfLite(numIni, numFin, idEvento, nomeCli, tipoCart);
+                    await handleGerarPdfLite(idVenda, idEvento, nomeCli, tipoCart);
                 }
             }
         }

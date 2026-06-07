@@ -83,6 +83,7 @@ def nova_venda_lite():
     # Busca Parâmetros
     parametros = db.parametros.find_one({}) or {}
     padrao_venda = parametros.get('padrao_registro_vendas', 'quantidade') 
+    venda_aleatoria = parametros.get('venda_aleatoria', False)
     print(f"🛠️ [DEBUG TELA LITE] Padrão de formulário capturado: '{padrao_venda}'")
 
     # =================================================================
@@ -143,6 +144,7 @@ def nova_venda_lite():
     return render_template(
         'venda_lite.html', 
         padrao_venda=padrao_venda,
+        venda_aleatoria=venda_aleatoria,
         eventos=eventos,
         selected_event=selected_event,
         ultimas_vendas=ultimas_vendas,
@@ -186,19 +188,18 @@ def processar_venda_lite():
     Mantém travas atômicas e coleções dinâmicas, ignora saldo de cliente.
     INCLUI MOTOR V8 DE INJEÇÃO COMBO E PILAR 1 DO ALEATÓRIO.
     """
-    # IMPORTAÇÃO LOCAL PARA EVITAR CIRCULAR IMPORT
+    from flask import g
     from app import get_vendas_db, hora_brasil, safe_float, try_object_id, get_next_bilhete_sequence, get_next_global_sequence, registrar_comissao_vendedor, clean_numeric_string, get_next_cliente_sequence, formatar_nome_proprio, sortear_combos_livres
+    from bson.decimal128 import Decimal128
     
     db = get_vendas_db()
     if db is None: 
         return redirect(url_for('venda_lite.nova_venda_lite', error="DB Offline."))
 
     id_evento_string = request.form.get('id_evento')
-    # 🚀 NOVOS CAMPOS DO CLIENTE
     telefone_cliente_lite_raw = request.form.get('telefone_cliente_lite', '').strip()
     nick_cliente_lite = request.form.get('nick_cliente_lite', '').strip() 
     id_cliente_lite_str = request.form.get('id_cliente_lite', '0')
-    
     telefone_limpo = clean_numeric_string(telefone_cliente_lite_raw)
 
     error_redirect_kwargs = {'id_evento': id_evento_string}
@@ -211,7 +212,6 @@ def processar_venda_lite():
         error_redirect_kwargs['error'] = "O Nome do Cliente é obrigatório."
         return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
 
-    # Validação do Evento e Status
     id_evento_mongo = try_object_id(id_evento_string)
     selected_event = db.eventos.find_one({'_id': id_evento_mongo})
     
@@ -222,17 +222,24 @@ def processar_venda_lite():
         error_redirect_kwargs['error'] = "⛔ VENDA CANCELADA! O evento não está mais Ativo."
         return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
 
-    # Carregar Parâmetros Globais
-    parametros = db.parametros.find_one({}) or {}
-    padrao_venda = parametros.get('padrao_registro_vendas', 'quantidade')
+    # ==========================================================================
+    # 🚀 PARÂMETROS GLOBAIS (Leitura 100% segura do painel)
+    # ==========================================================================
+    if hasattr(g, 'parametros_globais'):
+        padrao_venda = g.parametros_globais.get('padrao_registro_vendas', 'quantidade')
+        
+        # Converte de forma blindada para booleano
+        v_aleatoria = g.parametros_globais.get('venda_aleatoria', False)
+        modo_aleatorio = str(v_aleatoria).lower() in ['true', '1', 'sim', 'on']
+    else:
+        padrao_venda = 'quantidade'
+        modo_aleatorio = False
 
     tipo_cartela = int(selected_event.get('tipo_de_cartela', 15))
     id_evento_int_para_controle = selected_event.get('id_evento')
     limite_maximo_cartelas = int(selected_event.get('numero_maximo', 72000))
     valor_unitario = safe_float(selected_event.get('valor_de_venda', 0.00))
     unidade_de_venda = int(selected_event.get('unidade_de_venda', 1))
-    
-    # 🚀 CAPTURA DA VARIÁVEL COMBO
     combo_qtde = int(selected_event.get('combo_qtde', 1))
 
     colaborador_id = session.get('id_colaborador', 'N/A')
@@ -243,18 +250,15 @@ def processar_venda_lite():
     quantidade_kits = 0
     numero_inicial_atual = None
     numero_final_atual = None
-    numeros_iniciais_venda = [] # 🚀 Array mestre do Loop
+    numeros_iniciais_venda = [] 
 
     try:
-        # CHAVEAMENTO DE REGRA
+        # CHAVEAMENTO DE REGRA: NUMERAÇÃO
         if padrao_venda == 'numeracao':
             numero_kit_inicial = int(request.form.get('numero_kit_inicial', 0))
             numero_kit_final_str = request.form.get('numero_kit_final', '')
 
-            if numero_kit_inicial < 1: 
-                raise ValueError("Kit inicial inválido.")
-            
-            # Se não preencheu o final, considera igual ao inicial (1 kit)
+            if numero_kit_inicial < 1: raise ValueError("Kit inicial inválido.")
             if not numero_kit_final_str.strip():
                 numero_kit_final = numero_kit_inicial
             else:
@@ -264,76 +268,52 @@ def processar_venda_lite():
             limite_maximo_kits = limite_maximo_cartelas // divisor_unidade
 
             if numero_kit_inicial > limite_maximo_kits or numero_kit_final > limite_maximo_kits:
-                error_redirect_kwargs['error'] = f"⛔ Venda Bloqueada! O número máximo de kit permitido para este evento é {limite_maximo_kits} (Limite: {limite_maximo_cartelas} cartelas)."
+                error_redirect_kwargs['error'] = f"⛔ Venda Bloqueada! Limite máximo é {limite_maximo_kits}."
                 return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
 
             if numero_kit_final < numero_kit_inicial:
-                error_redirect_kwargs['error'] = "O Kit Final não pode ser menor que o Kit Inicial."
+                error_redirect_kwargs['error'] = "O Kit Final não pode ser menor que o Inicial."
                 return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
 
             quantidade_kits = (numero_kit_final - numero_kit_inicial) + 1
-            quantidade = quantidade_kits # Unidades brutas (Kits)
+            quantidade = quantidade_kits
             quantidade_cartelas_atual = quantidade_kits * unidade_de_venda
             
-            # Chama a nossa nova função matemática baseada no período original
-            numero_inicial_atual, numero_final_atual = converter_intervalo_kits_para_cartelas(
-                numero_kit_inicial, numero_kit_final, unidade_de_venda
-            )
+            # 🚀 MATEMÁTICA DIRETA (Resolve o erro de Importação Circular)
+            numero_inicial_atual = ((numero_kit_inicial - 1) * unidade_de_venda) + 1
+            numero_final_atual = numero_kit_final * unidade_de_venda
             
-            # Validação de Conflito
+            from app import checar_conflito_venda
             conflito = checar_conflito_venda(db, numero_inicial_atual, numero_final_atual, id_evento_int_para_controle)
         
             if conflito:
-                v_ini = conflito.get('numero_inicial')
-                v_fim = conflito.get('numero_final')
-
-                if v_ini >= numero_inicial_atual and v_fim <= numero_final_atual:
-                    if numero_inicial_atual == v_ini and numero_final_atual == v_fim:
-                        msg_erro = "⛔ Venda Totalmente Bloqueada: Este período já foi vendido!"
-                    else:
-                        msg_erro = f"⚠️ Parte deste período já foi vendido! (Conflito detectado nas cartelas {v_ini} à {v_fim})"
-                else:
-                    msg_erro = f"⚠️ Parte deste período já foi vendido! (Conflito detectado nas cartelas {v_ini} à {v_fim})"
-            
-                error_redirect_kwargs['error'] = msg_erro
+                error_redirect_kwargs['error'] = "⛔ Venda Bloqueada: Este período ou parte dele já foi vendido!"
                 return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
             
-            # O array recebe 1 item
-            numeros_iniciais_venda = [numero_inicial_atual]
+            #numeros_iniciais_venda = [numero_inicial_atual]
+            numeros_iniciais_venda = [numero_inicial_atual + (i * unidade_de_venda) for i in range(quantidade)]
 
-        # ==============================================================================
-        # 🚀 CHAVEAMENTO DE REGRA: MODO QUANTIDADE (Aninhando o Sequencial e o Aleatório)
-        # ==============================================================================
+        # CHAVEAMENTO DE REGRA: QUANTIDADE (Sequencial e Aleatório)
         elif padrao_venda == 'quantidade':
             quantidade = int(request.form.get('quantidade', 0))
             if quantidade <= 0: raise ValueError("Quantidade deve ser positiva.")
             
             quantidade_cartelas_atual = quantidade * unidade_de_venda
             
-            # Lê a flag de aleatoriedade direto do documento de parâmetros
-            modo_aleatorio = parametros.get('venda_aleatoria', False)
-            
             if modo_aleatorio:
-                # -----------------------------------------------------------
-                # 🎲 RODA O MOTOR V8 (SORTEIO ESPALHADO - ALEATÓRIO)
-                # -----------------------------------------------------------
+                # --- MOTOR V8 (ESPALHADO) ---
                 numeros_iniciais_venda = sortear_combos_livres(
                     db, id_evento_int_para_controle, limite_maximo_cartelas, 
                     unidade_de_venda, combo_qtde, quantidade
                 )
-                
                 if not numeros_iniciais_venda:
                     error_redirect_kwargs['error'] = "⛔ Não há vagas suficientes no Range Aleatório!"
                     return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
                 
-                # Variáveis de fallback usadas no Bluetooth e no dicionário da sessão
                 numero_inicial_atual = numeros_iniciais_venda[0]
                 numero_final_atual = numeros_iniciais_venda[-1] + (unidade_de_venda - 1)
-                
             else:
-                # -----------------------------------------------------------
-                # 🚜 RODA O MOTOR SEQUENCIAL TRADICIONAL
-                # -----------------------------------------------------------
+                # --- MOTOR SEQUENCIAL TRADICIONAL ---
                 numero_inicial_atual = get_next_bilhete_sequence(
                     db, id_evento_int_para_controle, 'inicial_proxima_venda', 
                     quantidade_cartelas_atual, limite_maximo_cartelas
@@ -347,52 +327,35 @@ def processar_venda_lite():
                         {'id_evento': id_evento_int_para_controle},
                         {'$set': {'inicial_proxima_venda': numero_inicial_atual + quantidade_cartelas_atual}}
                     )
-                    
                 numero_final_atual = numero_inicial_atual + quantidade_cartelas_atual - 1
-                
-                # Como é sequencial, o array do loop de gravação recebe apenas o 1º número do bloco
-                numeros_iniciais_venda = [numero_inicial_atual]
+                #numeros_iniciais_venda = [numero_inicial_atual]
+                numeros_iniciais_venda = [numero_inicial_atual + (i * unidade_de_venda) for i in range(quantidade)]
 
-
-        # ==============================================================================
         # GRAVAÇÃO E GERAÇÃO DE IDs
-        # ==============================================================================
         valor_total_atual = valor_unitario * quantidade
         novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
         id_venda_formatado = f"VL{novo_id_venda_int:05d}" 
-
-        # A chave mestre que agrupa todos os kits espalhados no Mongo
         id_transacao_combo = id_venda_formatado
 
-        # ==============================================================================
-        # 🚀 MOTOR CRM: RESOLUÇÃO OU CRIAÇÃO DO CLIENTE AUTOMÁTICA
-        # ==============================================================================
+        # CRM: CRIAÇÃO DO CLIENTE
         id_cliente_final = int(id_cliente_lite_str) if id_cliente_lite_str.isdigit() else 0
         nick_cliente_final = formatar_nome_proprio(nick_cliente_lite)
 
         cliente_existente = db.clientes.find_one({'telefone': telefone_limpo})
-        
         if cliente_existente:
             id_cliente_final = int(cliente_existente['id_cliente'])
             nick_cliente_final = cliente_existente['nick']
         elif id_cliente_final == 0:
             id_cliente_final = get_next_cliente_sequence()
             novo_cliente = {
-                "id_cliente": id_cliente_final,
-                "nome_cliente": nick_cliente_final,
-                "nick": nick_cliente_final,
-                "telefone": telefone_limpo,
-                "cpf": "",
-                "cidade": "",
-                "id_regional": regional_operador,
-                "id_colaborador": colaborador_id,
-                "data_cadastro": hora_brasil(),
-                "data_atualizacao": hora_brasil(),
-                "origem": "venda_lite_automatica",
+                "id_cliente": id_cliente_final, "nome_cliente": nick_cliente_final,
+                "nick": nick_cliente_final, "telefone": telefone_limpo,
+                "cpf": "", "cidade": "", "id_regional": regional_operador,
+                "id_colaborador": colaborador_id, "data_cadastro": hora_brasil(),
+                "data_atualizacao": hora_brasil(), "origem": "venda_lite_automatica",
                 "saldo_atual": Decimal128("0.00")
             }
             db.clientes.insert_one(novo_cliente)
-
 
         # ==============================================================================
         # 🚀 MOTOR DE GRAVAÇÃO EM LOOP (PILAR 1)
@@ -406,47 +369,35 @@ def processar_venda_lite():
                 "id_evento": id_evento_int_para_controle, 
                 "descricao_evento": selected_event.get('descricao'),
                 "id_regional": regional_operador,
-                
                 "id_cliente": id_cliente_final, 
                 "nome_cliente": nick_cliente_final,
                 "telefone_cliente": telefone_limpo,
-                
                 "id_colaborador": colaborador_id, 
                 "nick_colaborador": nick_colaborador_sessao,
-                "id_vendedor": colaborador_id,
-                "data_venda": hora_brasil(),
+                "id_vendedor": colaborador_id, "data_venda": hora_brasil(),
                 "tipo_cartela": tipo_cartela,
-                
                 "quantidade_unidades": 1, 
                 "quantidade_cartelas": unidade_de_venda,
                 "numero_inicial": num_inicial,
                 "numero_final": num_final_deste_kit,
-                "numero_inicial2": 0,
-                "numero_final2": 0,
-                
+                "numero_inicial2": 0, "numero_final2": 0,
                 "valor_unitario": Decimal128(str(valor_unitario)), 
                 "valor_total": Decimal128(str(valor_unitario)), 
-                "origem": "venda_lite_aleatoria" if padrao_venda == 'aleatorio' else "venda_lite",
+                "origem": "venda_lite_aleatoria" if modo_aleatorio else "venda_lite",
                 "id_transacao_combo": id_transacao_combo
             }
 
             db[nome_colecao_venda].insert_one(registro_venda)
 
-            # ==============================================================================
-            # MOTOR DE INJEÇÃO COMBO PARA ESTE KIT ESPECÍFICO
-            # ==============================================================================
+            # INJEÇÃO COMBO
             if combo_qtde > 1:
                 eventos_relacionados = selected_event.get('eventos_combo_relacionados', [])
-                
                 if eventos_relacionados:
                     kit_base_inicial = ((num_inicial - 1) // unidade_de_venda) + 1
-                    
                     for index, id_evento_irmao in enumerate(eventos_relacionados):
                         if index >= (combo_qtde - 1): break 
-                            
                         nome_colecao_irmao = f"vendas{id_evento_irmao}"
                         evento_irmao = db.eventos.find_one({'id_evento': id_evento_irmao})
-                        
                         if evento_irmao:
                             novo_kit_inicial = kit_base_inicial + (index + 1)
                             novo_numero_inicial_replica = ((novo_kit_inicial - 1) * unidade_de_venda) + 1
@@ -456,7 +407,6 @@ def processar_venda_lite():
                             if '_id' in registro_venda_irmao: del registro_venda_irmao['_id'] 
                             
                             novo_id_replica_int = get_next_global_sequence(db, 'id_vendas_global')
-                            
                             registro_venda_irmao.update({
                                 "id_venda": f"VL{novo_id_replica_int:05d}",
                                 "id_evento_ObjectId": evento_irmao.get('_id'), 
@@ -464,8 +414,7 @@ def processar_venda_lite():
                                 "descricao_evento": evento_irmao.get('descricao'),
                                 "numero_inicial": novo_numero_inicial_replica,
                                 "numero_final": novo_numero_final_replica,
-                                "numero_inicial2": 0,
-                                "numero_final2": 0,
+                                "numero_inicial2": 0, "numero_final2": 0,
                                 "valor_unitario": Decimal128("0.00"), 
                                 "valor_total": Decimal128("0.00"),
                                 "origem": "combo_replica_lite",
@@ -487,88 +436,82 @@ def processar_venda_lite():
             {"$inc": {"valor_pendente_telemovel": float(valor_total_atual)}}
         )
 
+        # 🚀 CORREÇÃO: Busca o documento de parâmetros para garantir a taxa de comissão correta
+        id_sala = session.get('id_sala', '000')
+        parametros = db.parametros.find_one({'id_sala': id_sala}) or db.parametros.find_one({'id_sala': f"SALA{id_sala}"}) or {}
+
         taxa_operador_bruta = parametros.get('perc_venda_direta', 15.0)
         taxa_operador = float(str(taxa_operador_bruta))
         registrar_comissao_vendedor(
-            db=db, 
-            id_colaborador=colaborador_id, 
+            db=db, id_colaborador=colaborador_id, 
             valor=valor_total_atual * (taxa_operador / 100),
-            tipo='vd',
-            id_evento=id_evento_int_para_controle,
-            id_venda=id_venda_formatado,
-            taxa_aplicada=taxa_operador,
+            tipo='vd', id_evento=id_evento_int_para_controle,
+            id_venda=id_venda_formatado, taxa_aplicada=taxa_operador,
             descricao=f"Comissão Venda Lite {id_venda_formatado}"
         )
+
+        # ==========================================================================
+        # 🚀 RECIBO HÍBRIDO E SESSÃO (MATRIZ UNIFICADA)
+        # ==========================================================================
+        host = request.host_url.rstrip('/')
+        url_api_json = (f"{host}/api/venda_bluetooth_json?numero_inicial={numero_inicial_atual}"
+                        f"&numero_final={numero_final_atual}&id_evento={id_evento_int_para_controle}"
+                        f"&nome_cliente={nick_cliente_lite}")
+        
+        session['url_bluetooth_print'] = f"my.bluetoothprint.scheme://{url_api_json}"
+        
+        # Formatação alinhada à esquerda, com fonte monoespaçada para simular o cupom térmico
+        detalhes_rodadas_html = "<div style='margin-top: 10px; padding-top: 10px; border-top: 1px dashed #ccc; text-align: left; font-family: monospace; font-size: 0.95em;'>"
+        
+        detalhes_rodadas_html += f"Unidades Compradas: <strong>{quantidade}</strong><br>"
+        detalhes_rodadas_html += f"(Cartelas: {unidade_de_venda})<br><br>"
+        detalhes_rodadas_html += "<strong>&gt; Período de Cartelas</strong><br>"
+
+        # Loop Exterior: Roda pelas Rodadas (1, 2, 3...)
+        for rodada in range(1, combo_qtde + 1):
+            
+            # Loop Interior: Roda por todos os Kits que o cliente comprou (sequenciais ou espalhados)
+            for num_inicial_base in numeros_iniciais_venda:
+                # Matemática para descobrir qual é este kit exato
+                kit_base = ((num_inicial_base - 1) // unidade_de_venda) + 1
+                kit_atual = kit_base + (rodada - 1)
+                ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+                fim_atual = ini_atual + unidade_de_venda - 1
+                
+                texto_kit = f"(Kit {kit_atual}):" if unidade_de_venda > 1 else ":"
+                
+                # Monta a linha visual: "> Rod. 01 (Kit 3031): 9091 a 9093"
+                detalhes_rodadas_html += f"&gt; Rod. {rodada:02d} {texto_kit} {ini_atual} a {fim_atual}<br>"
+
+        detalhes_rodadas_html += "</div>"
+
+        success_msg = (
+            f"<strong>✅ VENDA CONCLUÍDA</strong><br>"
+            f"<strong>> {id_venda_formatado} <</strong><br>"
+            f"Cliente: {nick_cliente_final}<br>"
+            f"Valor: R$ {valor_total_atual:.2f}<br>"
+            f"{detalhes_rodadas_html}" 
+        )
+
+        session['success_message'] = success_msg 
+        session['print_data'] = {
+            'id_evento': id_evento_int_para_controle,
+            'nome_cliente': nick_cliente_final,
+            'numero_inicial': numero_inicial_atual,
+            'numero_final': numero_final_atual,
+            'tipo_cartela': tipo_cartela,
+            'id_venda_recente': id_venda_formatado,
+            'id_cliente_recente': id_cliente_final,
+            'telefone_cliente': telefone_limpo
+        }
+
+        return redirect(url_for('venda_lite.nova_venda_lite', id_evento=id_evento_string))
 
     except Exception as e:
         import traceback
         traceback.print_exc()
         error_redirect_kwargs['error'] = f"Erro na gravação: {str(e)}"
         return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
-
-    # Pós-Venda (Bluetooth)
-    host = request.host_url.rstrip('/')
-    url_api_json = (f"{host}/api/venda_bluetooth_json?numero_inicial={numero_inicial_atual}"
-                    f"&numero_final={numero_final_atual}&id_evento={id_evento_int_para_controle}"
-                    f"&nome_cliente={nick_cliente_lite}")
-    
-    session['url_bluetooth_print'] = f"my.bluetoothprint.scheme://{url_api_json}"
-    
-    # ==============================================================================
-    # 🚀 MATEMÁTICA DO COMBO E RECIBO HÍBRIDO (Contínuo vs Espalhado)
-    # ==============================================================================
-    detalhes_rodadas_html = ""
-    
-    if padrao_venda == 'aleatorio':
-        # RECIBO LIMPO: Mostra apenas os números dos kits sorteados
-        kits_sorteados = [str(((n - 1) // unidade_de_venda) + 1) for n in numeros_iniciais_venda]
-        kits_texto = ", ".join(kits_sorteados)
-        
-        detalhes_rodadas_html += f"<div style='margin-top: 5px; padding-top: 5px; border-top: 1px dashed #ccc;'>"
-        detalhes_rodadas_html += f"<strong>Total de Kits: {quantidade}</strong><br>"
-        detalhes_rodadas_html += f"Kits Sorteados: <span style='color:#059669; font-weight:bold;'>{kits_texto}</span>"
-        
-        if combo_qtde > 1:
-            detalhes_rodadas_html += f"<br><span style='font-size: 0.85em; color: #666;'>+ {combo_qtde-1} rodadas vinculadas a cada Kit.</span>"
-        detalhes_rodadas_html += "</div>"
-        
-    else:
-        # RECIBO TRADICIONAL: Contínuo
-        kit_base_inicial = ((numero_inicial_atual - 1) // unidade_de_venda) + 1
-            
-        for rodada in range(1, combo_qtde + 1):
-            kit_rodada = kit_base_inicial + (rodada - 1)
-            ini_rodada = ((kit_rodada - 1) * unidade_de_venda) + 1
-            fim_rodada = ini_rodada + quantidade_cartelas_atual - 1
-                
-            detalhes_rodadas_html += f"<div style='margin-top: 5px; padding-top: 5px; border-top: 1px dashed #ccc;'>"
-            detalhes_rodadas_html += f"<strong>Rodada: {rodada:02d}</strong>"
-            if unidade_de_venda > 1:
-                 detalhes_rodadas_html += f" (Kit {kit_rodada})"
-            detalhes_rodadas_html += f"<br>Cartelas: <strong>{ini_rodada} a {fim_rodada}</strong></div>"
-
-    success_msg = (
-        f"<strong>✅ VENDA CONCLUÍDA</strong><br>"
-        f"<strong>> {id_venda_formatado} <</strong><br>"
-        f"Cliente: {nick_cliente_lite if 'nick_cliente_lite' in locals() else cliente_doc.get('nick')}<br>"
-        f"Valor: R$ {valor_total_atual:.2f}<br>"
-        f"{detalhes_rodadas_html}" 
-    )
-
-    session['success_message'] = success_msg 
-    session['print_data'] = {
-        'id_evento': id_evento_int_para_controle,
-        'nome_cliente': nick_cliente_lite,
-        'numero_inicial': numero_inicial_atual,
-        'numero_final': numero_final_atual,
-        'tipo_cartela': int(selected_event.get('tipo_de_cartela', 25)),
-        'id_venda_recente': id_venda_formatado,
-        'id_cliente_recente': id_cliente_final,
-        'telefone_cliente': telefone_limpo
-    }
-
-    return redirect(url_for('venda_lite.nova_venda_lite', id_evento=id_evento_string))
-
 
 
 # 4. Rota para Copiar Listagem de Vendas (Área de Transferência)

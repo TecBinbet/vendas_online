@@ -1486,9 +1486,11 @@ def login():
                 # 🎛️ INTEGRAÇÃO DA CHAVE GERAL DO MÓDULO LITE
                 parametros = db.parametros.find_one({}) or {}
                 usar_modo_lite = parametros.get('venda_lite', False) # Captura o Booleano do banco
+                usar_modo_aleatorio = parametros.get('venda_aleatoria', False) # Captura o Booleano do banco
 
                 print("\n" + "="*40)
                 print(f"🚥 [DEBUG LOGIN] Modo Venda Lite no BD: {usar_modo_lite}")
+                print(f"🚥 [DEBUG LOGIN] Modo Aleatório Ativado no BD: {usar_modo_aleatorio}")
                 print("="*40 + "\n")
 
                 if usar_modo_lite:
@@ -5207,46 +5209,62 @@ def reimprimir_comprovante_txt():
             elif not link_final_limpo.strip():
                 link_final_limpo = "Boa sorte!" # Mensagem padrão caso tudo falhe
             
+        # ==========================================
+        # MODO 1: REIMPRESSÃO DE VENDA ÚNICA (TXT)
+        # ==========================================
         if tipo_reimpressao == 'unica':
-            venda = db[nome_colecao_venda].find_one({'id_venda': id_venda_str})
-            if not venda:
+            # 🚀 CORREÇÃO CRÍTICA: Busca todas as fatias da venda
+            fatias_venda = list(db[nome_colecao_venda].find({'id_venda': id_venda_str}).sort('numero_inicial', 1))
+            if not fatias_venda:
                 return jsonify({'status': 'error', 'message': 'Venda não encontrada'})
             
-            # 🚀 MOTOR DO COMBO NA REIMPRESSÃO (WhatsApp)
+            venda_base = fatias_venda[0]
+            
+            # Totalizadores reais (somando todas as fatias)
+            quantidade_total_unidades = sum([v.get('quantidade_unidades', 1) for v in fatias_venda])
+            quantidade_total_cartelas = venda_base.get('quantidade_cartelas', unidade_de_venda)
+            valor_total_real = sum([safe_float(v.get('valor_total', 0)) for v in fatias_venda])
+            
+            # 🚀 MATRIZ DO COMBO NA REIMPRESSÃO TXT (WhatsApp)
             detalhes_rodadas_html = ""
-            qtd_cartelas = (venda['numero_final'] - venda['numero_inicial']) + 1
-            kit_base = ((venda['numero_inicial'] - 1) // unidade_de_venda) + 1
             
             for rodada in range(1, combo_qtde + 1):
-                kit_atual = kit_base + (rodada - 1)
-                ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
-                fim_atual = ini_atual + qtd_cartelas - 1
+                for fatia in fatias_venda:
+                    num_inicial_fatia = fatia['numero_inicial']
+                    qtd_cartelas_fatia = (fatia['numero_final'] - fatia['numero_inicial']) + 1
+                    
+                    kit_base = ((num_inicial_fatia - 1) // unidade_de_venda) + 1
+                    kit_atual = kit_base + (rodada - 1)
+                    
+                    ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+                    fim_atual = ini_atual + qtd_cartelas_fatia - 1
+                    
+                    texto_r = f"Rod. {rodada:02d}"
+                    if unidade_de_venda > 1:
+                        texto_r += f" (Kit {kit_atual})"
+                    
+                    detalhes_rodadas_html += f"   > {texto_r}: {ini_atual} a {fim_atual}<br>"
                 
-                texto_r = f"Rod. {rodada:02d}"
-                if unidade_de_venda > 1:
-                     texto_r += f" (Kit {kit_atual})"
-                detalhes_rodadas_html += f"   > {texto_r}: {ini_atual} a {fim_atual}<br>"
-                
-            if venda.get('numero_inicial2', 0) > 0:
-                detalhes_rodadas_html += f"   > Adicional: {venda['numero_inicial2']} a {venda['numero_final2']}<br>"
+                if fatia.get('numero_inicial2', 0) > 0:
+                    detalhes_rodadas_html += f"   > Adicional: {fatia['numero_inicial2']} a {fatia['numero_final2']}<br>"
 
             receipt_html = (
                 f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
                 f"      {nome_sala}<br>"
-                f"     >  {venda['id_venda']}  < <br>"
+                f"     >  {venda_base['id_venda']}  < <br>"
                 f"--------------------------------------------------------<br>"
-                f"Cliente: <strong>{venda['nome_cliente']}</strong><br>"
+                f"Cliente: <strong>{venda_base['nome_cliente']}</strong><br>"
                 f"Evento: {evento['descricao']}<br>"
                 f"<strong>Data: {data_evento_formatada} às {hora_evento_str}</strong><br>"
-                f"Colaborador:{venda['id_colaborador']}-{venda['nick_colaborador']}<br>"
+                f"Colaborador:{venda_base['id_colaborador']}-{venda_base['nick_colaborador']}<br>"
                 f"--------------------------------------------------------<br>"
-                f"Unidades Compradas: <strong>{venda['quantidade_unidades']}<strong><br>"
-                f"     (Cartelas: {venda['quantidade_cartelas']})<br>"
+                f"Unidades Compradas: <strong>{quantidade_total_unidades}<strong><br>"
+                f"     (Cartelas: {quantidade_total_cartelas})<br>"
                 f"<strong> >  Período de Cartelas  <<strong><br>"
                 f"{detalhes_rodadas_html}"
-                f"  VALOR: R$ {venda.get('valor_total', 0.00)}<br>"
+                f"<br>"
+                f"  VALOR: R$ {valor_total_real:.2f}<br>"
                 f"<br>" 
-                # (A injeção do link que estava aqui repetida foi removida)
             )
 
         elif tipo_reimpressao == 'cliente':
@@ -5432,48 +5450,62 @@ def reimprimir_comprovante_json():
         # MODO 1: REIMPRESSÃO DE VENDA ÚNICA
         # ==========================================
         if tipo_reimpressao == 'unica':
-            venda = db[nome_colecao_venda].find_one({'id_venda': id_venda_str})
-            if not venda:
+            # 🚀 CORREÇÃO CRÍTICA: Agora usamos .find() para apanhar todas as fatias de uma venda (Pilar 1)
+            fatias_venda = list(db[nome_colecao_venda].find({'id_venda': id_venda_str}).sort('numero_inicial', 1))
+            if not fatias_venda:
                 return jsonify({'status': 'error', 'message': 'Venda não encontrada'})
             
+            # Pega os dados principais da primeira fatia (são todos iguais)
+            venda_base = fatias_venda[0]
+            
+            # Calcula os totais reais somando todas as fatias
+            quantidade_total_unidades = sum([v.get('quantidade_unidades', 1) for v in fatias_venda])
+            quantidade_total_cartelas = venda_base.get('quantidade_cartelas', unidade_de_venda)
+            valor_total_real = sum([safe_float(v.get('valor_total', 0)) for v in fatias_venda])
+
             add_linha("COMPROVANTE DE COMPRA", "centro", "normal", True)
             add_linha(" ", "centro", "normal", False)
             
-            add_linha(f"ID da Venda: {venda['id_venda']}", "centro", "normal", False)
+            add_linha(f"ID da Venda: {venda_base['id_venda']}", "centro", "normal", False)
             add_linha("-------------------------------", "centro", "normal", False)
-            add_linha(f"Cliente: {venda['nome_cliente']}", "esquerda", "normal", True)
+            add_linha(f"Cliente: {venda_base['nome_cliente']}", "esquerda", "normal", True)
             add_linha(f"Evento: {evento['descricao']}", "esquerda", "normal", False)
             add_linha(f"Data: {data_evento_formatada} as {hora_evento_str}", "esquerda", "normal", False)
-            add_linha(f"Colab: {venda['id_colaborador']}-{venda['nick_colaborador']}", "esquerda", "normal", False)
+            add_linha(f"Colab: {venda_base['id_colaborador']}-{venda_base['nick_colaborador']}", "esquerda", "normal", False)
             add_linha("-------------------------------", "centro", "normal", False)
             
-            add_linha(f"Unidades Compradas: > {venda['quantidade_unidades']} <", "centro", "normal", False)
+            add_linha(f"Unidades Compradas: > {quantidade_total_unidades} <", "centro", "normal", False)
             add_linha("QTDE. CARTELAS", "centro", "normal", False)
-            add_linha(str(venda['quantidade_cartelas']), "centro", "duplo", False)
+            add_linha(str(quantidade_total_cartelas), "centro", "duplo", False)
 
             add_linha("> PERIODO DE CARTELAS <", "centro", "normal", True)
             
-            # 🚀 LÓGICA DO COMBO NA REIMPRESSÃO
-            qtd_cartelas = (venda['numero_final'] - venda['numero_inicial']) + 1
-            kit_base = ((venda['numero_inicial'] - 1) // unidade_de_venda) + 1
-            
+            # 🚀 LÓGICA DO COMBO EM MATRIZ NA REIMPRESSÃO (Igual à tela de sucesso)
             for rodada in range(1, combo_qtde + 1):
-                kit_atual = kit_base + (rodada - 1)
-                ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
-                fim_atual = ini_atual + qtd_cartelas - 1
                 
-                texto_r = f"Rodada {rodada:02d}"
-                if unidade_de_venda > 1:
-                    texto_r += f" (Kit {kit_atual})"
-                add_linha(texto_r, "centro", "normal", True)
-                add_linha(f"{ini_atual} a {fim_atual}", "centro", "normal", False)
-                
-            if venda.get('numero_inicial2', 0) > 0:
-                add_linha(f"Adicional: {venda['numero_inicial2']} a {venda['numero_final2']}", "centro", "normal", False)
+                for fatia in fatias_venda:
+                    num_inicial_fatia = fatia['numero_inicial']
+                    qtd_cartelas_fatia = (fatia['numero_final'] - fatia['numero_inicial']) + 1
+                    
+                    kit_base = ((num_inicial_fatia - 1) // unidade_de_venda) + 1
+                    kit_atual = kit_base + (rodada - 1)
+                    
+                    ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+                    fim_atual = ini_atual + qtd_cartelas_fatia - 1
+                    
+                    texto_r = f"Rodada {rodada:02d}"
+                    if unidade_de_venda > 1:
+                        texto_r += f" (Kit {kit_atual})"
+                        
+                    add_linha(texto_r, "centro", "normal", True)
+                    add_linha(f"{ini_atual} a {fim_atual}", "centro", "normal", False)
+                    
+                    if fatia.get('numero_inicial2', 0) > 0:
+                        add_linha(f"Adicional: {fatia['numero_inicial2']} a {fatia['numero_final2']}", "centro", "normal", False)
             
             add_linha("-------------------------------", "centro", "normal", False)
             
-            valor_formatado = f"{safe_float(venda['valor_total']):.2f}".replace('.', ',')
+            valor_formatado = f"{valor_total_real:.2f}".replace('.', ',')
             
             add_linha("VALOR PAGO", "centro", "normal", False)
             add_linha(f"R$ {valor_formatado}", "centro", "duplo", False)
@@ -6062,6 +6094,162 @@ def gerar_cartelas_pdf_15():
 
     except Exception as e:
         print(f"ERRO CRÍTICO ao gerar PDF 15: {e}")
+        import traceback
+        traceback.print_exc()
+        return f"Erro interno: {e}"
+
+
+@app.route('/gerar_pdf_lote_hibrido')
+@login_required
+def gerar_pdf_lote_hibrido():
+    """
+    Gera PDF de cartelas (15 ou 25) suportando Lotes Híbridos (Kits Espalhados ou Sequenciais).
+    Lê diretamente da base de dados usando o id_venda para apanhar todas as fatias da compra.
+    """
+    db = get_vendas_db() 
+    if db is None: 
+        return "Erro de Conexão: DB Offline.", 500
+
+    try:
+        id_venda = request.args.get('id_venda')
+        id_evento = int(request.args.get('id_evento', 0))
+        tipo_cartela_str = request.args.get('tipo_cartela', '15')
+        nome_cliente = request.args.get('nome_cliente', 'cliente')
+        
+        if not id_venda or not id_evento:
+            return "Erro: id_venda e id_evento são obrigatórios."
+            
+        TIPO_CARTELA = int(tipo_cartela_str)
+
+        # 1. Busca os Dados do Evento
+        evento = db.eventos.find_one({'id_evento': id_evento})
+        if not evento:
+            return "Erro: Evento não encontrado."
+
+        combo_qtde = int(evento.get('combo_qtde', 1))
+        unidade_de_venda = int(evento.get('unidade_de_venda', 1))
+
+        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
+        descricao_evento = evento.get('descricao', '')
+        
+        data_str = evento.get('data_evento', '')
+        hora_str = evento.get('hora_evento', '')
+        if '-' in str(data_str):
+            try:
+                dt = datetime.strptime(str(data_str), '%Y-%m-%d')
+                data_str = dt.strftime('%d/%m/%Y')
+            except: pass
+            
+        infos_evento = f"{descricao_evento} - {data_str} as {hora_str}"
+
+        # 2. Verifica a existência do ficheiro TXT do layout
+        caminho_check = os.path.join(CARTELAS_FOLDER, f'cartelas.{TIPO_CARTELA}')
+        if not os.path.exists(caminho_check):
+             return f"Erro: Arquivo 'cartelas.{TIPO_CARTELA}' não encontrado no servidor."
+
+        # 3. Busca todas as fatias da venda (Kits) no Banco de Dados
+        nome_colecao_venda = f"vendas{id_evento}"
+        fatias_venda = list(db[nome_colecao_venda].find({'id_venda': id_venda}).sort('numero_inicial', 1))
+        
+        if not fatias_venda:
+            return f"Erro: Nenhuma venda encontrada para o ID {id_venda}."
+
+        # Extrai os números iniciais base da compra
+        numeros_iniciais_base = [fatia['numero_inicial'] for fatia in fatias_venda]
+
+        # 4. Configura as métricas do PDF conforme o Tipo (15 ou 25)
+        pdf = PDFCartelas(orientation='P', unit='mm', format='A4') 
+        pdf.nome_sala = nome_sala
+        pdf.infos_evento = infos_evento
+        pdf.alias_nb_pages()
+
+        margem_x = 15
+        if TIPO_CARTELA == 15:
+            margem_top_inicial = 32
+            largura_cartela = 70
+            altura_cartela_total = 38 
+            espaco_horizontal = 10
+            espaco_vertical = 6 
+            # 10 posições (2 colunas x 5 linhas)
+            posicoes = [(margem_x + (col * (largura_cartela + espaco_horizontal)), margem_top_inicial + (linha * (altura_cartela_total + espaco_vertical))) for linha in range(5) for col in range(2)]
+        else:
+            margem_top_inicial = 30
+            largura_cartela = 70
+            altura_cartela_total = 64 
+            espaco_horizontal = 10
+            espaco_vertical = 12 
+            # 6 posições (2 colunas x 3 linhas)
+            posicoes = [(margem_x + (col * (largura_cartela + espaco_horizontal)), margem_top_inicial + (linha * (altura_cartela_total + espaco_vertical))) for linha in range(3) for col in range(2)]
+
+        # ==============================================================================
+        # 🚀 MOTOR DE IMPRESSÃO (MATRIZ RODADAS X KITS ESPALHADOS)
+        # ==============================================================================
+        for rodada in range(1, combo_qtde + 1):
+            
+            # Sempre que muda a rodada, queremos que ela comece numa página nova limpa
+            cartela_idx_na_pagina = 0
+            
+            for num_inicial_base in numeros_iniciais_base:
+                # Descobre qual kit estamos a processar
+                kit_base = ((num_inicial_base - 1) // unidade_de_venda) + 1
+                kit_atual = kit_base + (rodada - 1)
+                
+                # Descobre a faixa de cartelas deste kit na rodada atual
+                ini_atual = ((kit_atual - 1) * unidade_de_venda) + 1
+                fim_atual = ini_atual + unidade_de_venda - 1
+
+                for num_cartela in range(ini_atual, fim_atual + 1):
+                    
+                    if cartela_idx_na_pagina == 0:
+                        pdf.add_page()
+                        
+                        # INJETA O CABEÇALHO DA RODADA
+                        pdf.set_font('Arial', 'B', 12)
+                        pdf.set_text_color(180, 0, 0)
+                        
+                        texto_destaque = f"RODADA: {rodada:02d}"
+                        # Mostra o kit apenas se as cartelas não forem vendidas à unidade
+                        if unidade_de_venda > 1:
+                            texto_destaque += f"   |   KIT: {kit_atual}"
+                            
+                        pdf.set_y(22 if TIPO_CARTELA == 15 else 22) # Altura padrão abaixo do header
+                        pdf.cell(0, 5, texto_destaque, 0, 1, 'C')
+                        pdf.set_text_color(0, 0, 0)
+
+                    # Busca e desenha a cartela
+                    dados_cartela = buscar_dados_cartela_2d(num_cartela, TIPO_CARTELA)
+                    
+                    if not dados_cartela:
+                         print(f"Aviso: Dados da cartela {num_cartela} não encontrados.")
+                    else:
+                        if cartela_idx_na_pagina < len(posicoes):
+                            pos_x, pos_y = posicoes[cartela_idx_na_pagina]
+                            if TIPO_CARTELA == 15:
+                                pdf.desenhar_cartela_15(num_cartela, dados_cartela, pos_x, pos_y)
+                            else:
+                                pdf.desenhar_cartela(num_cartela, dados_cartela, pos_x, pos_y)
+                    
+                    cartela_idx_na_pagina += 1
+                    
+                    if cartela_idx_na_pagina >= len(posicoes):
+                        cartela_idx_na_pagina = 0
+
+        # ==============================================================================
+        
+        pdf_output = bytes(pdf.output()) 
+        
+        nick_limpo = clean_for_filename(nome_cliente)
+        # Nome do ficheiro mais genérico já que pode conter múltiplos kits dispersos
+        nome_arquivo = f'{nick_limpo}_eve{id_evento}_{TIPO_CARTELA}nums_Lote.pdf'
+        
+        response = make_response(pdf_output)
+        response.headers['Content-Type'] = 'application/pdf'
+        response.headers['Content-Disposition'] = f'attachment; filename="{nome_arquivo}"'
+        
+        return response
+
+    except Exception as e:
+        print(f"ERRO CRÍTICO ao gerar PDF Lote Híbrido: {e}")
         import traceback
         traceback.print_exc()
         return f"Erro interno: {e}"
