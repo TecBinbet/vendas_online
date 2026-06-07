@@ -197,16 +197,26 @@
                         </div>
                         
                         <div class="relative">
-                            <label for="nick_cliente_lite" class="font-bold text-gray-700 text-sm">Nome / Apelido:</label>
+                            <div class="flex justify-between items-center mb-1">
+                                <label for="nick_cliente_lite" class="font-bold text-gray-700 text-sm">Nome / Apelido:</label>
+                                
+                                <button type="button" onclick="ativarBuscaNickLite()" class="text-[11px] bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-1 rounded border border-blue-200 transition-colors flex items-center gap-1 font-semibold">
+                                    🔍 Busca Nick
+                                </button>
+                            </div>
+                            
                             <div class="flex gap-2">
                                 <input type="text" id="nick_cliente_lite" name="nick_cliente_lite" 
-       class="form-control flex-grow transition-colors" placeholder="Nome do cliente..." required autocomplete="off"
-       onkeydown="irParaProximoCampo(event, this)">
-                                <button type="button" onclick="limparCliente()" class="bg-white hover:bg-gray-100 text-red-600 px-3 py-1 rounded text-sm font-bold border border-red-200 transition shadow-sm">
+                                       class="form-control flex-grow transition-colors" placeholder="Nome do cliente..." required autocomplete="off"
+                                       onkeydown="irParaProximoCampo(event, this)"
+                                       onkeyup="handleLiteSearchInput(this)"> <button type="button" onclick="limparClienteLite()" class="bg-white hover:bg-gray-100 text-red-600 px-3 py-1 rounded text-sm font-bold border border-red-200 transition shadow-sm">
                                     Limpar
                                 </button>
                             </div>
-                            <span id="badge_cliente" class="absolute -top-1 right-0 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow hidden">Cadastrado!</span>
+                            
+                            <span id="badge_cliente" class="absolute -top-1 right-20 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow hidden">Cadastrado!</span>
+                            
+                            <div id="search-results-list" class="absolute z-50 w-full bg-white border border-gray-300 rounded-md shadow-xl mt-1" style="display: none; max-height: 250px; overflow-y: auto;"></div>
                         </div>
                     </div>
                     
@@ -412,6 +422,7 @@
         let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
         let Evento_ComboQtde = parseInt("{{ selected_event.combo_qtde | default('1') }}"); // 🚀 CARREGAMENTO DO COMBO
         let searchTimeout = null;
+
         const dadosImpressaoStr = '{{ print_data | tojson | safe if print_data else "null" }}';
         const dadosImpressao = dadosImpressaoStr !== "null" ? JSON.parse(dadosImpressaoStr) : null;
 
@@ -1253,8 +1264,6 @@ async function openUltimasVendas() {
             
             updateCartelasDisplay();
 
-            // ... (O resto do código do DOMContentLoaded com os disparos de Bluetooth mantém-se igual)
-
             // ====================================================
             // 🚀 DISPARO EXTERNO CORRIGIDO (Evita travar o WebView)        
             // ====================================================
@@ -1459,6 +1468,166 @@ async function openUltimasVendas() {
             }
         }
 
+        
+        // ==============================================================================
+        // 🚀 MÓDULO DE BUSCA NICK (VENDA LITE)
+        // ==============================================================================
+        let isBuscaNickAtiva = false;
+        let searchTimeout2 = null;
+
+        function ativarBuscaNickLite() {
+            isBuscaNickAtiva = true;
+            const inputNome = document.getElementById('nick_cliente_lite');
+            
+            inputNome.readOnly = false;
+            inputNome.classList.remove('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+            
+            inputNome.value = ''; 
+            inputNome.placeholder = 'Digite o Nick...'; // Deixamos claro o que ele deve digitar
+            inputNome.focus();
+            
+            // 🚀 ADICIONADO 'bg-yellow-100' PARA MUDAR O FUNDO
+            inputNome.classList.add('ring-2', 'ring-blue-500', 'border-blue-500', 'bg-yellow-100');
+        }
+
+        function handleLiteSearchInput(inputElement) {
+            if (!isBuscaNickAtiva) return; 
+
+            const termo = inputElement.value.trim();
+            const resultsDiv = document.getElementById('search-results-list');
+            
+            // Usando o timeout correto para esta função
+            if (searchTimeout2) clearTimeout(searchTimeout2);
+            
+            if (termo.length < 2) { 
+                resultsDiv.style.display = 'none'; 
+                return; 
+            }
+            
+            searchTimeout2 = setTimeout(() => { executarBuscaLite(termo); }, 250);
+        }
+
+        // 🚀 Função auxiliar para mascarar o telefone na lista de resultados
+        function formatarTelefoneString(v) {
+            if (!v) return '';
+            v = String(v).replace(/\D/g, ''); // Remove tudo o que não é número
+            if (v.length > 11) v = v.slice(0, 11);
+            if (v.length >= 3) {
+                return `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7)}`;
+            }
+            return v;
+        }
+
+        async function executarBuscaLite(termo) {
+            const resultsDiv = document.getElementById('search-results-list');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<div class="p-3 text-gray-500 text-center text-sm">⏳ Buscando...</div>';
+            
+            try {
+                // Chama a API da venda normal, buscando por nick
+                const response = await fetch(`/buscar_clientes?termo=${encodeURIComponent(termo)}&tipo=nick`);
+                const data = await response.json();
+                
+                resultsDiv.innerHTML = '';
+                
+                if (data.clientes && data.clientes.length > 0) {
+                    data.clientes.forEach(cli => {
+                        const div = document.createElement('div');
+                        div.className = 'p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors';
+                        
+                        // Formata o telefone
+                        const telFormatado = formatarTelefoneString(cli.telefone);
+                        const nomeColab = cli.nome_colaborador && cli.nome_colaborador !== 'S/C' ? cli.nome_colaborador : cli.id_colaborador;
+                        
+                        // 🚀 CORREÇÃO AQUI: Sintaxe corrigida e limpa
+                        div.innerHTML = `
+                            <div class="font-bold text-gray-800 text-sm">${cli.nick || cli.nome}</div>
+                            <div class="text-xs text-gray-500 mt-1">Colab: ${nomeColab} ${telFormatado ? '| Tel: ' + telFormatado : ''}</div>
+                        `;
+                        
+                        div.onclick = () => selecionarClienteLite(cli);
+                        resultsDiv.appendChild(div);
+                    });
+                } else { 
+                    resultsDiv.innerHTML = '<div class="p-3 text-gray-500 text-center text-sm">Nenhum nick encontrado.</div>'; 
+                }
+            } catch (err) { 
+                resultsDiv.innerHTML = '<div class="p-3 text-red-500 text-center text-sm">Erro na busca.</div>'; 
+            }
+        }
+
+        function selecionarClienteLite(cliente) {
+            const inputNome = document.getElementById('nick_cliente_lite');
+            const inputTelefone = document.getElementById('telefone_cliente_lite'); // Pegando o ID correto
+            const badge = document.getElementById('badge_cliente');
+            const idInput = document.getElementById('id_cliente_lite');
+            const colabInput = document.getElementById('colaborador_cliente_lite');
+            
+            // 1. Preenche Nome, ID e Colaborador
+            inputNome.value = cliente.nick || cliente.nome;
+            if (idInput) idInput.value = cliente.id;
+            if (colabInput && cliente.colaborador) colabInput.value = cliente.colaborador;
+            
+            // 2. Preenche e Formata o Telefone
+            if (inputTelefone && cliente.telefone) {
+                // Coloca o número no campo e chama a sua função já existente para formatar
+                inputTelefone.value = cliente.telefone;
+                formatarTelefone(inputTelefone); 
+                
+                // Evita que o onblur do telefone dispare uma busca redundante
+                ultimoWhatsAppBuscado = cliente.telefone.replace(/\D/g, ''); 
+            }
+
+            if(badge) badge.classList.remove('hidden');
+
+            isBuscaNickAtiva = false;
+            document.getElementById('search-results-list').style.display = 'none';
+            inputNome.placeholder = 'Nome do cliente...';
+            inputNome.classList.remove('ring-2', 'ring-blue-500', 'border-blue-500');
+            
+            inputNome.readOnly = true;
+            inputNome.classList.add('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+            
+            // 3. Foco no próximo campo (Kit ou Quantidade)
+            const kitInput = document.getElementById('numero_kit_inicial');
+            const qtdInput = document.getElementById('quantidade') || document.querySelector('input[name="quantidade"]');
+            
+            if (kitInput && !kitInput.disabled) {
+                setTimeout(() => kitInput.focus(), 100);
+            } else if (qtdInput && !qtdInput.disabled) {
+                setTimeout(() => qtdInput.focus(), 100);
+            }
+        }
+
+        // Função de Limpar ajustada para resetar o modo busca
+        function limparClienteLite() {
+            const inputNome = document.getElementById('nick_cliente_lite');
+            const inputTelefone = document.getElementById('telefone_lite') || document.getElementById('telefone_cliente_lite');
+            const badge = document.getElementById('badge_cliente');
+            const resultsDiv = document.getElementById('search-results-list');
+
+            inputNome.value = '';
+            inputNome.placeholder = 'Nome do cliente...';
+            inputNome.classList.remove('ring-2', 'ring-blue-500', 'border-blue-500');
+            if(inputTelefone) inputTelefone.value = '';
+            if(badge) badge.classList.add('hidden');
+            if(resultsDiv) resultsDiv.style.display = 'none';
+            
+            isBuscaNickAtiva = false;
+            inputNome.focus();
+        }
+
+        // Esconde a lista se clicar fora
+        document.addEventListener('click', function(event) {
+            const resultsDiv = document.getElementById('search-results-list');
+            const inputNome = document.getElementById('nick_cliente_lite');
+            
+            if (resultsDiv && event.target !== inputNome && event.target !== resultsDiv && !resultsDiv.contains(event.target)) {
+                resultsDiv.style.display = 'none';
+            }
+        });
+
+
     </script>
 
     {% if success and print_data %}
@@ -1518,6 +1687,8 @@ async function openUltimasVendas() {
             </button>
         </div>
     </div>
+    
+
 
     <script>
         // Foca automaticamente no botão "Nova Venda" para o operador fechar rápido com Enter

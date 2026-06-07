@@ -3197,6 +3197,8 @@ def buscar_clientes():
     termo = request.args.get('termo', '').strip()
     tipo_busca = request.args.get('tipo', 'nick') # nick, nome, id
     
+    #print(f"🔍 DEBUG BUSCA - Termo: '{termo}', Tipo: '{tipo_busca}'") # LOG
+    
     if not termo or len(termo) < 2: 
          return jsonify({'clientes': []})
 
@@ -3204,7 +3206,6 @@ def buscar_clientes():
     
     try:
         if tipo_busca == 'id':
-            # ID continua sendo busca exata ou contém digitos
             clean_id = re.sub(r'\D', '', termo)
             if clean_id.isdigit():
                 query_filter = {'id_cliente': int(clean_id)}
@@ -3212,7 +3213,6 @@ def buscar_clientes():
                 return jsonify({'clientes': []})
                 
         elif tipo_busca == 'nome':
-            # O '^' diz ao Banco: "Busque apenas se COMEÇAR com isso"
             regex_term = re.compile(f"^{re.escape(termo)}", re.IGNORECASE)
             query_filter = {'nome_cliente': {'$regex': regex_term}}
             
@@ -3222,24 +3222,29 @@ def buscar_clientes():
             
         clientes_cursor = db.clientes.find(
             query_filter, 
-            # 🚀 CORREÇÃO: Adicionado 'id_colaborador': 1 para o Mongo devolver este campo
-            {'id_cliente': 1, 'nome_cliente': 1, 'nick': 1, 'cidade': 1, 'id_colaborador': 1}
-        ).limit(10) # Mantém o limite para ser rápido
+            # 🚀 CORREÇÃO 1: Faltava o 'telefone': 1 aqui! E adicionei 'nome_colaborador'.
+            {'id_cliente': 1, 'nome_cliente': 1, 'nick': 1, 'cidade': 1, 'id_colaborador': 1, 'telefone': 1, 'nome_colaborador': 1}
+        ).limit(10)
         
         resultados = []
         for cli in clientes_cursor:
+            telefone_bd = cli.get('telefone', '')
+            #print(f"✅ DEBUG DB - Achou: {cli.get('nick')} | Tel: {telefone_bd}") # LOG
+            
             resultados.append({
                 'id': cli.get('id_cliente'),
                 'nome': cli.get('nome_cliente'),
                 'nick': cli.get('nick'),
-                'id_colaborador': cli.get('id_colaborador', 0), # 🚀 Garante que vai como 0 se não existir
+                'telefone': telefone_bd,  
+                'id_colaborador': cli.get('id_colaborador', 0),
+                'nome_colaborador': cli.get('nome_colaborador', 'S/C'),
                 'cidade': cli.get('cidade', 'N/A')
             })
             
         return jsonify({'clientes': resultados})
 
     except Exception as e:
-        print(f"Erro na busca dinâmica: {e}")
+        print(f"❌ Erro na busca dinâmica: {e}") # LOG
         return jsonify({'clientes': [], 'error': str(e)})
 
 
