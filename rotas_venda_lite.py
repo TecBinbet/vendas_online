@@ -223,20 +223,22 @@ def processar_venda_lite():
         return redirect(url_for('venda_lite.nova_venda_lite', **error_redirect_kwargs))
 
     # ==========================================================================
-    # 🚀 PARÂMETROS GLOBAIS (Leitura 100% segura do painel)
+    # 🚀 PARÂMETROS GLOBAIS (Leitura 100% Segura com Precisão de Sala)
     # ==========================================================================
-    if hasattr(g, 'parametros_globais'):
-        padrao_venda = g.parametros_globais.get('padrao_registro_vendas', 'quantidade')
-        
-        # Converte de forma blindada para booleano
-        v_aleatoria = g.parametros_globais.get('venda_aleatoria', False)
-        modo_aleatorio = str(v_aleatoria).lower() in ['true', '1', 'sim', 'on']
-    else:
-        padrao_venda = 'quantidade'
-        modo_aleatorio = False
+    id_sala = session.get('id_sala', '000')
+    parametros_sala = db.parametros.find_one({'id_sala': id_sala})
+    if not parametros_sala:
+        parametros_sala = db.parametros.find_one({'id_sala': f"SALA{id_sala}"}) or {}
+
+    padrao_venda = parametros_sala.get('padrao_registro_vendas', 'quantidade')
+    
+    # Converte de forma blindada para booleano
+    v_aleatoria = parametros_sala.get('venda_aleatoria', False)
+    modo_aleatorio = str(v_aleatoria).lower() in ['true', '1', 'sim', 'on']
 
     tipo_cartela = int(selected_event.get('tipo_de_cartela', 15))
     id_evento_int_para_controle = selected_event.get('id_evento')
+
     limite_maximo_cartelas = int(selected_event.get('numero_maximo', 72000))
     valor_unitario = safe_float(selected_event.get('valor_de_venda', 0.00))
     unidade_de_venda = int(selected_event.get('unidade_de_venda', 1))
@@ -283,8 +285,14 @@ def processar_venda_lite():
             numero_inicial_atual = ((numero_kit_inicial - 1) * unidade_de_venda) + 1
             numero_final_atual = numero_kit_final * unidade_de_venda
             
-            from app import checar_conflito_venda
-            conflito = checar_conflito_venda(db, numero_inicial_atual, numero_final_atual, id_evento_int_para_controle)
+            # 🚀 VERIFICAÇÃO DE CONFLITO DIRETA (Resolve o ImportError)
+            # Verifica se já existe alguma venda que cruza com o nosso início e fim
+            conflito = db[nome_colecao_venda].find_one({
+                '$or': [
+                    {'numero_inicial': {'$lte': numero_final_atual}, 'numero_final': {'$gte': numero_inicial_atual}},
+                    {'numero_inicial2': {'$lte': numero_final_atual}, 'numero_final2': {'$gte': numero_inicial_atual}}
+                ]
+            })
         
             if conflito:
                 error_redirect_kwargs['error'] = "⛔ Venda Bloqueada: Este período ou parte dele já foi vendido!"

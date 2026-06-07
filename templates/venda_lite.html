@@ -397,7 +397,11 @@
 
             <div class="flex flex-col gap-3">
                 <button onclick="executarAcao('imprimir')" class="btn bg-gray-700 text-white py-3 shadow">🖨️ Imprimir</button>
-                <button onclick="executarAcao('whatsapp')" class="btn bg-green-600 text-white py-3 shadow">📲 Enviar / Copiar</button>
+                
+                <button id="btn-modal-whatsapp" onclick="executarAcao('whatsapp')" class="btn bg-green-600 text-white py-3 shadow">📲 Enviar Link</button>
+                
+                <button id="btn-modal-pdf" onclick="executarAcao('empdf')" class="btn bg-blue-600 text-white py-3 shadow" style="display: none;">📄 Baixar / Abrir PDF</button>
+
                 <button onclick="document.getElementById('acao-modal').style.display='none'" class="btn bg-red-500 text-white py-2 mt-2 shadow">Fechar</button>
             </div>
         </div>
@@ -1289,7 +1293,23 @@ async function openUltimasVendas() {
             document.getElementById('temp-id-cliente').value = idCliente;
             document.getElementById('temp-tipo-acao').value = tipo;
     
+            // Define o título do Modal
             document.getElementById('titulo-acao').innerText = (tipo === 'cupom' ? 'Cupom de Venda' : 'Cartelas do Cliente');
+            
+            // 🚀 LÓGICA DE VISIBILIDADE DOS BOTÕES (PDF e WhatsApp)
+            const btnPdf = document.getElementById('btn-modal-pdf');
+            const btnWhatsApp = document.getElementById('btn-modal-whatsapp');
+
+            if (btnPdf && btnWhatsApp) {
+                if (tipo === 'cartelas') {
+                    btnPdf.style.display = 'block'; // Mostra o botão do PDF
+                    btnWhatsApp.innerText = '📲 Enviar Link'; // Define texto para link
+                } else {
+                    btnPdf.style.display = 'none'; // Esconde botão de PDF para Cupons
+                    btnWhatsApp.innerText = '📲 Enviar / Copiar'; // Retorna texto para cupom txt
+                }
+            }
+
             document.getElementById('acao-modal').style.display = 'flex';
         }
 
@@ -1324,8 +1344,18 @@ async function openUltimasVendas() {
                 if (formaEnvio === 'imprimir') {
                     // Usa a função de impressão 58mm
                     imprimirCartelas58mm(dados);
-                } else {
-                    // 🚀 CORREÇÃO: Usa a função híbrida atualizada, passando idVenda no lugar de numIni/numFin
+                } 
+                else if (formaEnvio === 'empdf') {
+                    // 🚀 NOVA AÇÃO: Gera o PDF e abre na nova aba
+                    await handleGerarPdfLite(
+                        idVenda, 
+                        idEvento, 
+                        dados.nome_cliente, 
+                        dados.tipo_cartela
+                    );
+                } 
+                else if (formaEnvio === 'whatsapp') {
+                    // Usa a função híbrida atualizada
                     enviarPdfViaWhatsApp(
                         idVenda, 
                         idEvento, 
