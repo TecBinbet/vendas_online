@@ -184,8 +184,8 @@
                 <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
                 <input type="hidden" name="modo_aleatorio" id="input_modo_aleatorio" value="false">
                 
-                <div class="form-group relative -mt-3 bg-green-50/50 p-2 rounded-lg border border-green-200 shadow-sm">
-                    <h3 class="text-xs font-bold text-green-800 mb-2 border-b border-green-200 pb-1 uppercase tracking-wider">Identificação do Cliente</h3>
+                <div class="form-group relative -mt-3 bg-green-50/50 p-1 rounded-lg border border-green-200 shadow-sm">
+                    <h3 class="text-xs font-black text-green-800 mb-1 border-b border-green-200 pb-1 uppercase tracking-wider">Identificação do Cliente</h3>
                     
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
                         <div>
@@ -225,10 +225,10 @@
                 </div>
 
                 {% if selected_event.combo_qtde and selected_event.combo_qtde > 1 %}
-                <div class="bg-orange-100 border-l-4 border-orange-500 p-1 -mt-1 -mb-1 rounded shadow-sm">
-                    <div class="flex items-center gap-2 mb-1">
-                        <span class="text-xl">🔥</span>
-                        <strong class="text-orange-800 text-sm uppercase tracking-tight">Venda de COMBO Ativa ({{ selected_event.combo_qtde }} Eventos)</strong>
+                <div class="bg-orange-100 border-l-4 border-orange-500 p-1 mt-1 -mb-1 rounded shadow-sm">
+                    <div class="flex items-center gap-2">
+                        <span class="text-xs">🔥</span>
+                        <strong class="text-orange-800 text-xs uppercase tracking-tight">Venda de COMBO Ativa ({{ selected_event.combo_qtde }} Eventos)</strong>
                     </div>
                 </div>
                 {% endif %}
@@ -1455,6 +1455,14 @@ async function openUltimasVendas() {
                 
                 // Só avança se o campo não estiver vazio
                 if (input.value.trim() !== '') {
+                    
+                    // 🚀 NOVA LÓGICA: Formata a primeira letra de cada palavra para maiúscula
+                    input.value = input.value
+                        .toLowerCase()
+                        .split(' ')
+                        .map(palavra => palavra.charAt(0).toUpperCase() + palavra.slice(1))
+                        .join(' ');
+
                     const kitInput = document.getElementById('numero_kit_inicial');
                     const qtdInput = document.getElementById('quantidade');
                     
@@ -1475,18 +1483,28 @@ async function openUltimasVendas() {
         let isBuscaNickAtiva = false;
         let searchTimeout2 = null;
 
+        // 2. Ativar modo busca (Limpando o telefone)
         function ativarBuscaNickLite() {
             isBuscaNickAtiva = true;
             const inputNome = document.getElementById('nick_cliente_lite');
+            const inputTelefone = document.getElementById('telefone_cliente_lite') || document.getElementById('telefone_lite');
+            
+            // 1 - Limpa o campo de telefone ao iniciar a busca por Nick
+            if (inputTelefone) {
+                inputTelefone.value = '';
+            }
+            if (typeof ultimoWhatsAppBuscado !== 'undefined') {
+                ultimoWhatsAppBuscado = ''; // Reseta a trava de busca do WhatsApp
+            }
             
             inputNome.readOnly = false;
             inputNome.classList.remove('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
             
             inputNome.value = ''; 
-            inputNome.placeholder = 'Digite o Nick...'; // Deixamos claro o que ele deve digitar
+            inputNome.placeholder = 'Digite o Nick...';
             inputNome.focus();
             
-            // 🚀 ADICIONADO 'bg-yellow-100' PARA MUDAR O FUNDO
+            // Adiciona o destaque visual amarelo para indicar modo busca
             inputNome.classList.add('ring-2', 'ring-blue-500', 'border-blue-500', 'bg-yellow-100');
         }
 
@@ -1537,6 +1555,7 @@ async function openUltimasVendas() {
                         
                         // Formata o telefone
                         const telFormatado = formatarTelefoneString(cli.telefone);
+                             
                         const nomeColab = cli.nome_colaborador && cli.nome_colaborador !== 'S/C' ? cli.nome_colaborador : cli.id_colaborador;
                         
                         // 🚀 CORREÇÃO AQUI: Sintaxe corrigida e limpa
@@ -1556,39 +1575,46 @@ async function openUltimasVendas() {
             }
         }
 
+        // 5. Preencher campos após selecionar (Voltando à cor padrão)
         function selecionarClienteLite(cliente) {
             const inputNome = document.getElementById('nick_cliente_lite');
-            const inputTelefone = document.getElementById('telefone_cliente_lite'); // Pegando o ID correto
+            const inputTelefone = document.getElementById('telefone_cliente_lite') || document.getElementById('telefone_lite');
             const badge = document.getElementById('badge_cliente');
             const idInput = document.getElementById('id_cliente_lite');
             const colabInput = document.getElementById('colaborador_cliente_lite');
             
-            // 1. Preenche Nome, ID e Colaborador
-            inputNome.value = cliente.nick || cliente.nome;
+            // Preenche Nome, ID e Colaborador
+            if (inputNome) inputNome.value = cliente.nick || cliente.nome;
             if (idInput) idInput.value = cliente.id;
             if (colabInput && cliente.colaborador) colabInput.value = cliente.colaborador;
             
-            // 2. Preenche e Formata o Telefone
+            // Preenche e formata o Telefone
             if (inputTelefone && cliente.telefone) {
-                // Coloca o número no campo e chama a sua função já existente para formatar
                 inputTelefone.value = cliente.telefone;
-                formatarTelefone(inputTelefone); 
-                
-                // Evita que o onblur do telefone dispare uma busca redundante
-                ultimoWhatsAppBuscado = cliente.telefone.replace(/\D/g, ''); 
+                if (typeof formatarTelefone === 'function') {
+                    formatarTelefone(inputTelefone); 
+                }
+                if (typeof ultimoWhatsAppBuscado !== 'undefined') {
+                    ultimoWhatsAppBuscado = cliente.telefone.replace(/\D/g, ''); 
+                }
             }
 
-            if(badge) badge.classList.remove('hidden');
+            if (badge) badge.classList.remove('hidden');
 
             isBuscaNickAtiva = false;
-            document.getElementById('search-results-list').style.display = 'none';
-            inputNome.placeholder = 'Nome do cliente...';
-            inputNome.classList.remove('ring-2', 'ring-blue-500', 'border-blue-500');
+            const resultsDiv = document.getElementById('search-results-list');
+            if (resultsDiv) resultsDiv.style.display = 'none';
             
-            inputNome.readOnly = true;
-            inputNome.classList.add('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+            if (inputNome) {
+                inputNome.placeholder = 'Nome do cliente...';
+                
+                // 2 - Remove TODAS as cores (amarelo da busca e azul de travamento) para voltar à cor padrão
+                inputNome.classList.remove('ring-2', 'ring-blue-500', 'border-blue-500', 'bg-yellow-100', 'bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+                
+                // Mantemos apenas readOnly para não editar o nick acidentalmente após escolher na lista
+                inputNome.readOnly = true; 
+            }
             
-            // 3. Foco no próximo campo (Kit ou Quantidade)
             const kitInput = document.getElementById('numero_kit_inicial');
             const qtdInput = document.getElementById('quantidade') || document.querySelector('input[name="quantidade"]');
             
@@ -1599,22 +1625,45 @@ async function openUltimasVendas() {
             }
         }
 
-        // Função de Limpar ajustada para resetar o modo busca
+        // 6. Função de limpar e reativar a tela (Voltando à cor padrão)
         function limparClienteLite() {
-            const inputNome = document.getElementById('nick_cliente_lite');
-            const inputTelefone = document.getElementById('telefone_lite') || document.getElementById('telefone_cliente_lite');
+            const telInput = document.getElementById('telefone_cliente_lite') || document.getElementById('telefone_lite');
+            const nickInput = document.getElementById('nick_cliente_lite');
             const badge = document.getElementById('badge_cliente');
             const resultsDiv = document.getElementById('search-results-list');
 
-            inputNome.value = '';
-            inputNome.placeholder = 'Nome do cliente...';
-            inputNome.classList.remove('ring-2', 'ring-blue-500', 'border-blue-500');
-            if(inputTelefone) inputTelefone.value = '';
+            if(telInput) telInput.value = '';
+            
+            if (nickInput) {
+                nickInput.value = '';
+                nickInput.placeholder = 'Nome do cliente...';
+                
+                // 2 - Remove todas as cores para garantir o fundo branco padrão
+                nickInput.classList.remove('ring-2', 'ring-blue-500', 'border-blue-500', 'bg-yellow-100', 'bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+                nickInput.readOnly = false; // Destranca o campo
+            }
+            
+            const idInput = document.getElementById('id_cliente_lite');
+            const colabInput = document.getElementById('colaborador_cliente_lite');
+            if (idInput) idInput.value = '0';
+            if (colabInput) colabInput.value = '';
+            
             if(badge) badge.classList.add('hidden');
             if(resultsDiv) resultsDiv.style.display = 'none';
             
+            if (typeof ultimoWhatsAppBuscado !== 'undefined') {
+                ultimoWhatsAppBuscado = ''; 
+            }
+            
+            localStorage.removeItem('lite_telefone');
+            localStorage.removeItem('lite_nick');
+            localStorage.removeItem('lite_id');
+            localStorage.removeItem('lite_colab');
+            
             isBuscaNickAtiva = false;
-            inputNome.focus();
+            
+            // Retorna o foco para o Nick para que possa digitar normalmente
+            if(telInput) telInput.focus();
         }
 
         // Esconde a lista se clicar fora

@@ -361,7 +361,7 @@ def processar_venda_lite():
                 "cpf": "", "cidade": "", "id_regional": regional_operador,
                 "id_colaborador": colaborador_id, "data_cadastro": hora_brasil(),
                 "data_atualizacao": hora_brasil(), "origem": "venda_lite_automatica",
-                "saldo_atual": Decimal128("0.00")
+                "saldo_atual": Decimal128("0.00"), "nome_colaborador": nick_colaborador_sessao
             }
             db.clientes.insert_one(novo_cliente)
 
