@@ -3341,9 +3341,13 @@ def cadastro_cliente():
             # --- 2. TRAVA DE VISÃO PARA LISTAGEM E CONSULTA ---
             base_query = {}
             if not is_master and id_regional_sessao:
-                # O gestor só vê clientes cujos donos (colaboradores) são da mesma regional
                 colabs_permitidos = [c['id_colaborador'] for c in db.colaboradores.find({"id_regional": int(id_regional_sessao)}, {"id_colaborador": 1})]
-                base_query["id_colaborador"] = {"$in": colabs_permitidos}
+                
+                # 🚀 CORREÇÃO: Vê clientes carimbados na regional OU que pertençam aos colaboradores dela
+                base_query["$or"] = [
+                    {"id_regional": int(id_regional_sessao)},
+                    {"id_colaborador": {"$in": colabs_permitidos}}
+                ]
 
             total_clientes = db.clientes.count_documents(base_query)
             filtro_colab = request.args.get('filtro_colab', type=int)     
