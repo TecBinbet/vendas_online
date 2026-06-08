@@ -3360,8 +3360,15 @@ def cadastro_cliente():
                 if session.get('nivel', 0) >= 4 and filtro_regional and filtro_regional.isdigit():
                     query_listagem["id_regional"] = int(filtro_regional)
 
-                # Busca ordenada pelo Mongo
-                clientes_cursor = db.clientes.find(query_listagem).sort("nick", pymongo.ASCENDING).limit(100)
+                # 🚀 NOVO: FILTRO ALFABÉTICO DE ALTA PERFORMANCE
+                letra_filtro = request.args.get('letra', '').upper()
+                if letra_filtro and len(letra_filtro) == 1 and letra_filtro.isalpha():
+                    # O símbolo '^' garante que só busca nomes que COMECEM com a letra
+                    regex_letra = re.compile(f"^{re.escape(letra_filtro)}", re.IGNORECASE)
+                    query_listagem["nick"] = {"$regex": regex_letra}
+
+                # Busca ordenada pelo Mongo (com Collation para ignorar maiúsculas/minúsculas)
+                clientes_cursor = db.clientes.find(query_listagem).collation({'locale': 'pt', 'strength': 2}).sort("nick", pymongo.ASCENDING).limit(100)
                 clientes_lista = list(clientes_cursor)
 
             elif active_view == 'consulta' and search_term:
@@ -3417,6 +3424,7 @@ def cadastro_cliente():
     }
     return render_template('cadastro_cliente.html', **context)
 
+
 @app.route('/resetar_senha_cliente/<int:id_cliente>', methods=['POST'])
 @login_required
 def resetar_senha_cliente(id_cliente):
@@ -3428,10 +3436,10 @@ def resetar_senha_cliente(id_cliente):
         return redirect(url_for('cadastro_cliente', view='listar', error="⛔ Acesso Negado: Apenas gestores podem resetar senhas."))
 
     try:
-        from werkzeug.security import generate_password_hash
+        import bcrypt # 🚀 CORREÇÃO: Usando a mesma biblioteca do cadastro
         
-        # Gera a nova senha criptografada com a palavra padrão "Senha"
-        nova_senha_hash = generate_password_hash("Senha")
+        # 🚀 CORREÇÃO: Gera a nova senha criptografada EXATAMENTE como no novo cadastro
+        nova_senha_hash = bcrypt.hashpw("Senha".encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
 
         result = db.clientes.update_one(
             {'id_cliente': id_cliente},
@@ -7847,6 +7855,7 @@ def gravar_replicacao():
     Rota final que grava as cópias caso o operador confirme.
     Refaz a verificação de segurança por precaução.
     INCLUI: Criação automática de Índices de Alta Performance para cada réplica.
+    BLINDAGEM: Separa a replicação normal da replicação de Combos.
     """
     if session.get('nivel', 0) < 3:
         return redirect(url_for('menu_operacoes', error="Acesso Negado."))
@@ -7868,6 +7877,9 @@ def gravar_replicacao():
         if not evento_molde:
             raise ValueError("Evento molde não localizado.")
 
+        # 🚀 IDENTIFICA SE O EVENTO É UM COMBO OU NORMAL
+        combo_qtde = int(evento_molde.get('combo_qtde', 1))
+
         # Data Base
         data_molde = evento_molde.get('data_evento', '')
         hora_molde = evento_molde.get('hora_evento', '')
@@ -7881,7 +7893,7 @@ def gravar_replicacao():
         premio_formatado = f"{premio_bruto:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
         eventos_para_inserir = []
-        ids_replicados = [] # 🚀 NOVO: Lista para guardar os IDs dos eventos gerados
+        ids_replicados = [] # Lista para guardar os IDs dos eventos gerados
 
         # Parâmetros e Modo Treino
         params = db.parametros.find_one({})
@@ -7915,7 +7927,7 @@ def gravar_replicacao():
                                         error=f"Conflito de horário detectado em {data_str} {hora_str}. Cancelado."))
 
             novo_id = get_next_evento_sequence()
-            ids_replicados.append(novo_id) # 🚀 NOVO: Guarda o ID gerado na lista
+            ids_replicados.append(novo_id) 
 
             nova_descricao = f"{novo_dt.strftime('%d/%m')} às {hora_str} - R$ {premio_formatado}"
 
@@ -7933,9 +7945,12 @@ def gravar_replicacao():
                 "status": status_replicas,
                 "data_ativado": None if status_replicas != 'ativo' else hora_brasil(),
                 "data_cadastro": hora_brasil(),
-                "id_colaborador": session.get('id_colaborador', 'N/A'),
-                "id_evento_principal_combo": id_evento_molde # 🚀 NOVO: O filho sabe quem é o pai
+                "id_colaborador": session.get('id_colaborador', 'N/A')
             })
+
+            # 🚀 CORREÇÃO CRUCIAL: Só aplica as regras de travamento se for um Combo de verdade
+            if combo_qtde > 1:
+                novo_evento["id_evento_principal_combo"] = id_evento_molde 
 
             eventos_para_inserir.append(novo_evento)
             
@@ -7993,9 +8008,8 @@ def gravar_replicacao():
         if eventos_para_inserir:
             db.eventos.insert_many(eventos_para_inserir)
             
-            # 🚀 NOVO: AMARRAÇÃO FINAL (PAI GUARDA OS FILHOS)
-            # Atualiza o evento original adicionando a lista de eventos relacionados ao combo
-            if ids_replicados:
+            # 🚀 CORREÇÃO CRUCIAL: Só atualiza o Pai com a lista de filhos se for geração de Combo
+            if combo_qtde > 1 and ids_replicados:
                 db.eventos.update_one(
                     {'id_evento': id_evento_molde},
                     {'$set': {'eventos_combo_relacionados': ids_replicados}}
