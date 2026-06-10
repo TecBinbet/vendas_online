@@ -350,13 +350,17 @@
                         </select>
                         <p class="text-[10px] text-blue-600 font-bold italic -mt-2">ESPECIAL - Destaque no setor de vendas</p>
                     </div>
-
+ 
+                    {% if g.parametros_globais.get('venda_lite') == True %} 
                     <div class="form-group">
                         <label for="combo_qtde" class="text-purple-700 font-bold">Venda p/ COMBO (Qtd Eventos):</label>
                         <input type="number" id="combo_qtde" name="combo_qtde" min="1" max="20" class="form-control bg-purple-50 border-purple-300 text-purple-900 font-bold focus:ring-purple-500"
                                value="{{ evento.get('combo_qtde', 1) }}">
                         <p class="text-[10px] text-purple-600 font-bold italic -mt-2">1 = Normal | 3 = Evento Atual + 2 Próximos</p>
                     </div>
+                    {% else %}                    
+                        <input type="hidden" id="combo_qtde" name="combo_qtde" value="1">
+                    {% endif %} 
 
                     <div class="form-group">
                         <label for="distribuir_cortesia">Cortesias (Qtd. por Cliente):</label>
