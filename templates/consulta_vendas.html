@@ -83,7 +83,7 @@
                 <a href="{{ url_for('consulta_vendas') }}" class="text-fm font-bold text-blue-600 hover:underline mt-2 inline-block">← Trocar Evento</a>
             </div>
 
-            {% if nivel == 3 %}
+            {% if nivel >= 3 %}
                 <div class="card">
                     <h3 class="text-xl font-semibold mb-0 text-gray-700">2. Filtrar por Colaborador</h3>
                     <form method="GET" action="{{ url_for('consulta_vendas') }}">
@@ -102,6 +102,17 @@
                         </div>
                     </form>
                 </div>
+
+                {% if not selected_event.get('id_evento_principal_combo') %}
+                    <button type="button" onclick="dispararCortesiaEmMassa('{{ selected_event.id_evento }}', '{{ selected_event.descricao_evento | default(selected_event.descricao) }}')" 
+                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2 px-4 rounded shadow transition flex items-center gap-1.5 mt-4">
+                        🎁 Dar Cortesia em Massa
+                    </button>
+                {% else %}
+                    <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded shadow-sm">
+                        ⚠️ <b>Evento Secundário (COMBO):</b> Para gerar cortesias, acesse o <b>Evento Principal</b> desta rodada. O sistema irá distribuir os bilhetes automaticamente para cá.
+                    </div>
+                {% endif %}
             {% endif %}
 
             <div class="mt-2">
@@ -187,6 +198,13 @@
                                 <span class="stat-label">Total de Kits Vendidos:</span>
                                 <span class="stat-value">{{ cartao.total_kits }}</span>
                             </div>
+
+                            <div class="stat-item">
+                                <span class="stat-label">Total de Cartelas:</span>
+                                <span class="stat-value">{{ cartao.total_cartelas }}</span>
+                            </div>
+
+
                             <!-- === BLOCO DE VALOR E COMISSÃO (Individual) === -->
                             <div class="stat-item col-span-2 md:col-span-3">
                                 <div class="flex flex-col md:flex-row justify-between md:items-center md:gap-4">
@@ -227,7 +245,7 @@
                     {% if selected_colab_id %} <div class="alert-info">Nenhuma venda encontrada para o filtro selecionado.</div>
                     {% elif nivel < 3 %}
                         <div class="alert-info">Você ainda não realizou nenhuma venda para este evento.</div>
-                    {% elif nivel == 3 and not id_colaborador_param %}
+                    {% elif nivel >= 3 and not id_colaborador_param %}
                         <div class="alert-info">Selecione um colaborador para ver os resultados.</div>
                     {% endif %}
                 {% endfor %}
@@ -250,6 +268,50 @@
                 // Envia o formulário logo em seguida
                 selectElement.form.submit();
             }
+
+function dispararCortesiaEmMassa(idEvento, descricaoEvento) {
+    const qtd = prompt(`🎁 AÇÃO DE CORTESIA EM MASSA\n\nQuantas unidades de kit deseja dar de cortesia para CADA cliente que comprou no evento:\n"${descricaoEvento}"?\n\n⚠️ Esta ação gerará bilhetes R$ 0,00 sequenciais.`);
+    
+    if (qtd === null) return; // Operador cancelou
+    
+    const qtdInt = parseInt(qtd);
+    if (isNaN(qtdInt) || qtdInt <= 0) {
+        alert("❌ Quantidade inválida! Digite um número maior que 0.");
+        return;
+    }
+
+    if (confirm(`⚠️ CONFIRMAÇÃO FINAL\n\nTem certeza que deseja dar ${qtdInt} kit(s) cortesia para TODOS os clientes compradores deste evento?\nEsta operação não pode ser desfeita.`)) {
+        
+        // Ativa o spinner se você tiver a função global no sistema
+        if (typeof ativarSpinner === 'function') {
+            ativarSpinner('A gerar bilhetes cortesia em massa...');
+        }
+
+        // Envia os dados usando FormData via POST
+        const formData = new FormData();
+        formData.append('qtd_cortesia', qtdInt);
+
+        fetch(`/api/aplicar_cortesia_evento/${idEvento}`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === 'success') {
+                alert(`✅ ${data.message}`);
+                window.location.reload(); // Recarrega para exibir as novas cortesias na lista
+            } else {
+                alert(`❌ Erro: ${data.message}`);
+                if (typeof window.onpageshow === 'function') window.onpageshow(); // Desativa spinner
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("❌ Falha de comunicação com o servidor.");
+        });
+    }
+}
+
     </script>
 
 </body>

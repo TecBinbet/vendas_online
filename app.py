@@ -3179,6 +3179,147 @@ def buscar_clientes_json():
         return jsonify([]), 500
 
 
+@app.route('/api/aplicar_cortesia_evento/<int:id_evento>', methods=['POST'])
+@login_required
+def aplicar_cortesia_evento(id_evento):
+    """
+    Gera vendas de cortesia integradas com a LÓGICA DE COMBO.
+    Lê os clientes do evento pai, e distribui as cortesias respeitando 
+    a FONTE DA VERDADE (maior numero_final registrado) de cada evento.
+    """
+    from bson import Decimal128 
+    import pymongo # Necessário para a ordenação descendente
+
+    if session.get('nivel', 0) < 3:
+        return jsonify({'status': 'error', 'message': '⛔ Acesso Negado.'}), 403
+
+    db = get_vendas_db()
+    if db is None:
+        return jsonify({'status': 'error', 'message': 'Banco de Dados Offline.'}), 500
+
+    try:
+        qtd_cortesia = int(request.form.get('qtd_cortesia', 0))
+        if qtd_cortesia <= 0:
+            return jsonify({'status': 'error', 'message': 'Informe uma quantidade válida.'}), 400
+    except ValueError:
+        return jsonify({'status': 'error', 'message': 'Quantidade inválida.'}), 400
+
+    try:
+        evento_principal = db.eventos.find_one({'id_evento': id_evento})
+        if not evento_principal:
+            return jsonify({'status': 'error', 'message': 'Evento não localizado.'}), 404
+
+        # TRAVA BACKEND: Bloqueia se tentarem disparar a partir de um evento Secundário
+        if evento_principal.get('id_evento_principal_combo'):
+            return jsonify({'status': 'error', 'message': 'As cortesias de um COMBO devem ser geradas a partir do evento Principal.'}), 400
+
+        # Mapeia quem receberá os bilhetes (Pai + Filhos)
+        eventos_relacionados = evento_principal.get('eventos_combo_relacionados', [])
+        lista_eventos_ids = [id_evento] + eventos_relacionados 
+
+        # Lê a lista de clientes APENAS do evento Principal
+        nome_colecao_principal = f"vendas{id_evento}"
+        vendas_existentes = db[nome_colecao_principal].find({}, {'id_cliente': 1, 'nome_cliente': 1, 'telefone_cliente': 1})
+        
+        clientes_unicos = {}
+        for v in vendas_existentes:
+            id_cli = v.get('id_cliente')
+            if id_cli and id_cli != 0: 
+                clientes_unicos[id_cli] = {
+                    'nick': v.get('nome_cliente', f'CLI {id_cli}'),
+                    'telefone': v.get('telefone_cliente', '')
+                }
+
+        if not clientes_unicos:
+            return jsonify({'status': 'error', 'message': 'Nenhuma venda encontrada para gerar cortesia.'}), 400
+
+        colaborador_id = session.get('id_colaborador', 'N/A')
+        nick_colaborador = session.get('nick', 'Sistema')
+        total_cortesias_geradas = 0
+
+        # LOOP MESTRE: Roda o Pai, e depois cada Filho
+        for id_ev in lista_eventos_ids:
+            ev_atual = db.eventos.find_one({'id_evento': id_ev})
+            if not ev_atual: continue
+
+            unidade_venda = int(ev_atual.get('unidade_de_venda', 6))
+            tipo_cartela = int(ev_atual.get('tipo_cartela', 15))
+            regional_operador = ev_atual.get('id_regional', 1)
+            id_evento_mongo = ev_atual.get('_id')
+            nome_colecao_atual = f"vendas{id_ev}"
+
+            # 🎯 LÓGICA INFALÍVEL (Sugerida por si): Busca a última venda real na coleção
+            ultima_venda = db[nome_colecao_atual].find_one({}, sort=[("numero_final", pymongo.DESCENDING)])
+            
+            if ultima_venda and 'numero_final' in ultima_venda:
+                ponteiro_cartela = int(ultima_venda['numero_final']) + 1
+            else:
+                # Se a coleção estiver incrivelmente vazia (ninguém comprou nada)
+                ponteiro_cartela = int(ev_atual.get('numero_inicial', 1))
+
+            vendas_cortesia_evento = []
+
+            for id_cliente_final, info_cliente in clientes_unicos.items():
+                
+                total_cartelas_cliente = qtd_cortesia * unidade_venda
+                numero_inicial_atual = ponteiro_cartela
+                numero_final_atual = ponteiro_cartela + total_cartelas_cliente - 1
+                
+                # Avança o ponteiro individual deste evento para o próximo cliente
+                ponteiro_cartela = numero_final_atual + 1
+
+                id_venda_formatado = f"CORT-{id_ev}-{numero_inicial_atual}"
+
+                registro_venda = {
+                    "id_venda": id_venda_formatado,
+                    "id_evento_ObjectId": id_evento_mongo, 
+                    "id_evento": id_ev, 
+                    "descricao_evento": ev_atual.get('descricao'),
+                    "id_regional": regional_operador,
+                    "id_cliente": id_cliente_final, 
+                    "nome_cliente": info_cliente['nick'],
+                    "telefone_cliente": info_cliente['telefone'],
+                    "id_colaborador": colaborador_id,
+                    "nick_colaborador": nick_colaborador,
+                    "id_vendedor": colaborador_id,
+                    "data_venda": hora_brasil(),
+                    "tipo_cartela": tipo_cartela,  
+                    "quantidade_unidades": qtd_cortesia,
+                    "quantidade_cartelas": total_cartelas_cliente,
+                    "numero_inicial": numero_inicial_atual,
+                    "numero_final": numero_final_atual,
+                    "numero_inicial2": 0, 
+                    "numero_final2": 0,
+                    "valor_unitario": Decimal128("0.00"), 
+                    "valor_total": Decimal128("0.00"),
+                    "origem": "bonificacao_em_massa_combo"
+                }
+                vendas_cortesia_evento.append(registro_venda)
+
+            # Grava no banco e atualiza o ponteiro para os próximos
+            if vendas_cortesia_evento:
+                db[nome_colecao_atual].insert_many(vendas_cortesia_evento)
+                
+                # Ainda atualizamos o controle_venda apenas para manter a interface do painel sincronizada
+                db.controle_venda.update_one(
+                    {'id_evento': id_ev},
+                    {'$set': {'inicial_proxima_venda': ponteiro_cartela}},
+                    upsert=True
+                )
+                total_cortesias_geradas += len(vendas_cortesia_evento)
+
+        registrar_log("CORTESIA", "VENDAS COMBO", f"Aplicada cortesia para {len(clientes_unicos)} clientes em {len(lista_eventos_ids)} eventos do combo {id_evento}.")
+        
+        return jsonify({
+            'status': 'success', 
+            'message': f'🔥 Sucesso Combo! {total_cortesias_geradas} registros de cortesia inseridos no total (Pai + Filhos)!'
+        })
+
+    except Exception as e:
+        print(f"Erro ao aplicar cortesia em massa combo: {e}")
+        return jsonify({'status': 'error', 'message': f'Erro interno: {str(e)}'}), 500
+
+
 # Consulta de Cliente
 # No seu arquivo app.py
 
@@ -4554,7 +4695,7 @@ def consulta_vendas():
                     res['valor_comissao_float'] = ((venda_via_colab * taxa) / 100.0) + ((venda_via_auto * comissao_autoatendimento) / 100.0)
                     res['total_valor_float'] = safe_float(res['total_valor'])
                     resultados_agregados.append(res)
-
+	
             # --- RESUMO GERAL ---
             if selected_colab_id_str == 'ALL' and resultados_agregados:
                 resumo_geral = {
@@ -4562,6 +4703,7 @@ def consulta_vendas():
                     'total_kits': sum(r['total_kits'] for r in resultados_agregados),
                     'total_valor_float': sum(r['total_valor_float'] for r in resultados_agregados),
                     'total_vendas': sum(r['total_vendas'] for r in resultados_agregados),
+                    'total_cartelas': sum(r['total_cartelas'] for r in resultados_agregados),  
                     'valor_comissao_float': sum(r['valor_comissao_float'] for r in resultados_agregados),
                     'data_inicial': min(r['data_inicial'] for r in resultados_agregados),
                     'data_final': max(r['data_final'] for r in resultados_agregados)
