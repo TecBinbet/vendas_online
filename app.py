@@ -3319,6 +3319,66 @@ def aplicar_cortesia_evento(id_evento):
         print(f"Erro ao aplicar cortesia em massa combo: {e}")
         return jsonify({'status': 'error', 'message': f'Erro interno: {str(e)}'}), 500
 
+@app.route('/api/listar_cortesias_pendentes/<int:id_evento>', methods=['GET'])
+@login_required
+def listar_cortesias_pendentes(id_evento):
+    """
+    Retorna a lista de clientes que receberam cortesia no evento.
+    Serve para preencher a modal de "Envios em Massa".
+    """
+    db = get_vendas_db()
+    if db is None:
+        return jsonify({'status': 'error', 'message': 'DB Offline'})
+
+    nome_colecao = f"vendas{id_evento}"
+
+    try:
+        # Busca apenas as vendas originadas do botão de cortesia
+        cursor = db[nome_colecao].find({
+            "origem": {"$in": ["bonificacao_em_massa", "bonificacao_em_massa_combo"]}
+        }).sort("numero_inicial", 1) # Ordena pela Fonte da Verdade (sequência real)
+
+        lista_cortesias = []
+        for c in cursor:
+            lista_cortesias.append({
+                "id_venda": c.get("id_venda"),
+                "nome_cliente": c.get("nome_cliente", "Desconhecido"),
+                "telefone": c.get("telefone_cliente", ""),
+                "cartelas": c.get("quantidade_cartelas", 0),
+                "numero_inicial": c.get("numero_inicial", 0),
+                "tipo_cartela": c.get("tipo_cartela", 15),
+                "enviado": c.get("status_envio_whatsapp", False)
+            })
+
+        return jsonify({'status': 'success', 'cortesias': lista_cortesias})
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
+@app.route('/api/marcar_envio_cortesia', methods=['POST'])
+@login_required
+def marcar_envio_cortesia():
+    """
+    Marca silenciosamente que o operador já chamou este cliente no WhatsApp.
+    """
+    db = get_vendas_db()
+    id_evento = request.form.get('id_evento')
+    id_venda = request.form.get('id_venda')
+
+    if not id_evento or not id_venda:
+        return jsonify({'status': 'error', 'message': 'Dados incompletos.'})
+
+    try:
+        nome_colecao = f"vendas{id_evento}"
+        db[nome_colecao].update_one(
+            {"id_venda": id_venda},
+            {"$set": {"status_envio_whatsapp": True}}
+        )
+        return jsonify({'status': 'success'})
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
 
 # Consulta de Cliente
 # No seu arquivo app.py

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Consulta de Vendas</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <style>
         body { background-color: #F7F7F7; }
         .card { background-color: white; border-radius: 1px; box-shadow: 0 1px 2px rgba(0,0,0,0.1); padding: 0.2rem; margin-bottom: 0.6rem; }
@@ -104,13 +105,20 @@
                 </div>
 
                 {% if not selected_event.get('id_evento_principal_combo') %}
-                    <button type="button" onclick="dispararCortesiaEmMassa('{{ selected_event.id_evento }}', '{{ selected_event.descricao_evento | default(selected_event.descricao) }}')" 
-                        class="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2 px-4 rounded shadow transition flex items-center gap-1.5 mt-4">
-                        🎁 Dar Cortesia em Massa
-                    </button>
+                    <div class="flex gap-2 mt-4">
+                        <button type="button" onclick="dispararCortesiaEmMassa('{{ selected_event.id_evento }}', '{{ selected_event.descricao_evento | default(selected_event.descricao) }}')" 
+                            class="bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs py-2 px-4 rounded shadow transition flex items-center gap-1.5">
+                            🎁 Dar Cortesia em Massa
+                        </button>
+                        
+                        <button type="button" onclick="abrirPainelCortesias('{{ selected_event.id_evento }}')" 
+                            class="bg-green-600 hover:bg-green-700 text-white font-bold text-xs py-2 px-4 rounded shadow transition flex items-center gap-1.5">
+                            📲 Painel de Envios (Cortesias)
+                        </button>
+                    </div>
                 {% else %}
                     <div class="mt-4 p-3 bg-yellow-50 border border-yellow-200 text-yellow-800 text-xs rounded shadow-sm">
-                        ⚠️ <b>Evento Secundário (COMBO):</b> Para gerar cortesias, acesse o <b>Evento Principal</b> desta rodada. O sistema irá distribuir os bilhetes automaticamente para cá.
+                        ⚠️ <b>Evento Secundário (COMBO):</b> Para gerir cortesias, acesse o <b>Evento Principal</b>.
                     </div>
                 {% endif %}
             {% endif %}
@@ -255,6 +263,37 @@
         
     </div>
 
+<div id="modal-envios-cortesia" class="fixed inset-0 bg-black bg-opacity-60 z-50 hidden flex justify-center items-center backdrop-blur-sm">
+    <div class="bg-white w-11/12 md:w-3/4 lg:w-1/2 rounded-xl shadow-2xl flex flex-col max-h-[90vh]">
+        
+        <div class="bg-gray-50 border-b border-gray-200 p-2 rounded-t-xl flex justify-between items-center">
+            <h3 class="text-lg font-bold text-gray-800 flex items-center gap-2">
+                <span>📲</span> Controle de Envios (Cortesias)
+            </h3>
+            <button onclick="fecharPainelCortesias()" class="text-gray-400 hover:text-red-500 transition-colors">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
+        </div>
+
+        <div class="p-1 bg-white border-b border-gray-100 flex gap-2 justify-center">
+            <button onclick="filtrarListaCortesias('todos')" id="btn-filtro-todos" class="px-3 py-2 text-xs font-bold rounded-full bg-blue-100 text-blue-700 border border-blue-200 transition">Todos</button>
+            <button onclick="filtrarListaCortesias('pendentes')" id="btn-filtro-pendentes" class="px-3 py-2 text-xs font-bold rounded-full bg-gray-100 text-gray-600 border border-gray-200 hover:bg-yellow-100 hover:text-yellow-700 transition">⏳ Pendentes</button>
+            <button onclick="filtrarListaCortesias('enviados')" id="btn-filtro-enviados" class="px-3 py-2 text-xs font-bold rounded-full bg-gray-100 text-gray-600 border border-gray-200 hover:bg-green-100 hover:text-green-700 transition">✅ Enviados</button>
+        </div>
+
+        <div class="p-2 overflow-y-auto flex-grow bg-gray-50" id="corpo-lista-cortesias">
+            <div class="text-center text-gray-500 text-sm mt-10">Carregando lista...</div>
+        </div>
+
+        <div class="bg-white border-t border-gray-200 p-2 rounded-b-xl flex justify-end">
+            <button onclick="fecharPainelCortesias()" class="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold text-sm py-2 px-6 rounded shadow-sm transition">
+                Fechar Painel
+            </button>
+        </div>
+    </div>
+</div>
+
+
     <script>
             function ativarSpinnerFiltro(selectElement) {
                 const loadingSpinner = document.getElementById('loading-spinner');
@@ -311,6 +350,239 @@ function dispararCortesiaEmMassa(idEvento, descricaoEvento) {
         });
     }
 }
+
+// Variável global para armazenar os dados e permitir filtragem sem ir ao banco de novo
+let cortesiasAtuais = [];
+let idEventoAtualModal = null;
+
+// 1. Abrir Modal e Carregar Dados
+async function abrirPainelCortesias(idEvento) {
+    idEventoAtualModal = idEvento;
+    const modal = document.getElementById('modal-envios-cortesia');
+    const container = document.getElementById('corpo-lista-cortesias');
+    
+    modal.classList.remove('hidden');
+    container.innerHTML = '<div class="text-center text-gray-500 text-sm mt-10">⏳ Buscando registros...</div>';
+    
+    // Reseta filtros para "Todos"
+    filtrarListaCortesias('todos', true);
+
+    try {
+        const res = await fetch(`/api/listar_cortesias_pendentes/${idEvento}`);
+        const data = await res.json();
+        
+        if (data.status === 'success') {
+            cortesiasAtuais = data.cortesias;
+            renderizarListaCortesias(cortesiasAtuais);
+        } else {
+            container.innerHTML = `<div class="text-center text-red-500 text-sm mt-10">❌ Erro: ${data.message}</div>`;
+        }
+    } catch (err) {
+        container.innerHTML = '<div class="text-center text-red-500 text-sm mt-10">❌ Falha de comunicação.</div>';
+    }
+}
+
+// 2. Fechar Modal
+function fecharPainelCortesias() {
+    document.getElementById('modal-envios-cortesia').classList.add('hidden');
+}
+
+// 3. Renderizar a Lista no HTML
+function renderizarListaCortesias(lista) {
+    const container = document.getElementById('corpo-lista-cortesias');
+    container.innerHTML = '';
+    
+    if (lista.length === 0) {
+        container.innerHTML = '<div class="text-center text-gray-500 text-sm mt-10">Nenhum registro encontrado para este filtro.</div>';
+        return;
+    }
+
+    // 🚀 O PULO DO GATO: Agrupar a lista por Telefone/Cliente para não duplicar na tela
+    const agrupado = {};
+    lista.forEach(c => {
+        // Criamos uma chave única combinando o nome e o telefone do cliente
+        const chave = `${c.nome_cliente}_${c.telefone || 'S-N'}`;
+        
+        if (!agrupado[chave]) {
+            agrupado[chave] = {
+                nome_cliente: c.nome_cliente,
+                telefone: c.telefone,
+                tipo_cartela: c.tipo_cartela,
+                total_cartelas: 0,
+                // Guardamos uma lista de IDs de venda para dar baixa em todos de uma vez só!
+                ids_vendas: [],
+                // Guardamos as numerações iniciais para exibir de forma elegante
+                numeracoes: [],
+                // Se um dos registros estiver pendente, o status geral do bloco fica pendente
+                enviado: true 
+            };
+        }
+        
+        agrupado[chave].total_cartelas += c.cartelas;
+        agrupado[chave].ids_vendas.push(c.id_venda);
+        agrupado[chave].numeracoes.push(c.numero_inicial);
+        
+        // Se encontrar qualquer bilhete falso (não enviado), o bloco todo vira pendente
+        if (c.enviado === false) {
+            agrupado[chave].enviado = false;
+        }
+    });
+
+    // Agora iteramos sobre os clientes já consolidados e unificados!
+    Object.values(agrupado).forEach((c) => {
+        const div = document.createElement('div');
+        div.className = "bg-white p-1 rounded-lg shadow-sm border border-gray-100 mb-2 flex justify-between items-center transition hover:shadow-md";
+        
+        const isEnviado = c.enviado;
+        // Transforma o array [10, 20, 30] numa string legível "10, 20, 30"
+        const sequenciaIniciais = c.numeracoes.join(', ');
+        // Juntamos os IDs de venda separados por vírgula para passar para a função de envio
+        const stringIdsVendas = c.ids_vendas.join('|');
+        
+        div.innerHTML = `
+            <div class="flex-grow">
+                <div class="font-bold text-xl text-gray-800 -mt-3 -mb-1">${c.nome_cliente}</div>
+                <div class="text-xs text-gray-500 mt-1">
+                    Nº Iniciais: <span class="font-semibold text-blue-700">${sequenciaIniciais}</span> | 
+                    Total Cartelas: <span class="font-bold">${c.total_cartelas}</span> | 
+                    Tel: <span class="font-mono text-gray-700">${c.telefone || 'S/N'}</span>
+                </div>
+            </div>
+            <div class="ml-4 flex flex-col gap-1 items-end">
+                <span class="text-[10px] font-bold px-2 py-0.5 rounded-full ${isEnviado ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}">
+                    ${isEnviado ? '✅ ENVIADO' : '⏳ PENDENTE'}
+                </span>
+                
+                <button type="button" 
+                        onclick="processarEnvioCortesia('${stringIdsVendas}', '${idEventoAtualModal}', '${c.nome_cliente}', '${c.tipo_cartela}', '${c.telefone}', this)"
+                        class="mt-1 px-3 py-1.5 text-xs font-bold rounded transition-colors ${isEnviado ? 'bg-gray-100 text-gray-500 hover:bg-gray-200' : 'bg-green-500 text-white hover:bg-green-600 shadow-sm'}">
+                    ${isEnviado ? 'Reenviar PDF' : '📲 Chamar no Whats'}
+                </button>
+            </div>
+        `;
+        container.appendChild(div);
+    });
+}
+
+// 4. Lógica do Filtro Superior
+function filtrarListaCortesias(tipo, apenasVisual = false) {
+    // Ajusta o visual dos botões
+    ['todos', 'pendentes', 'enviados'].forEach(t => {
+        const btn = document.getElementById(`btn-filtro-${t}`);
+        if(t === tipo) {
+            btn.classList.add('bg-blue-100', 'text-blue-700', 'border-blue-200');
+            btn.classList.remove('bg-gray-100', 'text-gray-600', 'border-gray-200');
+        } else {
+            btn.classList.remove('bg-blue-100', 'text-blue-700', 'border-blue-200');
+            btn.classList.add('bg-gray-100', 'text-gray-600', 'border-gray-200');
+        }
+    });
+
+    if (apenasVisual) return; // Usado na inicialização para não renderizar lista vazia
+
+    let listaFiltrada = cortesiasAtuais;
+    if (tipo === 'pendentes') listaFiltrada = cortesiasAtuais.filter(c => !c.enviado);
+    if (tipo === 'enviados') listaFiltrada = cortesiasAtuais.filter(c => c.enviado);
+    
+    renderizarListaCortesias(listaFiltrada);
+}
+
+// 5. Ajuste na Função de Envio para dar baixa em múltiplos IDs simultaneamente
+async function processarEnvioCortesia(stringIdsVendas, idEvento, nomeCli, tipoCart, telCli, btnElement) {
+    if (!telCli || telCli === 'S/N') {
+        const novoTel = prompt("⚠️ Este cliente não tem telefone cadastrado. Digite o número com DDD para enviar:");
+        if (!novoTel) return;
+        telCli = novoTel.replace(/\D/g, '');
+    }
+
+    // Separamos os IDs novamente em formato de Array
+    const arrIds = stringIdsVendas.split('|');
+    
+    // 1. Dispara o WhatsApp usando o ID da primeira venda do grupo como referência para o PDF principal
+    if (typeof enviarPdfViaWhatsApp === 'function') {
+        enviarPdfViaWhatsApp(arrIds[0], idEvento, nomeCli, tipoCart, telCli);
+    } else {
+        alert("Função de envio padrão não encontrada na tela.");
+        return;
+    }
+
+    // 2. Avisa o backend para marcar o status de envio para CADA ID do grupo
+    for (const idVenda of arrIds) {
+        const formData = new FormData();
+        formData.append('id_evento', idEvento);
+        formData.append('id_venda', idVenda);
+
+        try {
+            await fetch('/api/marcar_envio_cortesia', {
+                method: 'POST',
+                body: formData
+            });
+            
+            // Atualiza o nosso cache global na memória para manter os filtros sincronizados
+            const idx = cortesiasAtuais.findIndex(c => c.id_venda === idVenda);
+            if (idx > -1) {
+                cortesiasAtuais[idx].enviado = true;
+                cortesiasAtuais[idx].telefone = telCli;
+            }
+        } catch (err) {
+            console.error("Falha ao registrar envio do ID " + idVenda, err);
+        }
+    }
+
+    // 3. Atualiza visualmente o bloco do cliente na tela para Verde/Sucesso
+    const parentDiv = btnElement.closest('.bg-white');
+    parentDiv.querySelector('span.text-\\[10px\\]').className = "text-[10px] font-bold px-2 py-0.5 rounded-full bg-green-100 text-green-700";
+    parentDiv.querySelector('span.text-\\[10px\\]').innerText = "✅ ENVIADO";
+    
+    btnElement.className = "mt-1 px-3 py-1.5 text-xs font-bold rounded transition-colors bg-gray-100 text-gray-500 hover:bg-gray-200";
+    btnElement.innerText = "Reenviar PDF";
+}
+
+
+        // Função para montar o link do PDF das Cartelas e enviar para o WhatsApp
+        function enviarPdfViaWhatsApp(idVenda, idEvento, nomeCliente, tipoCartela, telefoneCliente) {
+            console.log("--- LOG: Iniciando envio PDF WhatsApp ---");
+            console.log("Params recebidos:", { idVenda, idEvento, nomeCliente, tipoCartela, telefoneCliente });
+
+            // 1. Captura do idSala - Logs para ver se está a vir undefined
+            const idSalaInput = document.getElementById('id_sala');
+            const idSala = idSalaInput ? idSalaInput.value : '001';
+            console.log("ID da Sala capturado:", idSala);
+
+            // 2. Constrói o novo link
+            const baseUrl = `/gerar_pdf_lote_hibrido`;
+            const params = new URLSearchParams({
+                id_venda: idVenda,
+                id_evento: idEvento,
+                tipo_cartela: tipoCartela,
+                nome_cliente: nomeCliente,
+                id_sala: idSala
+            });
+            
+            const urlCompleta = window.location.origin + baseUrl + '?' + params.toString();
+            console.log("URL Final gerada:", urlCompleta);
+
+            // 3. Monta a mensagem
+            const textoMensagem = `Olá, ${nomeCliente}! 🎟️\n\nAcesse o link abaixo para visualizar e baixar o PDF das suas cartelas:\n\n🔗 ${urlCompleta}`;
+
+            bingoAlert("⏳ Abrindo WhatsApp...", 2000, '#27ae60');
+
+            // 4. Teste de execução
+            if (typeof abrirWhatsApp === 'function') {
+                console.log("Executando abrirWhatsApp global...");
+                abrirWhatsApp(textoMensagem, telefoneCliente);
+            } else {
+                console.warn("Função 'abrirWhatsApp' não encontrada! Usando fallback...");
+                const numeroLimpo = telefoneCliente.replace(/\D/g, '');
+                const ddi = (numeroLimpo.length === 10 || numeroLimpo.length === 11) ? '55' : '';
+                const msgCodificada = encodeURIComponent(textoMensagem);
+                
+                const finalUrl = `https://wa.me/${ddi}${numeroLimpo}?text=${msgCodificada}`;
+                console.log("Abrindo link direto:", finalUrl);
+                window.open(finalUrl, '_blank');
+            }
+        } 
+
 
     </script>
 

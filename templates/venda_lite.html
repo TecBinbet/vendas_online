@@ -410,7 +410,7 @@
                 
                 <button id="btn-modal-whatsapp" onclick="executarAcao('whatsapp')" class="btn bg-green-600 text-white py-3 shadow">📲 Enviar Link</button>
                 
-                <button id="btn-modal-pdf" onclick="executarAcao('empdf')" class="btn bg-blue-600 text-white py-3 shadow" style="display: none;">📄 Baixar / Abrir PDF</button>
+                <button id="btn-modal-pdf" onclick="executarAcao('empdf')" class="btn bg-blue-600 text-white py-3 shadow" style="display: none;">📄 Enviar o PDF</button>
 
                 <button onclick="document.getElementById('acao-modal').style.display='none'" class="btn bg-red-500 text-white py-2 mt-2 shadow">Fechar</button>
             </div>
@@ -1177,7 +1177,68 @@ async function openUltimasVendas() {
             }, 2000);
         }
 
-        async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
+async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
+    const baseUrl = `/gerar_pdf_lote_hibrido`;
+    const params = new URLSearchParams({
+        id_venda: idVenda,
+        id_evento: idEvento,
+        tipo_cartela: tipoCartela,
+        nome_cliente: nomeCliente
+    });
+
+    const urlCompleta = window.location.origin + baseUrl + '?' + params.toString();
+
+    // VERIFICA ONDE O SISTEMA ESTÁ RODANDO
+    if (typeof window.AndroidTerminal !== 'undefined') {
+        // --- 1. ESTÁ NO APP ANDROID (Mantém o comportamento original estável) ---
+        bingoAlert("⏳ Abrindo WhatsApp...", 2000, '#0047AB');
+        const urlPdfCodificada = encodeURIComponent(urlCompleta);
+        const nomeCodificado = encodeURIComponent(`Cartelas_${nomeCliente}.pdf`);
+
+        window.location.href = `meuapp://enviarpdf?url=${urlPdfCodificada}&nome=${nomeCodificado}`;
+
+    } else {
+        // --- 2. ESTÁ NO COMPUTADOR OU NAVEGADOR MOBILE EXTERNO ---
+        bingoAlert("⏳ Preparando PDF para envio...", 2000, '#0047AB');
+
+        try {
+            // 1. Verifica se o navegador suporta a API de compartilhamento de arquivos (ex: smartphones/safari)
+            if (navigator.canShare && navigator.share) {
+                
+                // 2. Baixa o PDF para a memória do navegador (Blob) de forma invisível
+                const response = await fetch(urlCompleta);
+                const blob = await response.blob();
+                
+                // 3. Cria o arquivo virtual idêntico ao modelo de consulta
+                const file = new File([blob], `cartelas_${idEvento}.pdf`, { type: "application/pdf" });
+                
+                // 4. Verifica se o navegador aceita o compartilhamento deste arquivo específico
+                if (navigator.canShare({ files: [file] })) {
+                    await navigator.share({
+                        files: [file],
+                        title: 'Cartelas de Bingo',
+                        text: `Olá ${nomeCliente}, aqui estão suas cartelas!`
+                    });
+                    // Se o fluxo rodar até aqui, a folha de compartilhamento nativa foi aberta com sucesso
+                } else {
+                    throw new Error("Compartilhamento de arquivos não suportado por este navegador.");
+                }
+            } else {
+                throw new Error("API de compartilhamento não suportada no ambiente atual.");
+            }
+        } catch (err) {
+            console.log("Fallback executado (Abertura em nova aba):", err);
+            
+            // --- 3. FALLBACK SEGURO PARA DESKTOP/PC ---
+            // Se o navegador não tiver suporte a share (como Chrome no Windows/Linux),
+            // ou se o usuário cancelar, ele abre o PDF na nova aba de forma limpa.
+            window.open(urlCompleta, '_blank');
+        }
+    }
+}
+
+
+        async function handleGerarPdfLiteB(idVenda, idEvento, nomeCliente, tipoCartela) {
             const baseUrl = `/gerar_pdf_lote_hibrido`;
             const params = new URLSearchParams({
                 id_venda: idVenda,
@@ -1356,12 +1417,13 @@ async function openUltimasVendas() {
                 } 
                 else if (formaEnvio === 'empdf') {
                     // 🚀 NOVA AÇÃO: Gera o PDF e abre na nova aba
-                    abrirPdfHibrido(
-                        idVenda, 
-                        idEvento, 
-                        dados.nome_cliente, 
-                        dados.tipo_cartela
-                    );
+                    await handleGerarPdfLite(idVenda, idEvento, dados.nome_cliente, dados.tipo_cartela);
+                    //abrirPdfHibrido(
+                    //    idVenda, 
+                    //    idEvento, 
+                    //    dados.nome_cliente, 
+                    //    dados.tipo_cartela
+                    //);
                 } 
                 else if (formaEnvio === 'whatsapp') {
                     // Usa a função híbrida atualizada

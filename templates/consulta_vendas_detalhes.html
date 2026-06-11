@@ -515,20 +515,51 @@
         // =======================================================
         
         function filtrarTabela() {
-            const termo = document.getElementById('searchInput').value.toLowerCase();
+            const termo = document.getElementById('searchInput').value.toLowerCase().trim();
             const linhas = document.querySelectorAll('.linha-venda');
+            
+            // Verifica se o termo digitado é um número puro
+            const isBuscaNumerica = termo !== '' && !isNaN(termo);
+            const numeroBuscado = isBuscaNumerica ? parseInt(termo, 10) : null;
 
             linhas.forEach(linha => {
                 // A coluna 0 é a dos Números e a coluna 3 é a do Cliente
                 const textoNumeros = linha.cells[0].innerText.toLowerCase();
                 const textoCliente = linha.cells[3].innerText.toLowerCase();
 
-                // Se o termo existir nos números ou no nome, mostra a linha. Se não, oculta.
+                let mostrar = false;
+
+                // 1. Busca Padrão de Texto (Nome do cliente ou texto exato)
                 if (textoNumeros.includes(termo) || textoCliente.includes(termo)) {
-                    linha.style.display = '';
-                } else {
-                    linha.style.display = 'none';
+                    mostrar = true;
+                } 
+                // 2. 🚀 A MÁGICA: Busca por Intervalo Numérico
+                else if (isBuscaNumerica) {
+                    // Puxa todos os números que estão escritos na célula 0 (ex: "310 a 312" vira um array [310, 312])
+                    const numerosNaCelula = textoNumeros.match(/\d+/g);
+                    
+                    if (numerosNaCelula && numerosNaCelula.length >= 2) {
+                        const numInicial = parseInt(numerosNaCelula[0], 10);
+                        const numFinal = parseInt(numerosNaCelula[1], 10);
+                        
+                        // Verifica se o número buscado está no meio do intervalo (ex: 311 >= 310 E 311 <= 312)
+                        if (numeroBuscado >= numInicial && numeroBuscado <= numFinal) {
+                            mostrar = true;
+                        }
+                        
+                        // BÔNUS: Se a sua cartela tiver numeração dupla ativa, ele verifica o segundo intervalo também
+                        if (numerosNaCelula.length >= 4) {
+                            const numInicial2 = parseInt(numerosNaCelula[2], 10);
+                            const numFinal2 = parseInt(numerosNaCelula[3], 10);
+                            if (numeroBuscado >= numInicial2 && numeroBuscado <= numFinal2) {
+                                mostrar = true;
+                            }
+                        }
+                    }
                 }
+
+                // Aplica a visibilidade
+                linha.style.display = mostrar ? '' : 'none';
             });
         }
 
