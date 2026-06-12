@@ -82,22 +82,36 @@
             </div>
 
             <div class="bg-white py-2 px-4 rounded-lg shadow border-l-4 border-red-500">
-                <h3 class="text-gray-500 text-sm font-bold uppercase mb-2">Total Premiação</h3>
-                <div class="flex justify-between items-center border-b pb-2 mb-2">
-                    <div class="text-left">
-                        <span class="text-xs text-gray-500 block">Prêmios Bingo</span>
-                        <span class="text-lg font-bold text-red-600">R$ {{ painel.premio_bingo | format_moeda }}</span>
+                <h3 class="text-gray-500 text-sm font-bold uppercase mb-2">Saídas de Premiação</h3>
+                
+                <div class="space-y-1 mb-2">
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-gray-600">Prêmios Bingo:</span>
+                        <span class="font-bold text-red-600">R$ {{ painel.premio_bingo | format_moeda }}</span>
                     </div>
-                    <div class="text-gray-300 text-2xl font-light">|</div>
-                    <div class="text-right">
-                        <span class="text-xs text-gray-500 block">Prêmios Sorte Extra</span>
-                        <span class="text-lg font-bold text-red-800">R$ {{ painel.premio_extra | format_moeda }}</span>
+                    
+                    <div class="flex justify-between items-center text-xs bg-purple-50 px-1 py-0.5 rounded border border-purple-100">
+                        <span class="text-purple-800 font-semibold" title="Retirado do Fundo de Reserva">Fundo (Acumulado):</span>
+                        <span class="font-bold text-purple-900">R$ {{ painel.premio_extra | format_moeda }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center text-xs">
+                        <span class="text-gray-600">Sorte Extra:</span>
+                        <span class="font-bold text-red-600">R$ {{ painel.premio_sorte_extra | format_moeda }}</span>
                     </div>
                 </div>
-                <div class="flex justify-between items-center pt-1 mb-1">
+                
+                <div class="flex justify-between items-center pt-1 mb-1 border-t border-gray-200">
                     <span class="text-sm font-bold text-gray-700">TOTAL GERAL:</span>
                     <span class="text-xl font-extrabold text-red-700">R$ {{ painel.premio_total_geral | format_moeda }}</span>
                 </div>
+                
+                {% if painel.bingo_acumulado and painel.bingo_acumulado > 0 %}
+                <div class="text-[10px] text-center text-purple-600 italic -mt-1 mb-1">
+                    (Total pago ao ganhador: R$ {{ painel.bingo_acumulado | format_moeda }})
+                </div>
+                {% endif %}
+                
                 <div class="flex justify-between text-xs mt-1 pt-1 border-t border-gray-100">
                     <span class="text-green-600 font-bold">Pago: {{ painel.premios_pagos | format_moeda }}</span>
                     <span class="text-gray-500 font-bold">Pend: {{ painel.premios_pendentes | format_moeda }}</span>
@@ -135,7 +149,7 @@
                         </span>
                     {% endif %}
                 </div>
-                <p class="text-xs text-gray-500">Vendas - Comissões - Prêmios</p>
+                <p class="text-xs text-gray-500" title="Arrecadação - Comissões - Prêmios - Fundo de Reserva">Vendas - Comissões - Prêmios Totais</p>
             </div>
         </div>
 

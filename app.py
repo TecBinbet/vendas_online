@@ -338,6 +338,42 @@ def sortear_combos_livres(db, id_evento_pai, limite_maximo_cartelas, unidade_de_
     # Retorna os números ordenados para a impressão do recibo ficar bonita
     return sorted(numeros_iniciais_sorteados)
 
+
+def calcular_faturamento_evento(id_evento):
+    db = get_vendas_db()
+    evento = db.eventos.find_one({"id_evento": id_evento})
+    if not evento:
+        return None
+
+    # 1. Captura as receitas (exemplo padrão do seu sistema)
+    arrecadacao_bruta = float(evento.get('arrecadacao_bruta', Decimal128("0.00")).to_decimal())
+    
+    # 2. Captura os prêmios normais (Linhas, Quadra, Bingo Base)
+    premios_normais = float(evento.get('premios_pagos_normais', Decimal128("0.00")).to_decimal())
+    
+    # 3. Captura as novas métricas do Acumulado (Convertendo de Decimal128 de forma segura)
+    premio_extra_doc = evento.get('premio_extra', Decimal128("0.00"))
+    premio_extra = float(premio_extra_doc.to_decimal())
+    
+    bingo_acumulado_doc = evento.get('bingo_acumulado', Decimal128("0.00"))
+    bingo_acumulado = float(bingo_acumulado_doc.to_decimal())
+
+    # 4. Cálculo de Lucro Líquido Real
+    # Deduzimos os prêmios normais e o valor EXTRA que saiu do caixa para compor o Acumulado
+    lucro_liquido = arrecadacao_bruta - premios_normais - premio_extra
+
+    return {
+        "arrecadacao_bruta": arrecadacao_bruta,
+        "premios_normais": premios_normais,
+        "premio_extra": premio_extra,
+        "bingo_acumulado_total": bingo_acumulado,
+        "lucro_liquido": lucro_liquido
+    }
+
+
+#########################################
+# INICIAR ROTAS
+#########################################
 @app.route('/api/dashboard_faturamento_regional')
 @login_required
 def dashboard_faturamento_regional():
@@ -7466,31 +7502,50 @@ def financeiro_evento():
 
         lista_final.sort(key=lambda x: x['pendente'], reverse=True)
         
-        # 🚀 CORREÇÃO: Regionaliza os prêmios caso o Master aplique o filtro
+        # 🚀 CORREÇÃO: Regionaliza os prêmios e incorpora as novas chaves do Acumulado/Sorte Extra
         if is_master and not id_regional_filtro:
             premio_bingo = safe_float(evento.get('premio_total', 0))
-            premio_extra = safe_float(evento.get('premios_sorte_extra', 0))
+            premio_sorte_extra = safe_float(evento.get('premios_sorte_extra', 0))
+            premio_extra = safe_float(evento.get('premio_extra', 0)) # Fundo de Reserva
+            bingo_acumulado = safe_float(evento.get('bingo_acumulado', 0))
         else:
             old_regional = session.get('id_regional')
             if is_master and id_regional_filtro:
                 session['id_regional'] = int(id_regional_filtro)
             
+            # Recalcula o prêmio base regionalizado
             evento_reg = calcular_premios_dinamicos(db, evento.copy(), g.parametros_globais)
             premio_bingo = safe_float(evento_reg.get('premio_total', 0))
-            premio_extra = safe_float(evento.get('premios_sorte_extra', 0)) if is_master else 0.0
+            
+            # Prêmios especiais (Geralmente escopo global do Master)
+            premio_sorte_extra = safe_float(evento.get('premios_sorte_extra', 0)) if is_master else 0.0
+            premio_extra = safe_float(evento.get('premio_extra', 0)) if is_master else 0.0
+            bingo_acumulado = safe_float(evento.get('bingo_acumulado', 0)) if is_master else 0.0
             
             if is_master:
                 session['id_regional'] = old_regional
         
-        premio_total_geral = premio_bingo + premio_extra
+        # O custo total do evento agora soma os 3 componentes de saída financeira
+        premio_total_geral = premio_bingo + premio_sorte_extra + premio_extra
+        
+        # Receita da casa e cálculo do saldo contábil
         receita_liquida_casa = (totais['vendas'] - totais['comissao']) + totais['vendas_cupons']
         saldo_evento_projetado = receita_liquida_casa - premio_total_geral
 
+        # Empacota os dados atualizados para espelhar perfeitamente no novo HTML
         dados_painel = {
-            'total_vendas_bingo': totais['vendas'], 'total_vendas_cupons': totais['vendas_cupons'],
-            'receita_bruta_total': totais['vendas'] + totais['vendas_cupons'], 'total_comissao': totais['comissao'],
-            'premio_bingo': premio_bingo, 'premio_extra': premio_extra, 'premio_total_geral': premio_total_geral,
-            'saldo_projetado': saldo_evento_projetado, 'total_recebido': totais['pago_central'], 'total_a_receber': totais['pendente_central']
+            'total_vendas_bingo': totais['vendas'], 
+            'total_vendas_cupons': totais['vendas_cupons'],
+            'receita_bruta_total': totais['vendas'] + totais['vendas_cupons'], 
+            'total_comissao': totais['comissao'],
+            'premio_bingo': premio_bingo, 
+            'premio_sorte_extra': premio_sorte_extra, 
+            'premio_extra': premio_extra,
+            'bingo_acumulado': bingo_acumulado,
+            'premio_total_geral': premio_total_geral,
+            'saldo_projetado': saldo_evento_projetado, 
+            'total_recebido': totais['pago_central'], 
+            'total_a_receber': totais['pendente_central']
         }
         
         return render_template('financeiro_evento.html', evento=evento, lista=lista_final, painel=dados_painel, totais=totais, g=g)
