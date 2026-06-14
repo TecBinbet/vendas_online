@@ -1567,9 +1567,29 @@ def login():
 @app.route('/auto_cadastro_colaborador', methods=['GET'])
 def auto_cadastro_colaborador():
     id_sala = request.args.get('id_sala', g.id_sala)
-    id_reg = request.args.get('id_reg', '0')
+    id_reg = request.args.get('id_reg', '1') 
     
-    return render_template('auto_cadastro_colaborador.html', id_sala=id_sala, id_reg=id_reg)
+    # Verifica se o id_reg é válido
+    try:
+        if int(id_reg) <= 0:
+            return redirect(url_for('login_page', error="Acesso negado. Regional inválida.", id_sala=id_sala))
+    except ValueError:
+        return redirect(url_for('login_page', error="Acesso negado. Parâmetro corrompido.", id_sala=id_sala))
+        
+    # 🚀 NOVO: Busca o nome da Regional no Banco de Dados
+    db = get_vendas_db()
+    nome_regional = "Não Identificada"
+    if db is not None:
+        try:
+            regional = db.regionais.find_one({'id_regional': int(id_reg)})
+            if regional:
+                nome_regional = regional.get('descricao', 'Não Identificada')
+        except Exception as e:
+            print(f"[ERRO] Falha ao buscar nome da regional: {e}")
+
+    # Passamos a nova variável 'nome_regional' para o HTML
+    return render_template('auto_cadastro_colaborador.html', id_sala=id_sala, id_reg=id_reg, nome_regional=nome_regional)
+
 
 @app.route('/menu')
 @login_required
