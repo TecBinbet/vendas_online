@@ -910,7 +910,7 @@
             const faltaUmInput = document.getElementById('premio_faltaum');
             const qtdLinhasInput = document.getElementById('quantidade_de_linhas');
             const premioSegundoBingoInput = document.getElementById('premio_segundobingo');   
-            const unidadeDeVendaInput = document.getElementById('unidade_de_venda');
+            // const unidadeDeVendaInput = document.getElementById('unidade_de_venda');
 
             if (tipoSelect) {
                 const tipo = tipoSelect.value.toString(); 
@@ -922,9 +922,9 @@
                         faltaUmInput.classList.add('bg-gray-200', 'text-gray-500'); 
                     }
 
-                    if (unidadeDeVendaInput) {
-                       unidadeDeVendaInput.value = "1"
-                    }
+                    //if (unidadeDeVendaInput) {
+                    //   unidadeDeVendaInput.value = "1"
+                    // }
 
                     maxInput.value = "90000"
                     if (qtdLinhasInput) {
@@ -936,9 +936,9 @@
                         premioSegundoBingoInput.classList.add('bg-gray-200', 'text-gray-500');
                     }
                 } else {
-                    if (unidadeDeVendaInput) {
-                       unidadeDeVendaInput.value = "6"
-                    }
+                    //if (unidadeDeVendaInput) {
+                    //   unidadeDeVendaInput.value = "6"
+                    //}
                     maxInput.value = "72000"
                     if (faltaUmInput) { faltaUmInput.disabled = false; faltaUmInput.classList.remove('bg-gray-200', 'text-gray-500'); }
                     if (qtdLinhasInput) { qtdLinhasInput.disabled = false; qtdLinhasInput.classList.remove('bg-gray-200', 'text-gray-500'); }

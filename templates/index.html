@@ -120,7 +120,8 @@
         <!-- Formulário de Login -->
         <!-- Nota: A action pode incluir o id_sala na URL apenas como garantia, mas o before_request é o principal -->
         <form method="POST" action="{{ url_for('login', id_sala=id_sala_exibicao) }}" id="login-form"> 
-            
+            <input type="hidden" name="id_reg" value="{{ request.args.get('id_reg', '0') }}">
+
             <label for="nome">Nome/Nick:</label>
             <input type="text" id="nome" name="nome" required autocomplete="username">
 

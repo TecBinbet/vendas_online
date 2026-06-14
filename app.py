@@ -652,17 +652,23 @@ def calcular_premios_dinamicos(db, evento, param_doc):
     """
     id_evento_int = evento.get('id_evento')
     
+    # 🚀 TRAVA ABSOLUTA: Salva a unidade de venda original na memória protegida
+    # antes que qualquer cálculo ou retorno modifique a estrutura do dicionário.
+    unidade_original = evento.get('unidade_de_venda')
+
     # NOVO: IDENTIFICAÇÃO DA REGIONAL PARA O CÁLCULO
-    # Se o operador não for Master, o prêmio é calculado APENAS sobre as vendas da regional dele.
     regional_id = session.get('id_regional')
     is_master = session.get('nivel', 0) >= 4
 
     # 1. Verifica se o evento está elegível para cálculo dinâmico
     if str(evento.get('tipo_premiacao', '')).lower() != 'porcentagem':
+        # Restaura a trava antes de devolver o evento
+        if unidade_original is not None: evento['unidade_de_venda'] = int(unidade_original)
         return evento
 
     porcento_premios = safe_float(param_doc.get('porcento_premios', 0))
     if porcento_premios <= 0:
+        if unidade_original is not None: evento['unidade_de_venda'] = int(unidade_original)
         return evento
 
     # 2. Resgata e calcula as vendas FILTRADAS POR REGIONAL
@@ -676,7 +682,7 @@ def calcular_premios_dinamicos(db, evento, param_doc):
             match_filter['id_regional'] = int(regional_id) # Carimbo regional
 
         pipeline = [
-            {'$match': match_filter}, # Filtra as vendas antes de somar[cite: 1]
+            {'$match': match_filter}, # Filtra as vendas antes de somar
             {'$group': {'_id': None, 'total_unidades': {'$sum': '$quantidade_unidades'}}}
         ]
         
@@ -690,21 +696,15 @@ def calcular_premios_dinamicos(db, evento, param_doc):
     total_arrecadado = qtd_vendas * valor_venda
 
     if total_arrecadado <= 0:
+        if unidade_original is not None: evento['unidade_de_venda'] = int(unidade_original)
         return evento
 
     # 3. Matemática de Comparação
     premio_potencial = total_arrecadado * (porcento_premios / 100.0)
-    
-    # Se for regionalizado, o prêmio atual deve ser comparado ao que está no banco, 
-    # mas lembre-se que o banco guarda o prêmio global. 
-    # Para relatórios regionais, o premio_potencial é o que importa para exibição.
     premio_atual_banco = safe_float(evento.get('premio_total', 0))
 
-    # 4. Distribuição (A lógica de fatiamento permanece a mesma)
+    # 4. Distribuição
     diferenca = premio_potencial - premio_atual_banco
-    
-    # Nota: A gravação no banco (update_one) só deve ocorrer se for o cálculo GLOBAL (Master),
-    # caso contrário, apenas retornamos o 'evento' modificado para exibição na tela do vendedor.
     
     tipo_cartela = int(evento.get('tipo_de_cartela', evento.get('tipo_cartela', 15)))
     qtd_linhas = int(evento.get('quantidade_de_linhas', evento.get('quantidade_linhas', 1)))
@@ -713,16 +713,12 @@ def calcular_premios_dinamicos(db, evento, param_doc):
     
     premio_distribuir = premio_potencial - faltaum_val
     
-    # Seleção da Regra de Porcentagem (mantido seu código original)
     if tipo_cartela == 15:
         if tem_quadra:
+            import math
             regra = param_doc.get('porcento_15_quadra', {})
             evento['premio_quadra'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('quadra', 0)) / 100.0)))
-            # ... (restante das suas variáveis de 15 dezenas)
-        # ... (restante das suas condicionais de linhas)
-    
-    # (Toda a sua lógica de distribuição de prêmios por tipo de cartela entra aqui)
-    # Apenas certifique-se de usar o 'premio_distribuir' que agora é regionalizado.
+            # A sua lógica de distribuição de prêmios por tipo de cartela continua aqui...
 
     # RECALCULA O PRÊMIO TOTAL REGIONALIZADO
     novo_total_arredondado = (
@@ -735,7 +731,11 @@ def calcular_premios_dinamicos(db, evento, param_doc):
     
     evento['premio_total'] = novo_total_arredondado
     
-    # 5. GRAVAÇÃO REAL NO BANCO (Apenas se for Master/Global para não sobrescrever o prêmio da matriz)
+    # 🚀 RESTAURAÇÃO DE SEGURANÇA: Injeta a unidade real de volta para não se perder na tela de vendas
+    if unidade_original is not None:
+        evento['unidade_de_venda'] = int(unidade_original)
+    
+    # 5. GRAVAÇÃO REAL NO BANCO
     if is_master:
         updates_db = {}
         for k in ['premio_quadra', 'premio_linha', 'premio_bingo', 'premio_segundobingo', 'premio_total']:
@@ -744,9 +744,11 @@ def calcular_premios_dinamicos(db, evento, param_doc):
         updates_db['is_premio_dinamico_ativo'] = True
         
         try:
+             # O Mongo atualiza apenas as fatias numéricas do prêmio, nunca sobreescrevendo a unidade_de_venda
              db.eventos.update_one({'id_evento': id_evento_int}, {'$set': updates_db})
         except Exception as e:
-             log_sistema(f"[MOTOR ERRO] Falha ao gravar reajuste global: {e}", nivel="ERRO")
+             # Caso não use a def log_sistema original, substitua por print
+             print(f"[MOTOR ERRO] Falha ao gravar reajuste global: {e}")
 
     return evento
 
@@ -1438,18 +1440,37 @@ def login_page():
                            g=g) # <--- IMPORTANTE: Adicionar isto
 
 
+#from flask import request, redirect, url_for, session, g, render_template
+
 @app.route('/login', methods=['POST'])
 def login():
     
     #print("\n=== [DEBUG] INÍCIO DO LOGIN ===")
     
-    nome_raw = request.form.get('nome')
-    senha_raw = request.form.get('senha')
+    nome_raw = request.form.get('nome', '')
+    senha_raw = request.form.get('senha', '')
+    
+    id_sala_to_redirect = g.id_sala
+    
+    # =========================================================================
+    # 🚀 INTERCEPTADOR "NEW" - AUTO CADASTRO DE COLABORADORES
+    # =========================================================================
+    # Agora ele tenta pegar do formulário (POST) primeiro. Se não achar, tenta da URL (GET).
+    id_reg_raw = request.form.get('id_reg') or request.args.get('id_reg', '0')
+    
+    if nome_raw.strip().lower() == 'new' and senha_raw.strip().lower() == 'new':
+        try:
+            if int(id_reg_raw) > 0:
+                return redirect(url_for('auto_cadastro_colaborador', id_sala=id_sala_to_redirect, id_reg=id_reg_raw))
+            else:
+                return redirect(url_for('login_page', error="Link de cadastro inválido. Faltando parâmetro da regional.", id_sala=id_sala_to_redirect))
+        except ValueError:
+            return redirect(url_for('login_page', error="Parâmetro de regional corrompido.", id_sala=id_sala_to_redirect))
+    # =========================================================================
     
     # Padroniza o nome para busca (Title Case)
     nome_usuario = format_title_case(nome_raw)
     
-    id_sala_to_redirect = g.id_sala
     db = get_vendas_db()
     
     if db is None:
@@ -1480,6 +1501,7 @@ def login():
         senha_eficaz = senha_limpa # Qual versão da senha funcionou?
 
         # 1. Tenta EXATAMENTE como digitou (Para o futuro)
+        import bcrypt
         try:
             if bcrypt.checkpw(senha_limpa.encode('utf-8'), senha_hash_banco.encode('utf-8')):
                 autenticado = True
@@ -1541,6 +1563,13 @@ def login():
 
     return redirect(url_for('login_page', error="Usuário ou senha inválidos.", id_sala=id_sala_to_redirect))
 
+
+@app.route('/auto_cadastro_colaborador', methods=['GET'])
+def auto_cadastro_colaborador():
+    id_sala = request.args.get('id_sala', g.id_sala)
+    id_reg = request.args.get('id_reg', '0')
+    
+    return render_template('auto_cadastro_colaborador.html', id_sala=id_sala, id_reg=id_reg)
 
 @app.route('/menu')
 @login_required
@@ -2059,6 +2088,117 @@ def cadastro_colaborador():
     }
     
     return render_template('cadastro_colaborador.html', **context)
+
+
+#import bcrypt
+#import re
+#import traceback
+
+@app.route('/salvar_auto_cadastro_colaborador', methods=['POST'])
+def salvar_auto_cadastro_colaborador():
+    id_sala = request.form.get('id_sala', g.id_sala)
+    id_reg_str = request.form.get('id_regional', '1')
+
+    db = get_vendas_db()
+    if db is None:
+        return render_template('auto_cadastro_colaborador.html', error="Erro de Conexão com o Banco de Dados.", id_sala=id_sala, id_reg=id_reg_str)
+
+    try:
+        # 1. Higienização idêntica à rota de referência
+        nome_colaborador = formatar_nome_proprio(request.form.get('nome_completo'))
+        nick = formatar_nome_proprio(request.form.get('nick'))
+        telefone = clean_numeric_string(request.form.get('telefone'))
+        cpf_raw = request.form.get('cpf')
+        cpf = clean_numeric_string(cpf_raw) if cpf_raw else ''
+        cidade = format_title_case(request.form.get('cidade'))
+        chave_pix = request.form.get('chave_pix', '').strip().lower()
+        confirma_chave_pix = request.form.get('confirma_chave_pix', '').strip().lower()
+        senha = request.form.get('senha')
+        confirma_senha = request.form.get('confirma_senha') 
+        nivel = int(request.form.get('nivel', 1))
+        
+        try:
+            id_regional = int(id_reg_str)
+        except ValueError:
+            id_regional = 1
+
+        # 2. Validações Básicas
+        if not nome_colaborador:
+            raise ValueError("O campo Nome Completo é obrigatório.")
+        if not nick:
+            raise ValueError("O campo Nick é obrigatório.")
+        if not telefone:
+            raise ValueError("O campo Telefone é obrigatório.")
+        
+        # 🚀 NOVO: Bloqueio contra a senha padrão do sistema
+        if not senha or senha != confirma_senha:
+            raise ValueError("A senha é obrigatória e as confirmações devem ser iguais.")
+        if senha.strip().lower() == "senha":
+            raise ValueError("A palavra 'senha' não é permitida. Por favor, escolha uma senha mais segura.")
+
+        if not chave_pix or chave_pix != confirma_chave_pix:
+            raise ValueError("A Chave PIX é obrigatória e deve conferir com a confirmação.")
+
+        # 3. Validação Rigorosa de PIX (Trava de Duplicidade)
+        query_pix_colab = {
+            'chave_pix': {'$regex': f'^{re.escape(chave_pix)}$', '$options': 'i'}
+        }
+        colaborador_existente_pix = db.colaboradores.find_one(query_pix_colab)
+        if colaborador_existente_pix:
+            nick_encontrado = colaborador_existente_pix.get('nick', 'Desconhecido')
+            raise ValueError(f"A Chave PIX '{chave_pix}' já está em uso pelo colaborador: {nick_encontrado}.")
+
+        # 4. Validação de Duplicidade de Nome ou Nick
+        existente_nome = db.colaboradores.find_one({
+            '$or': [{'nick': nick}, {'nome_colaborador': nome_colaborador}]
+        })
+        if existente_nome:
+            raise ValueError("Este Nick ou Nome já está a ser utilizado por outro colaborador. Escolha outro.")
+
+        # 5. Captura de Padrões do Sistema (Limite e Comissão)
+        limite_credito = float(g.parametros_globais.get('limite_de_credito', 100.00))
+        comissao = int(g.parametros_globais.get('comissao_padrao', 20))
+
+        # 6. Criptografia da Senha
+        senha_limpa = senha.strip() 
+        hashed_password = bcrypt.hashpw(senha_limpa.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+        # 7. Geração de ID e Montagem do Documento
+        novo_id_colaborador_int = get_next_colaborador_sequence()
+        if novo_id_colaborador_int is None: 
+            raise Exception("Falha ao gerar ID do colaborador.")
+
+        dados_colaborador = {
+            "id_colaborador": novo_id_colaborador_int,
+            "nome_colaborador": nome_colaborador,
+            "nick": nick,
+            "telefone": telefone,
+            "cpf": cpf,
+            "cidade": cidade,
+            "chave_pix": chave_pix,
+            "nivel": nivel, 
+            "comissao": comissao,
+            "limite_credito": limite_credito,
+            "id_regional": id_regional,
+            "senha": hashed_password,
+            "status": "ativo"
+        }
+
+        # 8. Gravação e Sucesso
+        db.colaboradores.insert_one(dados_colaborador)
+        
+        success_msg = f"<strong>Excelente, {nick}!</strong><br>A sua conta foi criada com sucesso e já pode fazer login."
+        return render_template('auto_cadastro_colaborador.html', success=success_msg, id_sala=id_sala, id_reg=id_reg_str)
+
+    except ValueError as e:
+        # Erros de validação (PIX duplicado, senha errada, etc.)
+        return render_template('auto_cadastro_colaborador.html', error=str(e), id_sala=id_sala, id_reg=id_reg_str)
+        
+    except Exception as e:
+        # Erros severos
+        print(f"ERRO CRÍTICO no auto_cadastro_colaborador: {e}")
+        traceback.print_exc()
+        return render_template('auto_cadastro_colaborador.html', error="Erro interno ao processar o cadastro. Tente novamente.", id_sala=id_sala, id_reg=id_reg_str)
 
 
 @app.route('/gravar_colaborador', methods=['POST'])
@@ -4499,10 +4639,183 @@ def excluir_evento(id_evento):
         traceback.print_exc()
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento: {e}", view='listar'))
 
-
 @app.route('/gravar_evento', methods=['POST'])
 @login_required
 def gravar_evento():
+    db = get_vendas_db()
+    if db is None: return redirect(url_for('login'))
+
+    if session.get('nivel', 0) < 3:
+        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+
+    id_evento_edicao = request.form.get('id_evento_edicao') 
+    
+    # 🚨 DEDO-DURO: Monitore seu terminal para ver o valor exato vindo do HTML
+    print("🛑 LOG 1 - DADOS RECEBIDOS DO HTML:", dict(request.form))
+    
+    def clean_float_input(form_key, default_value='0'):
+        value_raw = request.form.get(form_key, default_value)
+        if not value_raw or value_raw.strip() == '':
+            value_raw = str(default_value)
+        return float(value_raw.replace(',', '.'))
+
+    try:
+        data_evento_str = request.form.get('data_evento')
+        hora_evento = request.form.get('hora_evento')
+        descricao = format_title_case(request.form.get('descricao'))
+        
+        # 🚀 PROCESSAMENTO BLINDADO: Captura e garante o tipo inteiro purificado
+        unidade_raw = str(request.form.get('unidade_de_venda', '1')).strip()
+        unidade_de_venda = int(unidade_raw) if unidade_raw.isdigit() else 1
+        
+        print(f"🛑 LOG 2 - VARIÁVEL PYTHON: unidade_de_venda={unidade_de_venda} | Tipo: {type(unidade_de_venda)}")
+
+        tipo_de_cartela = int(request.form.get('tipo_de_cartela', 15)) 
+        tipo_de_evento = request.form.get('tipo_de_evento', 'Normal') 
+        tipo_premiacao = request.form.get('tipo_premiacao', 'Fixa')
+        
+        # 🚀 Captura do COMBO
+        try:
+            combo_qtde = int(request.form.get('combo_qtde', 1))
+            if combo_qtde < 1: combo_qtde = 1
+        except ValueError:
+            combo_qtde = 1
+
+        # --- LÓGICA DE CARTELA E NÚMERO MÁXIMO ---
+        if tipo_de_cartela == 25:
+            premio_faltaum = 0.0
+            premio_segundobingo = 0.0
+            quantidade_de_linhas = 1
+            param_key = 'arquivo_cartela_25'
+            default_max = 90000
+        else:
+            premio_faltaum = clean_float_input('premio_faltaum')
+            premio_segundobingo = clean_float_input('premio_segundobingo')
+            quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
+            param_key = 'arquivo_cartela_15'
+            default_max = 72000
+            
+        try:
+            param_doc = db.parametros.find_one({})
+            numero_maximo = int(param_doc.get(param_key, default_max)) if param_doc else default_max
+        except:
+            numero_maximo = default_max
+        
+        # Captura financeira
+        valor_de_venda = clean_float_input('valor_de_venda')
+        premio_quadra = clean_float_input('premio_quadra')
+        premio_linha = clean_float_input('premio_linha')
+        premio_bingo = clean_float_input('premio_bingo')
+        premio_acumulado = clean_float_input('premio_acumulado')
+        minimo_de_venda = clean_float_input('minimo_de_venda') 
+        premiacao_fixa = clean_float_input('premiacao_fixa', default_value='-1.00')
+
+        numero_inicial = int(request.form.get('numero_inicial', 1))
+        minimo_terminal = int(request.form.get('minimo_terminal', 6))
+        maximo_terminal = int(request.form.get('maximo_terminal', 1200))  
+
+        bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
+
+        try:
+            distribuir_cortesia = int(request.form.get('distribuir_cortesia', 0))
+            if distribuir_cortesia < 0: 
+                distribuir_cortesia = 0
+        except ValueError:
+            distribuir_cortesia = 0
+
+        # Verificação explícita sem usar all() para evitar falsos-negativos com o número zero
+        if not data_evento_str or not hora_evento or not descricao:
+             raise ValueError("Preencha todos os campos obrigatórios (*).")
+
+        data_obj = datetime.strptime(data_evento_str, '%Y-%m-%d')
+        data_evento_str_gravar = data_obj.strftime('%d/%m/%Y')
+        data_hora_evento_dt = datetime.strptime(f"{data_evento_str} {hora_evento}", '%Y-%m-%d %H:%M')
+        
+        premio_total = premio_quadra + (premio_linha * quantidade_de_linhas) + premio_bingo + premio_segundobingo + premio_faltaum
+        
+        dados_evento = {
+            "data_evento": data_evento_str_gravar, 
+            "hora_evento": hora_evento, 
+            "data_hora_evento": data_hora_evento_dt, 
+            "descricao": descricao,
+            "unidade_de_venda": int(unidade_de_venda), # Força a tipagem estrita aqui
+            "tipo_de_cartela": tipo_de_cartela, 
+            "tipo_de_evento": tipo_de_evento,
+            "tipo_premiacao": tipo_premiacao,
+            "valor_de_venda": Decimal128(str(valor_de_venda)),
+            "numero_inicial": numero_inicial,
+            "numero_maximo": numero_maximo,
+            "minimo_terminal": minimo_terminal,
+            "maximo_terminal": maximo_terminal,  
+            "premio_quadra": Decimal128(str(premio_quadra)),
+            "quantidade_de_linhas": quantidade_de_linhas,
+            "premio_linha": Decimal128(str(premio_linha)),
+            "premio_bingo": Decimal128(str(premio_bingo)),
+            "premio_faltaum": Decimal128(str(premio_faltaum)),
+            "premio_segundobingo": Decimal128(str(premio_segundobingo)),
+            "premiacao_fixa": Decimal128(str(premiacao_fixa)),
+            "premio_total": Decimal128(str(premio_total)), 
+            "premio_acumulado": Decimal128(str(premio_acumulado)),
+            "bola_tope_acumulado": bola_tope_acumulado,
+            "minimo_de_venda": Decimal128(str(minimo_de_venda)),
+            "id_colaborador": session.get('id_colaborador', 'N/A'),
+            "distribuir_cortesia": distribuir_cortesia,
+            "combo_qtde": combo_qtde 
+        }
+        
+        print(f"🛑 LOG 3 - DICIONÁRIO PRONTO PARA GRAVAR: unidade_de_venda={dados_evento.get('unidade_de_venda')}")
+
+        if id_evento_edicao:
+            db.eventos.update_one({'id_evento': int(id_evento_edicao)}, {'$set': dados_evento})
+            
+            # Leitura imediata de auditoria
+            evento_audit = db.eventos.find_one({'id_evento': int(id_evento_edicao)})
+            print(f"🛑 LOG 4 (UPDATE) - LEITURA DIRETA NO MONGODB APÓS SALVAR: unidade={evento_audit.get('unidade_de_venda')}")
+            
+            success_msg = f"Evento ID: {id_evento_edicao} atualizado com sucesso!"
+            return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
+        else:
+            novo_id = get_next_evento_sequence()
+            dados_evento.update({
+                "id_evento": novo_id, 
+                "status": "ativo", 
+                "data_ativado": None,
+                "data_cadastro": hora_brasil()
+            })
+            db.eventos.insert_one(dados_evento)
+
+            # Leitura imediata de auditoria
+            evento_audit = db.eventos.find_one({'id_evento': novo_id})
+            print(f"🛑 LOG 4 (INSERT) - LEITURA DIRETA NO MONGODB APÓS SALVAR: unidade={evento_audit.get('unidade_de_venda')}")
+
+            nome_colecao_vendas = f"vendas{novo_id}"
+            try:
+                db[nome_colecao_vendas].create_index([("id_regional", 1), ("data_venda", -1)])
+                db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_vendedor", 1)])
+                db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_colaborador", 1)])
+                db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_cliente", 1)])
+            except Exception as e:
+                pass
+
+            if combo_qtde > 1:
+                replicas = combo_qtde - 1
+                success_msg = f"Evento '{dados_evento['descricao']}' gravado (ID: {novo_id}). Defina agora o intervalo para criar os próximos {replicas} eventos."
+                return redirect(url_for('cadastro_evento', view='alterar', id_evento=novo_id, auto_replicar=replicas, success=success_msg))
+            else:
+                success_msg = f"Evento '{dados_evento['descricao']}' salvo com sucesso! ID: {novo_id}."
+                return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
+
+    except Exception as e:
+        print(f"ERRO na gravação: {e}")
+        session['form_data'] = dict(request.form)
+        view_redirect = 'alterar' if id_evento_edicao else 'novo'
+        return redirect(url_for('cadastro_evento', error=f"Erro ao salvar: {e}", view=view_redirect, id_evento=id_evento_edicao))
+
+
+# aApagar
+@app.route('/gravar_eventoB', methods=['POST'])
+@login_required
+def gravar_eventoB():
     db = get_vendas_db()
     if db is None: return redirect(url_for('login'))
 
@@ -4521,7 +4834,8 @@ def gravar_evento():
         data_evento_str = request.form.get('data_evento')
         hora_evento = request.form.get('hora_evento')
         descricao = format_title_case(request.form.get('descricao'))
-        unidade_de_venda = int(request.form.get('unidade_de_venda', 1))
+        unidade_raw = request.form.get('unidade_de_venda', '1').strip()
+        unidade_de_venda = int(unidade_raw) if unidade_raw.isdigit() else 1
         tipo_de_cartela = int(request.form.get('tipo_de_cartela', 15)) 
         tipo_de_evento = request.form.get('tipo_de_evento', 'Normal') 
         tipo_premiacao = request.form.get('tipo_premiacao', 'Fixa')
@@ -4608,7 +4922,7 @@ def gravar_evento():
             "premio_total": Decimal128(str(premio_total)), 
             "premio_acumulado": Decimal128(str(premio_acumulado)),
             "bola_tope_acumulado": bola_tope_acumulado,
-            "minimo_de_venda": int(minimo_de_venda),
+            "minimo_de_venda": Decimal128(str(minimo_de_venda)),
             "id_colaborador": session.get('id_colaborador', 'N/A'),
             "distribuir_cortesia": distribuir_cortesia,
             "combo_qtde": combo_qtde # 🚀 NOVO
@@ -8204,6 +8518,8 @@ def gravar_replicacao():
                 "data_hora_evento": novo_dt,
                 "descricao": nova_descricao,
                 "status": status_replicas,
+                "unidade_de_venda": int(evento_molde.get('unidade_de_venda', 1)), # 🔒 Trava da Unidade
+                "minimo_de_venda": evento_molde.get('minimo_de_venda'),           # 🔒 Trava do Decimal128
                 "data_ativado": None if status_replicas != 'ativo' else hora_brasil(),
                 "data_cadastro": hora_brasil(),
                 "id_colaborador": session.get('id_colaborador', 'N/A')
