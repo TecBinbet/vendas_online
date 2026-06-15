@@ -313,16 +313,36 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
         
         let textoParaRawBT = conteudoRecibo;
 
-        // Se for JSON, extraímos as linhas para criar um texto limpo
+        // Se for JSON, extraímos as linhas para criar um texto limpo e formatado
         if (isJson) {
             try {
                 const pacote = JSON.parse(conteudoRecibo);
                 textoParaRawBT = "";
+                
                 pacote.linhas.forEach(linha => {
-                    // O RawBT suporta tags simples como <b>, <center>, etc., nas versões mais recentes.
-                    // Caso prefira texto bruto, removeríamos as tags. Aqui mandamos limpo para evitar erros:
-                    textoParaRawBT += linha.texto + "\n"; 
+                    let txt = linha.texto;
+                    
+                    // 1. Identifica se a linha é uma cartela (ex: "01 15 30 45 60")
+                    const isCartela = (linha.tipo === 'cartela' || txt.match(/^\d+ \d+ \d+ \d+ \d+$/));
+                    
+                    if (isCartela) {
+                        // FORMATAÇÃO DE CARTELA PARA RAWBT
+                        // Adicionamos espaços extras entre os números para preencher os 58mm
+                        let numerosEspacados = txt.trim().split(/\s+/).join("   "); 
+                        
+                        // Usamos tags suportadas pelo RawBT: Centralizado, Negrito e Altura Dupla
+                        txt = `<center><b><font size='tall'>${numerosEspacados}</font></b></center>\n<center>------------------------</center>`;
+                    } else {
+                        // FORMATAÇÃO PADRÃO DO RECIBO PARA RAWBT
+                        if (linha.negrito) txt = `<b>${txt}</b>`;
+                        if (linha.alinhamento === 'centro') txt = `<center>${txt}</center>`;
+                        if (linha.alinhamento === 'direita') txt = `<right>${txt}</right>`;
+                        if (linha.tamanho === 'duplo') txt = `<font size='big'>${txt}</font>`;
+                    }
+
+                    textoParaRawBT += txt + "\n"; 
                 });
+                
                 textoParaRawBT += "\n\n"; // Avanço extra no final para corte
             } catch(e) {
                 console.error("Erro ao converter JSON para RawBT:", e);
