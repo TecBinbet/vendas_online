@@ -313,11 +313,12 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
         
         let textoParaRawBT = conteudoRecibo;
 
-        // Comandos Universais ESC/POS (Invisíveis)
+        // Comandos Universais ESC/POS
         const BOLD_ON = "\x1B\x45\x01";
         const BOLD_OFF = "\x1B\x45\x00";
         const SIZE_NORMAL = "\x1D\x21\x00";
-        const SIZE_DUPLA_ALTURA = "\x1D\x21\x01"; 
+        const SIZE_DUPLA_ALTURA = "\x1D\x21\x01";
+        const SIZE_DUPLA_LARGURA = "\x1D\x21\x10"; // Comando para esticar na horizontal
 
         if (isJson) {
             try {
@@ -328,28 +329,39 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
 
                 pacote.linhas.forEach(linha => {
                     let txt = linha.texto.trim();
-                    const isCartela = (linha.tipo === 'cartela' || txt.match(/^\d+ \d+ \d+ \d+ \d+$/));
                     
-                    if (isCartela) {
+                    // Condições para detetar o conteúdo da linha
+                    const isNumerosCartela = (linha.tipo === 'cartela' || txt.match(/^\d+ \d+ \d+ \d+ \d+$/));
+                    const isTituloCartela = txt.includes("Ctla."); 
+                    
+                    if (isTituloCartela) {
+                        // 1. TÍTULO DA CARTELA ("Ctla. xxxxx")
+                        // Largura Dupla ocupa 2 espaços por caractere. Calculamos o centro baseado nisso.
+                        let espacosEsquerda = Math.max(0, Math.floor((LARGURA_LINHA - (txt.length * 2)) / 2));
+                        let paddingCenter = " ".repeat(espacosEsquerda);
+                        
+                        textoParaRawBT += paddingCenter + SIZE_DUPLA_LARGURA + BOLD_ON + txt + BOLD_OFF + SIZE_NORMAL + "\n";
+                    } 
+                    else if (isNumerosCartela) {
+                        // 2. MATRIZ DE DEZENAS
+                        // 1 espaço entre cada dezena (Ex: "01 15 30 45 60")
                         let numerosArray = txt.split(/\s+/);
-                        let cartelaEspacada = numerosArray.join("   "); 
+                        let cartelaEspacada = numerosArray.join(" "); 
+                        
+                        // Se quisesse 1 espaço entre CADA número unitário (Ex: "0 1  1 5  3 0"):
+                        // let cartelaEspacada = txt.replace(/\s+/g, "").split("").join(" ");
                         
                         let espacosEsquerda = Math.max(0, Math.floor((LARGURA_LINHA - cartelaEspacada.length) / 2));
                         let paddingCenter = " ".repeat(espacosEsquerda);
                         
-                        let separador = "------------------------";
-                        let padSeparador = " ".repeat(Math.floor((LARGURA_LINHA - separador.length) / 2));
-                        
-                        // INJEÇÃO DO TAMANHO E NEGRITO
-                        // 1. Liga Altura Dupla e Negrito
-                        // 2. Imprime os números
-                        // 3. Desliga Negrito e volta ao Tamanho Normal
-                        textoParaRawBT += "\n" + paddingCenter + SIZE_DUPLA_ALTURA + BOLD_ON + cartelaEspacada + BOLD_OFF + SIZE_NORMAL + "\n";
-                        
-                        textoParaRawBT += padSeparador + separador + "\n";
-                        
-                    } else {
-                        // FORMATAÇÃO DO RECIBO NORMAL
+                        // Removido o "\n" do início para encostar na linha superior e o separador inferior
+                        textoParaRawBT += paddingCenter + SIZE_DUPLA_ALTURA + BOLD_ON + cartelaEspacada + BOLD_OFF + SIZE_NORMAL + "\n";
+                    } 
+                    else {
+                        // 3. TEXTO NORMAL (Cabeçalho/Rodapé)
+                        // Ignoramos linhas vazias enviadas pelo JSON para garantir que não sobram buracos
+                        if (txt === "") return; 
+
                         if (linha.alinhamento === 'centro') {
                             let espacos = Math.max(0, Math.floor((LARGURA_LINHA - txt.length) / 2));
                             txt = " ".repeat(espacos) + txt;
@@ -363,7 +375,7 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
                     }
                 });
                 
-                // << textoParaRawBT += "\n\n\n";
+                // Removido o avanço de linhas no final (\n\n\n)
             } catch(e) {
                 console.error("Erro ao converter JSON para RawBT:", e);
                 textoParaRawBT = conteudoRecibo; 
