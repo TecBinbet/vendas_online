@@ -1855,7 +1855,8 @@ async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
                         id_evento: idEvento,
                         numero_inicial: numIni,
                         numero_final: numFin,
-                        tipo_cartela: tipoCart
+                        tipo_cartela: tipoCart,
+                        nome_cliente: nomeCli
                     });
                 } else if (acao === 'whatsapp') {
                     // Chama a sua função padronizada de PDF
