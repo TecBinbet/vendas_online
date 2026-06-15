@@ -1022,7 +1022,6 @@ async function openUltimasVendas() {
         // ==========================================
         // 🚀 NOVA FUNÇÃO DE REIMPRESSÃO (JSON/WhatsApp)
         // ==========================================
-
         async function executarReimpressao(idVenda, idCliente, acao) {
              // ativarSpinner(acao === 'imprimir' ? "Enviando para impressora..." : "Preparando WhatsApp...");
 
@@ -1043,7 +1042,8 @@ async function openUltimasVendas() {
                 const response = await fetch(urlAbsoluta, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
+                    body: JSON.stringify(data),
+                    credentials: 'include'  
                 });
 
                 const result = await response.json();
