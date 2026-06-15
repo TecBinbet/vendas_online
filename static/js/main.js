@@ -345,7 +345,7 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
                         
                         // Adiciona ao texto final (Cartela + Quebra de linha + Separador)
                         textoParaRawBT += "\n" + paddingCenter + cartelaEspacada + "\n";
-                        textoParaRawBT += padSeparador + separador + "\n";
+                        //<< textoParaRawBT += padSeparador + separador + "\n";
                         
                     } else {
                         // FORMATAÇÃO DO RECIBO NORMAL
@@ -359,7 +359,7 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
                     }
                 });
                 
-                textoParaRawBT += "\n\n\n"; // Avanço extra no final para facilitar o corte manual
+                //<<textoParaRawBT += "\n\n\n"; // Avanço extra no final para facilitar o corte manual
             } catch(e) {
                 console.error("Erro ao converter JSON para RawBT:", e);
                 textoParaRawBT = conteudoRecibo; // Fallback de segurança
