@@ -349,8 +349,8 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
                         // Transforma "02" em "0 2"
                         let dezenasSeparadas = numerosArray.map(num => num.split("").join(" "));
                         
-                        // Junta tudo com 4 espaços entre as dezenas
-                        let cartelaEspacada = dezenasSeparadas.join("    "); 
+                        // Junta tudo com 3 espaços entre as dezenas
+                        let cartelaEspacada = dezenasSeparadas.join("   "); 
                         
                         // O cartelaEspacada terá 31 caracteres. Calcula o centro (quase 0, pois já ocupa tudo)
                         let espacosEsquerda = Math.max(0, Math.floor((LARGURA_LINHA - cartelaEspacada.length) / 2));
