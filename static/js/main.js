@@ -313,67 +313,67 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
         
         let textoParaRawBT = conteudoRecibo;
 
-        // Se for JSON, extraímos as linhas para criar um texto limpo e formatado com espaços
+        // Comandos Universais ESC/POS (Invisíveis)
+        const BOLD_ON = "\x1B\x45\x01";
+        const BOLD_OFF = "\x1B\x45\x00";
+        const SIZE_NORMAL = "\x1D\x21\x00";
+        const SIZE_DUPLA_ALTURA = "\x1D\x21\x01"; 
+
         if (isJson) {
             try {
                 const pacote = JSON.parse(conteudoRecibo);
                 textoParaRawBT = "";
                 
-                // Impressoras 58mm geralmente têm 32 caracteres de largura
                 const LARGURA_LINHA = 32; 
 
                 pacote.linhas.forEach(linha => {
                     let txt = linha.texto.trim();
-                    
-                    // Identifica se a linha é uma cartela (ex: "01 15 30 45 60")
                     const isCartela = (linha.tipo === 'cartela' || txt.match(/^\d+ \d+ \d+ \d+ \d+$/));
                     
                     if (isCartela) {
-                        // 1. ESPAÇAMENTO DA CARTELA
-                        // Transforma "01 15 30" em "01   15   30"
                         let numerosArray = txt.split(/\s+/);
                         let cartelaEspacada = numerosArray.join("   "); 
                         
-                        // 2. CENTRALIZAÇÃO MATEMÁTICA
-                        // Calcula quantos espaços vazios precisamos colocar à esquerda
                         let espacosEsquerda = Math.max(0, Math.floor((LARGURA_LINHA - cartelaEspacada.length) / 2));
                         let paddingCenter = " ".repeat(espacosEsquerda);
                         
-                        // 3. LINHA SEPARADORA
                         let separador = "------------------------";
                         let padSeparador = " ".repeat(Math.floor((LARGURA_LINHA - separador.length) / 2));
                         
-                        // Adiciona ao texto final (Cartela + Quebra de linha + Separador)
-                        textoParaRawBT += "\n" + paddingCenter + cartelaEspacada + "\n";
-                        //<< textoParaRawBT += padSeparador + separador + "\n";
+                        // INJEÇÃO DO TAMANHO E NEGRITO
+                        // 1. Liga Altura Dupla e Negrito
+                        // 2. Imprime os números
+                        // 3. Desliga Negrito e volta ao Tamanho Normal
+                        textoParaRawBT += "\n" + paddingCenter + SIZE_DUPLA_ALTURA + BOLD_ON + cartelaEspacada + BOLD_OFF + SIZE_NORMAL + "\n";
+                        
+                        textoParaRawBT += padSeparador + separador + "\n";
                         
                     } else {
                         // FORMATAÇÃO DO RECIBO NORMAL
-                        // Se o backend pedir para centralizar (ex: Cabeçalho), nós empurramos com espaços
                         if (linha.alinhamento === 'centro') {
                             let espacos = Math.max(0, Math.floor((LARGURA_LINHA - txt.length) / 2));
                             txt = " ".repeat(espacos) + txt;
+                        }
+                        
+                        if (linha.negrito) {
+                            txt = BOLD_ON + txt + BOLD_OFF;
                         }
                         
                         textoParaRawBT += txt + "\n";
                     }
                 });
                 
-                //<<textoParaRawBT += "\n\n\n"; // Avanço extra no final para facilitar o corte manual
+                // << textoParaRawBT += "\n\n\n";
             } catch(e) {
                 console.error("Erro ao converter JSON para RawBT:", e);
-                textoParaRawBT = conteudoRecibo; // Fallback de segurança
+                textoParaRawBT = conteudoRecibo; 
             }
         }
 
         try {
-            // Converte o texto finalizado em Base64
             const base64Data = btoa(unescape(encodeURIComponent(textoParaRawBT)));
-            
-            // Envia para o RawBT
             const intentUrl = "intent:base64," + base64Data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
             window.location.href = intentUrl;
-            console.log("Enviado para o RawBT com formatação calculada!");
         } catch (err) {
             console.error("Falha ao gerar o link do RawBT:", err);
             alert("Erro ao tentar abrir o RawBT.");
