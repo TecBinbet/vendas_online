@@ -322,7 +322,6 @@ if (isJson) {
         pacote.linhas.forEach(linha => {
             // Define classes baseadas no conteúdo da linha
             let classes = "linha-padrao";
-
             if (linha.alinhamento === 'centro') classes += " centro";
             if (linha.alinhamento === 'direita') classes += " direita";
             if (linha.negrito) classes += " negrito";
@@ -376,38 +375,24 @@ if (isJson) {
         }
 
         const printWindow = window.open('', '_blank', 'width=300,height=500,left=-1000,top=-1000');
-
-printWindow.document.write(`
-    <html>
-    <head>
-        <style>
-            @page { margin: 0; }
-            body { 
-                font-family: 'Courier New', monospace; 
-                font-size: 13px; 
-                margin: 5mm; 
-                white-space: pre-wrap; 
-            }
-            .centro { text-align: center; }
-            .negrito { font-weight: 900; }
-            .duplo { font-size: 18px; font-weight: 900; }
-            
-            /* ESTILO DAS CARTELAS (O segredo para alinhar os números) */
-            .estilo-cartela {
-                font-family: 'Courier New', monospace;
-                font-size: 15px;
-                font-weight: 900;
-                letter-spacing: 4px; /* Isso espaça os números de forma uniforme */
-                text-align: center;
-                margin: 2px 0;
-                padding: 2px 0;
-                border-bottom: 1px dashed #ccc;
-            }
-        </style>
-    </head>
-    <body>${htmlParaImprimir}</body>
-    </html>
-`);
+        printWindow.document.write(`
+            <html>
+            <head>
+                <style>
+                    @page { margin: 0; }
+                    body { 
+                        font-family: 'Courier New', Courier, monospace; 
+                        font-size: 14px; 
+                        margin: 5mm; 
+                        white-space: pre-wrap; 
+                        color: black;
+                        font-weight: bold;
+                    }
+                </style>
+            </head>
+            <body>${htmlParaImprimir}</body>
+            </html>
+        `);
         printWindow.document.close();
         printWindow.focus();
         
