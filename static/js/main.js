@@ -313,54 +313,70 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
         
         let textoParaRawBT = conteudoRecibo;
 
-        // Se for JSON, extraímos as linhas para criar um texto limpo e formatado
+        // Se for JSON, extraímos as linhas para criar um texto limpo e formatado com espaços
         if (isJson) {
             try {
                 const pacote = JSON.parse(conteudoRecibo);
                 textoParaRawBT = "";
                 
+                // Impressoras 58mm geralmente têm 32 caracteres de largura
+                const LARGURA_LINHA = 32; 
+
                 pacote.linhas.forEach(linha => {
-                    let txt = linha.texto;
+                    let txt = linha.texto.trim();
                     
-                    // 1. Identifica se a linha é uma cartela (ex: "01 15 30 45 60")
+                    // Identifica se a linha é uma cartela (ex: "01 15 30 45 60")
                     const isCartela = (linha.tipo === 'cartela' || txt.match(/^\d+ \d+ \d+ \d+ \d+$/));
                     
                     if (isCartela) {
-                        // FORMATAÇÃO DE CARTELA PARA RAWBT
-                        // Adicionamos espaços extras entre os números para preencher os 58mm
-                        let numerosEspacados = txt.trim().split(/\s+/).join("   "); 
+                        // 1. ESPAÇAMENTO DA CARTELA
+                        // Transforma "01 15 30" em "01   15   30"
+                        let numerosArray = txt.split(/\s+/);
+                        let cartelaEspacada = numerosArray.join("   "); 
                         
-                        // Usamos tags suportadas pelo RawBT: Centralizado, Negrito e Altura Dupla
-                        txt = `<center><b><font size='tall'>${numerosEspacados}</font></b></center>\n<center>------------------------</center>`;
+                        // 2. CENTRALIZAÇÃO MATEMÁTICA
+                        // Calcula quantos espaços vazios precisamos colocar à esquerda
+                        let espacosEsquerda = Math.max(0, Math.floor((LARGURA_LINHA - cartelaEspacada.length) / 2));
+                        let paddingCenter = " ".repeat(espacosEsquerda);
+                        
+                        // 3. LINHA SEPARADORA
+                        let separador = "------------------------";
+                        let padSeparador = " ".repeat(Math.floor((LARGURA_LINHA - separador.length) / 2));
+                        
+                        // Adiciona ao texto final (Cartela + Quebra de linha + Separador)
+                        textoParaRawBT += "\n" + paddingCenter + cartelaEspacada + "\n";
+                        textoParaRawBT += padSeparador + separador + "\n";
+                        
                     } else {
-                        // FORMATAÇÃO PADRÃO DO RECIBO PARA RAWBT
-                        if (linha.negrito) txt = `<b>${txt}</b>`;
-                        if (linha.alinhamento === 'centro') txt = `<center>${txt}</center>`;
-                        if (linha.alinhamento === 'direita') txt = `<right>${txt}</right>`;
-                        if (linha.tamanho === 'duplo') txt = `<font size='big'>${txt}</font>`;
+                        // FORMATAÇÃO DO RECIBO NORMAL
+                        // Se o backend pedir para centralizar (ex: Cabeçalho), nós empurramos com espaços
+                        if (linha.alinhamento === 'centro') {
+                            let espacos = Math.max(0, Math.floor((LARGURA_LINHA - txt.length) / 2));
+                            txt = " ".repeat(espacos) + txt;
+                        }
+                        
+                        textoParaRawBT += txt + "\n";
                     }
-
-                    textoParaRawBT += txt + "\n"; 
                 });
                 
-                textoParaRawBT += "\n\n"; // Avanço extra no final para corte
+                textoParaRawBT += "\n\n\n"; // Avanço extra no final para facilitar o corte manual
             } catch(e) {
                 console.error("Erro ao converter JSON para RawBT:", e);
-                textoParaRawBT = conteudoRecibo; // Fallback
+                textoParaRawBT = conteudoRecibo; // Fallback de segurança
             }
         }
 
         try {
-            // Converte o texto para Base64 para garantir que caracteres especiais e acentos não quebrem a URL
+            // Converte o texto finalizado em Base64
             const base64Data = btoa(unescape(encodeURIComponent(textoParaRawBT)));
             
-            // Dispara o Intent do Android que acorda o aplicativo RawBT e manda imprimir
+            // Envia para o RawBT
             const intentUrl = "intent:base64," + base64Data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
             window.location.href = intentUrl;
-            console.log("Enviado para o RawBT com sucesso!");
+            console.log("Enviado para o RawBT com formatação calculada!");
         } catch (err) {
             console.error("Falha ao gerar o link do RawBT:", err);
-            alert("Erro ao tentar abrir o RawBT. Certifique-se de que a aplicação está instalada.");
+            alert("Erro ao tentar abrir o RawBT.");
         }
         
     } else {
