@@ -283,50 +283,78 @@ window.addEventListener('DOMContentLoaded', verificarImpressoraAoCarregar);
 
 function imprimirComprovanteUniversal(conteudoRecibo) {
     console.log("--- [IMPRESSAO] Iniciando processo ---");
+    
+    // Verifica se o conteúdo é o nosso novo pacote JSON estruturado
     const isJson = (typeof conteudoRecibo === 'string' && conteudoRecibo.trim().startsWith('{'));
     console.log("Tipo de conteúdo detectado:", isJson ? "JSON (Estruturado)" : "Texto Puro");
 
-    // ==========================================
-    // 1. MODO: ANDROID NATIVO (Seu APK)
-    // ==========================================
     if (window.AndroidTerminal) {
-        console.log("Modo: Android (Bluetooth Nativo)");
+        console.log("Modo: Android (Bluetooth)");
+        
         if (!impressoraAtiva) {
+            console.warn("Impressora não definida, tentando recuperar...");
+            bingoAlert("Procurando impressora conectada...", 3000, '#f39c12');
             verificarImpressoraAoCarregar();
-            if (!impressoraAtiva) return;
+            
+            if (!impressoraAtiva) {
+                console.error("Erro: Nenhuma impressora ativa encontrada.");
+                return; 
+            }
         }
-        isJson ? window.AndroidTerminal.imprimirReciboJson(conteudoRecibo, impressoraAtiva) 
-               : window.AndroidTerminal.imprimirRecibo(conteudoRecibo, impressoraAtiva);
-
-    // ==========================================
-    // 2. MODO: ANDROID WEB (Fora do APK - RawBT)
-    // ==========================================
+        
+        console.log("Enviando para a ponte Android. Impressora:", impressoraAtiva);
+        if (isJson) {
+            window.AndroidTerminal.imprimirReciboJson(conteudoRecibo, impressoraAtiva);
+        } else {
+            window.AndroidTerminal.imprimirRecibo(conteudoRecibo, impressoraAtiva);
+        }
     } else if (/Android/i.test(navigator.userAgent)) {
         console.log("Modo: Android Web (RawBT)");
+        
         let textoParaRawBT = conteudoRecibo;
 
-        if (isJson) {
-            try {
-                const pacote = JSON.parse(conteudoRecibo);
-                textoParaRawBT = "";
-                pacote.linhas.forEach(linha => {
-                    let txt = linha.texto;
-                    if (linha.alinhamento === 'centro') txt = `<center>${txt}</center>`;
-                    if (linha.negrito) txt = `<b>${txt}</b>`;
-                    if (linha.texto.match(/^\d+ \d+ \d+ \d+ \d+$/)) txt = `<font size='big'>${txt}</font>`;
-                    textoParaRawBT += txt + "\n";
-                });
-            } catch(e) { console.error("Erro RawBT JSON:", e); }
+        // Se for JSON, extraímos as linhas para criar um texto limpo
+        // Dentro da função imprimirComprovanteUniversal, substitua o bloco que processa o JSON (Modo PC/USB):
+if (isJson) {
+    try {
+        const pacote = JSON.parse(conteudoRecibo);
+        htmlParaImprimir = "";
+        pacote.linhas.forEach(linha => {
+            // Define classes baseadas no conteúdo da linha
+            let classes = "linha-padrao";
+
+            if (linha.alinhamento === 'centro') classes += " centro";
+            if (linha.alinhamento === 'direita') classes += " direita";
+            if (linha.negrito) classes += " negrito";
+            if (linha.tamanho === 'duplo') classes += " duplo";
+            
+            // Adiciona classe especial para números de cartela se identificar padrão de numeração
+            if (linha.texto.match(/^\d+ \d+ \d+ \d+ \d+$/)) { 
+                classes += " estilo-cartela"; 
+            }
+
+            htmlParaImprimir += `<div class="${classes}">${linha.texto}</div>`;
+        });
+    } catch(e) { console.error("Erro ao renderizar JSON no PC:", e); }
+}
+
+        try {
+            // Converte o texto para Base64 para garantir que caracteres especiais e acentos não quebrem a URL
+            const base64Data = btoa(unescape(encodeURIComponent(textoParaRawBT)));
+            
+            // Dispara o Intent do Android que acorda o aplicativo RawBT e manda imprimir
+            const intentUrl = "intent:base64," + base64Data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
+            window.location.href = intentUrl;
+            console.log("Enviado para o RawBT com sucesso!");
+        } catch (err) {
+            console.error("Falha ao gerar o link do RawBT:", err);
+            alert("Erro ao tentar abrir o RawBT. Certifique-se de que a aplicação está instalada.");
         }
-
-        const base64Data = btoa(unescape(encodeURIComponent(textoParaRawBT)));
-        window.location.href = `intent:base64,${base64Data}#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;`;
-
-    // ==========================================
-    // 3. MODO: PC (Chrome Kiosk/USB)
-    // ==========================================
+        
     } else {
         console.log("Modo: PC (USB)");
+        
+        // Modo PC (Chrome Kiosk) - Estrutura original com window.open
         let htmlParaImprimir = conteudoRecibo;
 
         if (isJson) {
@@ -334,38 +362,63 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
                 const pacote = JSON.parse(conteudoRecibo);
                 htmlParaImprimir = "";
                 pacote.linhas.forEach(linha => {
-                    const isCartela = (linha.tipo === 'cartela' || linha.texto.match(/^\d+ \d+ \d+ \d+ \d+$/));
-                    let classes = isCartela ? "estilo-cartela" : "linha-padrao";
+                    let estilo = "";
+                    if (linha.alinhamento === 'centro') estilo += "text-align: center; ";
+                    if (linha.alinhamento === 'direita') estilo += "text-align: right; ";
+                    if (linha.negrito) estilo += "font-weight: 900; ";
+                    if (linha.tamanho === 'duplo') estilo += "font-size: 1.2em; ";
                     
-                    if (linha.alinhamento === 'centro') classes += " centro";
-                    if (linha.alinhamento === 'direita') classes += " direita";
-                    if (linha.negrito) classes += " negrito";
-                    if (linha.tamanho === 'duplo') classes += " duplo";
-                    
-                    htmlParaImprimir += `<div class="${classes}">${linha.texto}</div>`;
+                    htmlParaImprimir += `<div style="${estilo}">${linha.texto}</div>`;
                 });
-            } catch(e) { console.error("Erro render PC:", e); }
+            } catch(e) {
+                console.error("Erro ao renderizar JSON no PC:", e);
+            }
         }
 
         const printWindow = window.open('', '_blank', 'width=300,height=500,left=-1000,top=-1000');
-        printWindow.document.write(`
-            <html>
-            <head>
-                <style>
-                    @page { margin: 0; }
-                    body { font-family: 'Courier New', monospace; font-size: 13px; margin: 5mm; white-space: pre-wrap; }
-                    .centro { text-align: center; }
-                    .negrito { font-weight: 900; }
-                    .duplo { font-size: 18px; font-weight: 900; }
-                    .estilo-cartela { font-family: 'Courier New', monospace; font-size: 15px; font-weight: 900; letter-spacing: 4px; text-align: center; margin: 4px 0; border-bottom: 1px dashed #000; }
-                </style>
-            </head>
-            <body>${htmlParaImprimir}</body>
-            </html>
-        `);
+
+printWindow.document.write(`
+    <html>
+    <head>
+        <style>
+            @page { margin: 0; }
+            body { 
+                font-family: 'Courier New', monospace; 
+                font-size: 13px; 
+                margin: 5mm; 
+                white-space: pre-wrap; 
+            }
+            .centro { text-align: center; }
+            .negrito { font-weight: 900; }
+            .duplo { font-size: 18px; font-weight: 900; }
+            
+            /* ESTILO DAS CARTELAS (O segredo para alinhar os números) */
+            .estilo-cartela {
+                font-family: 'Courier New', monospace;
+                font-size: 15px;
+                font-weight: 900;
+                letter-spacing: 4px; /* Isso espaça os números de forma uniforme */
+                text-align: center;
+                margin: 2px 0;
+                padding: 2px 0;
+                border-bottom: 1px dashed #ccc;
+            }
+        </style>
+    </head>
+    <body>${htmlParaImprimir}</body>
+    </html>
+`);
         printWindow.document.close();
         printWindow.focus();
-        setTimeout(() => { printWindow.onafterprint = () => printWindow.close(); printWindow.print(); }, 250);
+        
+        setTimeout(() => {
+            // O Kiosk vai piscar a tela, enviar para a fila e o onafterprint fecha a janela limpa
+            printWindow.onafterprint = function() {
+                printWindow.close();
+            };
+            
+            printWindow.print();
+        }, 250);
     }
 }
 
