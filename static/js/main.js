@@ -343,18 +343,19 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
                         textoParaRawBT += paddingCenter + SIZE_DUPLA_LARGURA + BOLD_ON + txt + BOLD_OFF + SIZE_NORMAL + "\n";
                     } 
                     else if (isNumerosCartela) {
-                        // 2. MATRIZ DE DEZENAS
-                        // 1 espaço entre cada dezena (Ex: "01 15 30 45 60")
-                        let numerosArray = txt.split(/\s+/);
-                        let cartelaEspacada = numerosArray.join(" "); 
+                        // 2. MATRIZ DE DEZENAS (Espaçamento Total)
+                        let numerosArray = txt.split(/\s+/); // Separa as dezenas originais
                         
-                        // Se quisesse 1 espaço entre CADA número unitário (Ex: "0 1  1 5  3 0"):
-                        // let cartelaEspacada = txt.replace(/\s+/g, "").split("").join(" ");
+                        // Transforma "02" em "0 2"
+                        let dezenasSeparadas = numerosArray.map(num => num.split("").join(" "));
                         
+                        // Junta tudo com 4 espaços entre as dezenas
+                        let cartelaEspacada = dezenasSeparadas.join("    "); 
+                        
+                        // O cartelaEspacada terá 31 caracteres. Calcula o centro (quase 0, pois já ocupa tudo)
                         let espacosEsquerda = Math.max(0, Math.floor((LARGURA_LINHA - cartelaEspacada.length) / 2));
                         let paddingCenter = " ".repeat(espacosEsquerda);
                         
-                        // Removido o "\n" do início para encostar na linha superior e o separador inferior
                         textoParaRawBT += paddingCenter + SIZE_DUPLA_ALTURA + BOLD_ON + cartelaEspacada + BOLD_OFF + SIZE_NORMAL + "\n";
                     } 
                     else {
