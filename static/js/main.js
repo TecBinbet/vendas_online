@@ -314,28 +314,21 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
         let textoParaRawBT = conteudoRecibo;
 
         // Se for JSON, extraímos as linhas para criar um texto limpo
-        // Dentro da função imprimirComprovanteUniversal, substitua o bloco que processa o JSON (Modo PC/USB):
-if (isJson) {
-    try {
-        const pacote = JSON.parse(conteudoRecibo);
-        htmlParaImprimir = "";
-        pacote.linhas.forEach(linha => {
-            // Define classes baseadas no conteúdo da linha
-            let classes = "linha-padrao";
-            if (linha.alinhamento === 'centro') classes += " centro";
-            if (linha.alinhamento === 'direita') classes += " direita";
-            if (linha.negrito) classes += " negrito";
-            if (linha.tamanho === 'duplo') classes += " duplo";
-            
-            // Adiciona classe especial para números de cartela se identificar padrão de numeração
-            if (linha.texto.match(/^\d+ \d+ \d+ \d+ \d+$/)) { 
-                classes += " estilo-cartela"; 
+        if (isJson) {
+            try {
+                const pacote = JSON.parse(conteudoRecibo);
+                textoParaRawBT = "";
+                pacote.linhas.forEach(linha => {
+                    // O RawBT suporta tags simples como <b>, <center>, etc., nas versões mais recentes.
+                    // Caso prefira texto bruto, removeríamos as tags. Aqui mandamos limpo para evitar erros:
+                    textoParaRawBT += linha.texto + "\n"; 
+                });
+                textoParaRawBT += "\n\n"; // Avanço extra no final para corte
+            } catch(e) {
+                console.error("Erro ao converter JSON para RawBT:", e);
+                textoParaRawBT = conteudoRecibo; // Fallback
             }
-
-            htmlParaImprimir += `<div class="${classes}">${linha.texto}</div>`;
-        });
-    } catch(e) { console.error("Erro ao renderizar JSON no PC:", e); }
-}
+        }
 
         try {
             // Converte o texto para Base64 para garantir que caracteres especiais e acentos não quebrem a URL
