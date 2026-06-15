@@ -19,7 +19,7 @@ from bson.objectid import ObjectId
 from bson.decimal128 import Decimal128
 from datetime import datetime, timedelta
 from urllib.parse import quote_plus
-import math # Adicione isso no topo do seu arquivo app.py (se já não tiver)
+import math 
 import os
 import re # Para a busca de clientes e limpeza de nome
 import bcrypt
@@ -649,20 +649,21 @@ def calcular_premios_dinamicos(db, evento, param_doc):
     """
     MOTOR MATEMÁTICO (REGIONALIZADO): 
     Calcula prêmios com base no faturamento da REGIONAL do operador.
+    Contém trava absoluta de memória e trava de prêmio mínimo garantido.
     """
+    import math
+    
     id_evento_int = evento.get('id_evento')
     
     # 🚀 TRAVA ABSOLUTA: Salva a unidade de venda original na memória protegida
-    # antes que qualquer cálculo ou retorno modifique a estrutura do dicionário.
     unidade_original = evento.get('unidade_de_venda')
 
-    # NOVO: IDENTIFICAÇÃO DA REGIONAL PARA O CÁLCULO
+    # IDENTIFICAÇÃO DA REGIONAL PARA O CÁLCULO
     regional_id = session.get('id_regional')
     is_master = session.get('nivel', 0) >= 4
 
     # 1. Verifica se o evento está elegível para cálculo dinâmico
     if str(evento.get('tipo_premiacao', '')).lower() != 'porcentagem':
-        # Restaura a trava antes de devolver o evento
         if unidade_original is not None: evento['unidade_de_venda'] = int(unidade_original)
         return evento
 
@@ -673,52 +674,110 @@ def calcular_premios_dinamicos(db, evento, param_doc):
 
     # 2. Resgata e calcula as vendas FILTRADAS POR REGIONAL
     qtd_vendas = 0
+    total_arrecadado = 0.0
     nome_cv = f"vendas{id_evento_int}"
     
     if nome_cv in db.list_collection_names():
-        # MONTAGEM DO FILTRO DE AGREGAÇÃO
         match_filter = {}
         if not is_master and regional_id:
-            match_filter['id_regional'] = int(regional_id) # Carimbo regional
+            match_filter['id_regional'] = int(regional_id)
 
+        # 🚀 AGREGAÇÃO DUPLA: Somamos as unidades físicas e o dinheiro real em caixa
         pipeline = [
-            {'$match': match_filter}, # Filtra as vendas antes de somar
-            {'$group': {'_id': None, 'total_unidades': {'$sum': '$quantidade_unidades'}}}
+            {'$match': match_filter},
+            {
+                '$group': {
+                    '_id': None, 
+                    'total_unidades': {'$sum': '$quantidade_unidades'},
+                    'faturamento_real': {'$sum': '$valor_total'} # Captura o dinheiro real (Cortesias somam 0)
+                }
+            }
         ]
         
         vendas_data_list = list(db[nome_cv].aggregate(pipeline))
         if vendas_data_list:
             qtd_vendas = vendas_data_list[0].get('total_unidades', 0)
-            # Atualiza o objeto evento para o frontend mostrar a quantidade regionalizada
+            # Armazena o faturamento líquido real vindo direto do banco de dados
+            total_arrecadado = safe_float(vendas_data_list[0].get('faturamento_real', 0.0))
+            
+            # Atualiza o objeto evento para o front-end exibir os contadores certos
             evento['qtd_vendas'] = qtd_vendas
+            evento['total_arrecadado'] = total_arrecadado
 
     valor_venda = safe_float(evento.get('valor_de_venda', 0))
-    total_arrecadado = qtd_vendas * valor_venda
 
     if total_arrecadado <= 0:
         if unidade_original is not None: evento['unidade_de_venda'] = int(unidade_original)
         return evento
 
-    # 3. Matemática de Comparação
+    # 3. Matemática de Comparação e Preparação
     premio_potencial = total_arrecadado * (porcento_premios / 100.0)
     premio_atual_banco = safe_float(evento.get('premio_total', 0))
 
-    # 4. Distribuição
-    diferenca = premio_potencial - premio_atual_banco
-    
+    # =====================================================================
+    # 🚀 NOVA TRAVA: PRÊMIO MÍNIMO GARANTIDO
+    # Se o prêmio potencial for menor ou igual ao prêmio que já está na tela,
+    # significa que as vendas ainda não ultrapassaram a meta para subir o prêmio.
+    # O sistema aborta o recálculo e mantém os prêmios como estão.
+    # =====================================================================
+    if premio_potencial <= premio_atual_banco:
+        if unidade_original is not None: evento['unidade_de_venda'] = int(unidade_original)
+        return evento
+
+    # Se passou da trava, o bolo cresceu! Vamos fatiá-lo:
     tipo_cartela = int(evento.get('tipo_de_cartela', evento.get('tipo_cartela', 15)))
     qtd_linhas = int(evento.get('quantidade_de_linhas', evento.get('quantidade_linhas', 1)))
     tem_quadra = safe_float(evento.get('premio_quadra', 0)) > 0
     faltaum_val = safe_float(evento.get('premio_faltaum', 0))
     
+    # O valor a ratear é o potencial subtraindo o fixo do "Falta Um"
     premio_distribuir = premio_potencial - faltaum_val
     
+    # Zera os prêmios na memória para evitar lixo de cálculos anteriores
+    evento['premio_quadra'] = 0.0
+    evento['premio_linha'] = 0.0
+    evento['premio_bingo'] = 0.0
+    evento['premio_segundobingo'] = 0.0
+
+    # =====================================================================
+    # 4. SELEÇÃO DA REGRA DE RATEIO (CARTELA 15 vs 25)
+    # =====================================================================
     if tipo_cartela == 15:
-        if tem_quadra:
-            import math
+        if qtd_linhas == 3:
+            regra = param_doc.get('porcento_15_3linhas', {})
+        elif tem_quadra:
             regra = param_doc.get('porcento_15_quadra', {})
-            evento['premio_quadra'] = float(math.ceil(premio_distribuir * (safe_float(regra.get('quadra', 0)) / 100.0)))
-            # A sua lógica de distribuição de prêmios por tipo de cartela continua aqui...
+        else:
+            regra = param_doc.get('porcento_15', {})
+            
+    elif tipo_cartela == 25:
+        if tem_quadra:
+            regra = param_doc.get('porcento_25_4cantos', {})
+        else:
+            regra = param_doc.get('porcento_25', {})
+    else:
+        regra = {}
+
+    pct_linhas = safe_float(regra.get('linhas', regra.get('linha', 0)))
+    pct_quadra = safe_float(regra.get('quadra', regra.get('4cantos', regra.get('cantos', 0))))
+    pct_bingo = safe_float(regra.get('bingo', 0))
+    pct_segundobingo = safe_float(regra.get('segundobingo', 0))
+
+    # =====================================================================
+    # 5. DISTRIBUIÇÃO E CÁLCULO MATEMÁTICO FINAL
+    # =====================================================================
+    if tem_quadra and pct_quadra > 0:
+        evento['premio_quadra'] = float(math.ceil(premio_distribuir * (pct_quadra / 100.0)))
+        
+    if qtd_linhas > 0 and pct_linhas > 0:
+        total_para_linhas = premio_distribuir * (pct_linhas / 100.0)
+        evento['premio_linha'] = float(math.ceil(total_para_linhas / qtd_linhas))
+        
+    if pct_bingo > 0:
+        evento['premio_bingo'] = float(math.ceil(premio_distribuir * (pct_bingo / 100.0)))
+        
+    if pct_segundobingo > 0:
+        evento['premio_segundobingo'] = float(math.ceil(premio_distribuir * (pct_segundobingo / 100.0)))
 
     # RECALCULA O PRÊMIO TOTAL REGIONALIZADO
     novo_total_arredondado = (
@@ -729,14 +788,25 @@ def calcular_premios_dinamicos(db, evento, param_doc):
         faltaum_val
     )
     
+    # 🚀 SEGUNDA TRAVA DE SEGURANÇA: Só aceita a nova formatação se a soma final também for maior que a original
+    if novo_total_arredondado <= premio_atual_banco:
+        if unidade_original is not None: evento['unidade_de_venda'] = int(unidade_original)
+        # Reverte as fatias para evitar mostrar 0 na tela
+        return evento
+
     evento['premio_total'] = novo_total_arredondado
     
-    # 🚀 RESTAURAÇÃO DE SEGURANÇA: Injeta a unidade real de volta para não se perder na tela de vendas
+    # RESTAURAÇÃO DE SEGURANÇA: Injeta a unidade real de volta
     if unidade_original is not None:
         evento['unidade_de_venda'] = int(unidade_original)
     
-    # 5. GRAVAÇÃO REAL NO BANCO
+    # 6. GRAVAÇÃO REAL NO BANCO (Apenas Master/Global)
     if is_master:
+        try:
+            from bson.decimal128 import Decimal128
+        except ImportError:
+            pass
+            
         updates_db = {}
         for k in ['premio_quadra', 'premio_linha', 'premio_bingo', 'premio_segundobingo', 'premio_total']:
             if k in evento:
@@ -744,10 +814,8 @@ def calcular_premios_dinamicos(db, evento, param_doc):
         updates_db['is_premio_dinamico_ativo'] = True
         
         try:
-             # O Mongo atualiza apenas as fatias numéricas do prêmio, nunca sobreescrevendo a unidade_de_venda
              db.eventos.update_one({'id_evento': id_evento_int}, {'$set': updates_db})
         except Exception as e:
-             # Caso não use a def log_sistema original, substitua por print
              print(f"[MOTOR ERRO] Falha ao gravar reajuste global: {e}")
 
     return evento
@@ -4369,9 +4437,17 @@ def cadastro_evento():
 
     def to_num(val, is_int=False):
         try:
-            res = float(str(val.to_decimal())) if hasattr(val, 'to_decimal') else float(val or 0)
+            if hasattr(val, 'to_decimal'):
+                res = float(str(val.to_decimal()))
+            elif isinstance(val, (int, float)):
+                res = float(val)
+            else:
+                # 🚀 CORREÇÃO DA VÍRGULA: Troca vírgula por ponto para não quebrar o float
+                val_str = str(val or 0).strip().replace(',', '.')
+                res = float(val_str)
             return int(res) if is_int else res
-        except: return 0
+        except: 
+            return 0
 
     # 3. Bloco de Carregamento para Edição
     if form_data_erro:
@@ -4425,6 +4501,16 @@ def cadastro_evento():
                 
                 for key in all_numeric_fields:
                     if key in evento: evento[key] = to_num(evento[key])
+
+                if not evento.get('premio_total'):
+                    qtd_linhas_evento = to_num(evento.get('quantidade_de_linhas', 1), is_int=True)
+                    evento['premio_total'] = (
+                        to_num(evento.get('premio_quadra')) +
+                        (to_num(evento.get('premio_linha')) * qtd_linhas_evento) +
+                        to_num(evento.get('premio_bingo')) +
+                        to_num(evento.get('premio_segundobingo')) +
+                        to_num(evento.get('premio_faltaum'))
+                    ) 
 
                 id_ev = evento.get('id_evento')
                 nome_cv = f"vendas{id_ev}"
@@ -4671,7 +4757,7 @@ def gravar_evento():
     id_evento_edicao = request.form.get('id_evento_edicao') 
     
     # 🚨 DEDO-DURO: Monitore seu terminal para ver o valor exato vindo do HTML
-    print("🛑 LOG 1 - DADOS RECEBIDOS DO HTML:", dict(request.form))
+    #print("🛑 LOG 1 - DADOS RECEBIDOS DO HTML:", dict(request.form))
     
     def clean_float_input(form_key, default_value='0'):
         value_raw = request.form.get(form_key, default_value)
@@ -4688,7 +4774,7 @@ def gravar_evento():
         unidade_raw = str(request.form.get('unidade_de_venda', '1')).strip()
         unidade_de_venda = int(unidade_raw) if unidade_raw.isdigit() else 1
         
-        print(f"🛑 LOG 2 - VARIÁVEL PYTHON: unidade_de_venda={unidade_de_venda} | Tipo: {type(unidade_de_venda)}")
+        #print(f"🛑 LOG 2 - VARIÁVEL PYTHON: unidade_de_venda={unidade_de_venda} | Tipo: {type(unidade_de_venda)}")
 
         tipo_de_cartela = int(request.form.get('tipo_de_cartela', 15)) 
         tipo_de_evento = request.form.get('tipo_de_evento', 'Normal') 
@@ -4783,14 +4869,14 @@ def gravar_evento():
             "combo_qtde": combo_qtde 
         }
         
-        print(f"🛑 LOG 3 - DICIONÁRIO PRONTO PARA GRAVAR: unidade_de_venda={dados_evento.get('unidade_de_venda')}")
+        #print(f"🛑 LOG 3 - DICIONÁRIO PRONTO PARA GRAVAR: unidade_de_venda={dados_evento.get('unidade_de_venda')}")
 
         if id_evento_edicao:
             db.eventos.update_one({'id_evento': int(id_evento_edicao)}, {'$set': dados_evento})
             
             # Leitura imediata de auditoria
             evento_audit = db.eventos.find_one({'id_evento': int(id_evento_edicao)})
-            print(f"🛑 LOG 4 (UPDATE) - LEITURA DIRETA NO MONGODB APÓS SALVAR: unidade={evento_audit.get('unidade_de_venda')}")
+            #print(f"🛑 LOG 4 (UPDATE) - LEITURA DIRETA NO MONGODB APÓS SALVAR: unidade={evento_audit.get('unidade_de_venda')}")
             
             success_msg = f"Evento ID: {id_evento_edicao} atualizado com sucesso!"
             return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
@@ -4806,7 +4892,7 @@ def gravar_evento():
 
             # Leitura imediata de auditoria
             evento_audit = db.eventos.find_one({'id_evento': novo_id})
-            print(f"🛑 LOG 4 (INSERT) - LEITURA DIRETA NO MONGODB APÓS SALVAR: unidade={evento_audit.get('unidade_de_venda')}")
+            #print(f"🛑 LOG 4 (INSERT) - LEITURA DIRETA NO MONGODB APÓS SALVAR: unidade={evento_audit.get('unidade_de_venda')}")
 
             nome_colecao_vendas = f"vendas{novo_id}"
             try:
@@ -8925,57 +9011,65 @@ def motor_background_premios():
         tempo_sleep_global = 60 # Padrão: 60 segundos
         
         try:
-            # 1. Procura todas as salas ativas
-            salas = list(db_control.salas.find({}, {"id_sala": 1, "url_parte1": 1, "url_parte2": 1}))
-            
-            for sala in salas:
-                id_sala = sala.get('id_sala')
+            # ====================================================================
+            # 🚀 O SEGREDO: Criamos um "Contexto Falso" para o Robô não quebrar
+            # ====================================================================
+            with app.test_request_context('/'):
+                from flask import session
+                # Injetamos dados na sessão fantasma para o calcular_premios_dinamicos
+                session['nivel'] = 5          # Transforma o Robô num Master (pode gravar no banco)
+                session['id_regional'] = None # Robô lê as vendas de TODAS as regionais juntas
                 
-                try:
-                    # Conecta ao banco de vendas da sala (usa cache se possível)
-                    client_sala = DB_VENDAS_CLIENT_CACHE.get(id_sala)
-                    if not client_sala:
-                        uri_vendas = f"{sala['url_parte1']}{ENCODED_PASSWORD}{sala['url_parte2']}"
-                        client_sala = MongoClient(uri_vendas, tlsCAFile=certifi.where(), serverSelectionTimeoutMS=5000)
-                        DB_VENDAS_CLIENT_CACHE[id_sala] = client_sala
-                        
-                    db_sala = client_sala[DB_NAME_VENDAS]
+                # 1. Procura todas as salas ativas
+                salas = list(db_control.salas.find({}, {"id_sala": 1, "url_parte1": 1, "url_parte2": 1}))
+                
+                for sala in salas:
+                    id_sala = sala.get('id_sala')
                     
-                    # 2. Busca os parâmetros de gatilho
-                    params = db_sala.parametros.find_one({}) or {}
-                    minimo_atualizacao = safe_float(params.get('minimo_atualizacao_premios', 50.0))
-                    tempo_sala = safe_get_int(params.get('tempo_atualizacao_premios', 1)) * 60
-                    
-                    if tempo_sala > 0:
-                        tempo_sleep_global = tempo_sala
-
-                    # 3. Busca APENAS eventos que bateram a meta de acumulação
-                    query_eventos = {
-                        "status": "ativo",
-                        "tipo_premiacao": "Porcentagem",
-                        "valor_pendente_telemovel": {"$gte": minimo_atualizacao}
-                    }
-                    
-                    eventos_para_atualizar = list(db_sala.eventos.find(query_eventos))
-                    
-                    for ev in eventos_para_atualizar:
-                        # TRAVA DE SEGURANÇA: Lê o exato valor antes de calcular
-                        valor_lido = safe_float(ev.get('valor_pendente_telemovel', 0))
-                        
-                        if valor_lido >= minimo_atualizacao:
-                            # Chama a nossa função principal que atualiza e grava a premiação
-                            calcular_premios_dinamicos(db_sala, ev, params)
+                    try:
+                        # Conecta ao banco de vendas da sala (usa cache se possível)
+                        client_sala = DB_VENDAS_CLIENT_CACHE.get(id_sala)
+                        if not client_sala:
+                            uri_vendas = f"{sala['url_parte1']}{ENCODED_PASSWORD}{sala['url_parte2']}"
+                            client_sala = MongoClient(uri_vendas, tlsCAFile=certifi.where(), serverSelectionTimeoutMS=5000)
+                            DB_VENDAS_CLIENT_CACHE[id_sala] = client_sala
                             
-                            # MÁGICA DA CONCORRÊNCIA: Subtrai exatamente o que lemos. 
-                            # Se entraram R$5 durante o cálculo, eles continuam lá!
-                            db_sala.eventos.update_one(
-                                {"_id": ev["_id"]},
-                                {"$inc": {"valor_pendente_telemovel": -valor_lido}}
-                            )
-                            #print(f"[ROBÔ SALA {id_sala}] 🚀 Prêmio EVE{ev['id_evento']} atualizado! Buffer abatido em: R$ {valor_lido:.2f}")
+                        db_sala = client_sala[DB_NAME_VENDAS]
+                        
+                        # 2. Busca os parâmetros de gatilho
+                        params = db_sala.parametros.find_one({}) or {}
+                        minimo_atualizacao = safe_float(params.get('minimo_atualizacao_premios', 50.0))
+                        tempo_sala = safe_get_int(params.get('tempo_atualizacao_premios', 1)) * 60
+                        
+                        if tempo_sala > 0:
+                            tempo_sleep_global = tempo_sala
 
-                except Exception as e_sala:
-                    print(f"[ROBÔ ERRO] Falha ao processar sala {id_sala}: {e_sala}")
+                        # 3. Busca APENAS eventos que bateram a meta de acumulação
+                        query_eventos = {
+                            "status": "ativo",
+                            "tipo_premiacao": "Porcentagem",
+                            "valor_pendente_telemovel": {"$gte": minimo_atualizacao}
+                        }
+                        
+                        eventos_para_atualizar = list(db_sala.eventos.find(query_eventos))
+                        
+                        for ev in eventos_para_atualizar:
+                            # TRAVA DE SEGURANÇA: Lê o exato valor antes de calcular
+                            valor_lido = safe_float(ev.get('valor_pendente_telemovel', 0))
+                            
+                            if valor_lido >= minimo_atualizacao:
+                                # O cálculo agora vai correr liso, pois ele lê o session['nivel'] = 5 que criámos!
+                                calcular_premios_dinamicos(db_sala, ev, params)
+                                
+                                # MÁGICA DA CONCORRÊNCIA: Subtrai exatamente o que lemos. 
+                                db_sala.eventos.update_one(
+                                    {"_id": ev["_id"]},
+                                    {"$inc": {"valor_pendente_telemovel": -valor_lido}}
+                                )
+                                #print(f"[ROBÔ SALA {id_sala}] 🚀 Prêmio EVE{ev['id_evento']} atualizado! Buffer abatido em: R$ {valor_lido:.2f}")
+
+                    except Exception as e_sala:
+                        print(f"[ROBÔ ERRO] Falha ao processar sala {id_sala}: {e_sala}")
                     
         except Exception as e_global:
             print(f"[ROBÔ ERRO GLOBAL] Falha no loop principal do robô: {e_global}")

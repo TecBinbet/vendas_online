@@ -219,6 +219,40 @@ function verificarImpressoraAoCarregar() {
     }
 }
 
+
+// Variável global para segurar a conexão e não pedir permissão toda hora
+let impressoraWebBluetooth = null;
+
+async function imprimirViaWebBluetooth(conteudo) {
+    try {
+        // 1. Pede permissão e conecta (só na primeira vez)
+        if (!impressoraWebBluetooth) {
+            console.log("Buscando impressoras BLE...");
+            const device = await navigator.bluetooth.requestDevice({
+                filters: [{ services: ['000018f0-0000-1000-8000-00805f9b34fb'] }], // UUID genérico comum de impressoras
+                optionalServices: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] // UUID característico de escrita
+            });
+
+            console.log("Conectando ao GATT Server...");
+            const server = await device.gatt.connect();
+            
+            // Aqui você buscaria o serviço e a característica exata da sua impressora
+            // impressoraWebBluetooth = await server.getPrimaryService(...).then(s => s.getCharacteristic(...));
+        }
+
+        // 2. Converte o JSON ou Texto em Array de Bytes (ESC/POS)
+        let bytesParaImprimir = converterParaEscPos(conteudo); // Você precisará desta função de parser
+
+        // 3. Envia os bytes divididos em pacotes (MTU do BLE geralmente é pequeno, ~512 bytes)
+        // await impressoraWebBluetooth.writeValue(bytesParaImprimir);
+        console.log("Impressão Web Bluetooth enviada com sucesso!");
+
+    } catch (error) {
+        console.error("Falha na impressão Web Bluetooth:", error);
+    }
+}
+
+
 // ==========================================
 // UTILITÁRIOS DE MOEDA
 // ==========================================
@@ -273,6 +307,40 @@ function imprimirComprovanteUniversal(conteudoRecibo) {
             window.AndroidTerminal.imprimirReciboJson(conteudoRecibo, impressoraAtiva);
         } else {
             window.AndroidTerminal.imprimirRecibo(conteudoRecibo, impressoraAtiva);
+        }
+    } else if (/Android/i.test(navigator.userAgent)) {
+        console.log("Modo: Android Web (RawBT)");
+        
+        let textoParaRawBT = conteudoRecibo;
+
+        // Se for JSON, extraímos as linhas para criar um texto limpo
+        if (isJson) {
+            try {
+                const pacote = JSON.parse(conteudoRecibo);
+                textoParaRawBT = "";
+                pacote.linhas.forEach(linha => {
+                    // O RawBT suporta tags simples como <b>, <center>, etc., nas versões mais recentes.
+                    // Caso prefira texto bruto, removeríamos as tags. Aqui mandamos limpo para evitar erros:
+                    textoParaRawBT += linha.texto + "\n"; 
+                });
+                textoParaRawBT += "\n\n"; // Avanço extra no final para corte
+            } catch(e) {
+                console.error("Erro ao converter JSON para RawBT:", e);
+                textoParaRawBT = conteudoRecibo; // Fallback
+            }
+        }
+
+        try {
+            // Converte o texto para Base64 para garantir que caracteres especiais e acentos não quebrem a URL
+            const base64Data = btoa(unescape(encodeURIComponent(textoParaRawBT)));
+            
+            // Dispara o Intent do Android que acorda o aplicativo RawBT e manda imprimir
+            const intentUrl = "intent:base64," + base64Data + "#Intent;scheme=rawbt;package=ru.a402d.rawbtprinter;end;";
+            window.location.href = intentUrl;
+            console.log("Enviado para o RawBT com sucesso!");
+        } catch (err) {
+            console.error("Falha ao gerar o link do RawBT:", err);
+            alert("Erro ao tentar abrir o RawBT. Certifique-se de que a aplicação está instalada.");
         }
         
     } else {

@@ -467,7 +467,7 @@
                                 
                                 <td class="py-2 px-2 border-b text-sm font-semibold">
                                     <span class="{% if evento.get('is_premio_dinamico_ativo') %}text-green-700 font-bold{% endif %}">
-                                        R$ {{ evento.premio_total_float | format_moeda }}
+                                        R$ {{ evento.premio_total | format_moeda }}
                                     </span>
                                     {% if evento.get('is_premio_dinamico_ativo') %}
                                         <span title="Prêmio Reajustado Pelas Vendas!" class="cursor-help ml-1">🚀</span>
