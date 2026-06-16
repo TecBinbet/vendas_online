@@ -73,18 +73,53 @@
     <div class="max-w-6xl mx-auto">
         
         <!-- CABEÇALHO -->
-        <div class="flex justify-between items-center mb-1">
-            <h2 class="text-xl font-semibold mb-1 text-blue-800 flex items-center gap-2">
+        <div class="flex flex-col md:flex-row justify-between items-center mb-4 gap-3">
+            <h2 class="text-xl font-semibold text-blue-800 flex items-center gap-2">
                 🏆 Galeria de Resultados
             </h2>
-            <a href="{{ url_for('menu_operacoes') }}" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition">
-                ← Voltar ao Menu
-            </a>
+            
+            <div class="flex items-center gap-3 w-full md:w-auto justify-end">
+                
+                {% if nivel >= 3 %}
+                <div class="hidden md:block">
+                    <form action="{{ url_for('sincronizar_ganhadores') }}" method="POST" enctype="multipart/form-data" id="formSincronizar" class="m-0">
+                        
+                        <input type="file" id="arquivo_json" name="arquivo_json" accept=".json" class="hidden" onchange="document.getElementById('formSincronizar').submit();">
+                        
+                        <button type="button" onclick="document.getElementById('arquivo_json').click();" 
+                                class="bg-emerald-500 hover:bg-emerald-600 text-white px-4 py-2 rounded-lg font-medium transition flex items-center gap-2 shadow-sm border border-emerald-600">
+                            <span class="text-lg">📥</span> Importar Ganhadores
+                        </button>
+                        
+                    </form>
+                </div>
+                {% endif %}
+
+                <a href="{{ url_for('menu_operacoes') }}" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition shadow-sm border border-gray-300 whitespace-nowrap">
+                    ← Voltar ao Menu
+                </a>
+            </div>
         </div>
 
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    {% if category == 'success' %}
+                        <div class="bg-green-100 border-l-4 border-green-500 text-green-800 p-3 mb-4 rounded shadow-sm font-bold flex items-center gap-2 animate__animated animate__fadeIn">
+                            <span>✅</span> {{ message }}
+                        </div>
+                    {% else %}
+                        <div class="bg-red-100 border-l-4 border-red-500 text-red-800 p-3 mb-4 rounded shadow-sm font-bold flex items-center gap-2 animate__animated animate__fadeIn">
+                            <span>❌</span> {{ message }}
+                        </div>
+                    {% endif %}
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
         {% if error %}
-            <div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-2 mb-3 rounded shadow-sm" role="alert">
-                <p>{{ error }}</p>
+            <div class="bg-red-100 border-l-4 border-red-500 text-red-800 p-3 mb-4 rounded shadow-sm font-bold flex items-center gap-2">
+                <span>❌</span> {{ error }}
             </div>
         {% endif %}
 

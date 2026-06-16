@@ -110,7 +110,10 @@
                 <thead>
                     <tr>
                         <th>Números</th>
-                        <th>Kits</th>                        
+                        {% if mostrar_rodape %}
+                        <th>RodPé</th>
+                        {% endif %}
+                        <th>Kits</th>                          
                         <th>Valor (R$)</th>
                         <th>Cliente</th>                        
                         <th>Comissão (R$)</th>
@@ -145,6 +148,10 @@
                                     <br> {{ venda.numero_inicial2 }} a {{ venda.numero_final2 }}
                                 {% endif %}
                             </td>
+                            {% if mostrar_rodape %}
+                            <td class="font-bold text-blue-600">{{ venda.rodape }}</td> 
+                            {% endif %} 
+
                             <td class="font-bold ">{{ venda.quantidade_unidades }}</td>                            
                             <td class="font-bold  text-green-600">{{ venda.valor_total_float | format_moeda }}</td>
                             <td class="font-medium">{{ venda.nome_cliente }} ({{venda.id_cliente}})</td>

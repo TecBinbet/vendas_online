@@ -1,0 +1,119 @@
+[
+  {
+    "id_evento": 175,
+    "descricao": "Sorteio Especial de Domingo",
+    "data_evento": "09/06/2026",
+    "hora_inicial": "20:00",
+    "hora_final": "21:13",
+    "total_de_bolas": 32,
+    "bolas_sorteadas": [64, 8, 68, 9, 13, 40, 39, 35, 52, 18, 10, 16, 23, 17, 53, 42, 37, 15],
+    "status": "finalizado",
+    "ganhadores": [
+      {
+        "cliente": { "id": "1045", "nome": "João das Neves" },
+        "colaborador": { "id": "002", "nome": "Antonio" },
+        "cartelas": 105,
+        "premio": "Linha",
+        "valor_total_premio": 500.00,
+        "valor_rateado": 250.00,
+        "tipo_premiacao": "Normal"
+      },
+      {
+        "cliente": { "id": "0892", "nome": "Maria Silva" },
+        "colaborador": { "id": "002", "nome": "Antonio" },
+        "cartelas": 408,
+        "premio": "Linha",
+        "valor_total_premio": 500.00,
+        "valor_rateado": 250.00,
+        "tipo_premiacao": "Normal"
+      },
+      {
+        "cliente": { "id": "2021", "nome": "Juliana Castro" },
+        "colaborador": { "id": "001", "nome": "João Carlos" },
+        "cartelas": 990,
+        "premio": "Bingo",
+        "valor_total_premio": 1500.00,
+        "valor_rateado": 1500.00,
+        "tipo_premiacao": "Normal"
+      }
+    ]
+  },
+  {
+    "id_evento": 177,
+    "descricao": "Sorteio Especial de Domingo",
+    "data_evento": "09/06/2026",
+    "hora_inicial": "20:00",
+    "hora_final": "21:13",
+    "total_de_bolas": 32,
+    "bolas_sorteadas": [64, 8, 68, 9, 13, 40, 39, 35, 52, 18, 10, 16, 23, 17, 53, 42, 37, 15],
+    "status": "finalizado",
+    "ganhadores": [
+      {
+        "cliente": { "id": "1045", "nome": "João das Neves" },
+        "colaborador": { "id": "002", "nome": "Antonio" },
+        "cartelas": 105,
+        "premio": "Linha",
+        "valor_total_premio": 500.00,
+        "valor_rateado": 250.00,
+        "tipo_premiacao": "Normal"
+      },
+      {
+        "cliente": { "id": "0892", "nome": "Maria Silva" },
+        "colaborador": { "id": "002", "nome": "Antonio" },
+        "cartelas": 408,
+        "premio": "Linha",
+        "valor_total_premio": 500.00,
+        "valor_rateado": 250.00,
+        "tipo_premiacao": "Normal"
+      },
+      {
+        "cliente": { "id": "2021", "nome": "Juliana Castro" },
+        "colaborador": { "id": "001", "nome": "João Carlos" },
+        "cartelas": 990,
+        "premio": "Bingo",
+        "valor_total_premio": 1500.00,
+        "valor_rateado": 1500.00,
+        "tipo_premiacao": "Normal"
+      }
+    ]
+  },
+  {
+    "id_evento": 178,
+    "descricao": "Sorteio Especial de Domingo",
+    "data_evento": "09/06/2026",
+    "hora_inicial": "20:00",
+    "hora_final": "21:13",
+    "total_de_bolas": 32,
+    "bolas_sorteadas": [64, 8, 68, 9, 13, 40, 39, 35, 52, 18, 10, 16, 23, 17, 53, 42, 37, 15],
+    "status": "finalizado",
+    "ganhadores": [
+      {
+        "cliente": { "id": "1045", "nome": "João das Neves" },
+        "colaborador": { "id": "002", "nome": "Antonio" },
+        "cartelas": 105,
+        "premio": "Linha",
+        "valor_total_premio": 500.00,
+        "valor_rateado": 250.00,
+        "tipo_premiacao": "Normal"
+      },
+      {
+        "cliente": { "id": "0892", "nome": "Maria Silva" },
+        "colaborador": { "id": "002", "nome": "Antonio" },
+        "cartelas": 408,
+        "premio": "Linha",
+        "valor_total_premio": 500.00,
+        "valor_rateado": 250.00,
+        "tipo_premiacao": "Normal"
+      },
+      {
+        "cliente": { "id": "2021", "nome": "Juliana Castro" },
+        "colaborador": { "id": "001", "nome": "João Carlos" },
+        "cartelas": 990,
+        "premio": "Bingo",
+        "valor_total_premio": 1500.00,
+        "valor_rateado": 1500.00,
+        "tipo_premiacao": "Normal"
+      }
+    ]
+  }
+]

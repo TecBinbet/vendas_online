@@ -6,8 +6,10 @@ import traceback
 import pymongo
 from zoneinfo import ZoneInfo
 import random
+import json
+#from flask import request, flash, redirect, url_for
 
-from flask import Blueprint, Flask, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response, send_file, render_template_string
+from flask import Blueprint, Flask, flash, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response, send_file, render_template_string
 #from flask_login import login_required, current_user
 from fpdf import FPDF
 # import pdfkit
@@ -5272,6 +5274,18 @@ def consulta_vendas_detalhes():
         id_evento_int = selected_event.get('id_evento')
         nome_colecao_venda = f"vendas{id_evento_int}"
         
+        # 🚀 NOVO: Captura a unidade de vendas do evento (ajuste o nome do campo se no seu BD for diferente, ex: 'unidade_venda')
+        
+        try:
+            unidade_de_vendas = int(selected_event.get('unidade_de_venda', 1))
+
+        except (ValueError, TypeError):
+            unidade_de_vendas = 1
+        
+        print(f"unidade_de_vendas:>>> 2 >  {unidade_de_vendas}")    
+        mostrar_rodape = (unidade_de_vendas > 1)
+        # ----------------------------------------------------
+
         # --- 2. CONSTRUÇÃO DO FILTRO INTELIGENTE ---
         query_filter = {}
 
@@ -5303,6 +5317,15 @@ def consulta_vendas_detalhes():
             venda['valor_comissao_float'] = (venda['valor_total_float'] * taxa_final) / 100.0
             venda['taxa_comissao_aplicada'] = taxa_final
             
+            # 🚀 NOVO: CÁLCULO DO RODAPÉ
+            if mostrar_rodape:
+                try:
+                    num_final = int(venda.get('numero_final', 0))
+                    venda['rodape'] = num_final // unidade_de_vendas # Divisão inteira (//) para garantir número exato
+                except (ValueError, TypeError):
+                    venda['rodape'] = "-"
+            # ---------------------------------------------------- 
+
             vendas_detalhadas.append(venda)
 
         if not vendas_detalhadas:
@@ -5321,7 +5344,90 @@ def consulta_vendas_detalhes():
                            info_evento_id=id_evento_int, 
                            info_colaborador="TODOS" if id_colaborador_param == 'ALL' else session.get('nick'),
                            info_tipo_cartela=selected_event.get('tipo_de_cartela', 25),
-                           is_evento_filho=is_evento_filho) # 🚀 ENVIADO PARA O JINJA (HTML)
+                           is_evento_filho=is_evento_filho, 
+                           mostrar_rodape=mostrar_rodape)   
+
+
+@app.route('/api/checar_rodape', methods=['GET'])
+@login_required
+def checar_rodape():
+    id_evento = request.args.get('id_evento')
+    rodape_str = request.args.get('rodape')
+
+    if not id_evento or not rodape_str:
+        return jsonify({'error': 'Parâmetros inválidos'}), 400
+
+    try:
+        rodape = int(rodape_str)
+        
+        if rodape <= 0:
+            return jsonify({'error': 'Rodapé deve ser maior que zero'}), 400
+
+        db = get_vendas_db()
+        
+        # 🚀 BLINDAGEM: Verifica se o ID enviado é Numérico ou um ObjectId (Hexadecimal)
+        if str(id_evento).isdigit():
+            evento = db.eventos.find_one({'id_evento': int(id_evento)})
+        else:
+            try:
+                evento = db.eventos.find_one({'_id': ObjectId(id_evento)})
+            except:
+                evento = db.eventos.find_one({'_id': id_evento}) # Fallback de segurança
+
+        if not evento:
+            print(f">>> [RODAPÉ] Erro: Evento {id_evento} não encontrado.")
+            return jsonify({'error': 'Evento não encontrado'}), 404
+
+        # Pega o id_evento real (inteiro) de dentro do documento para buscar a coleção correta
+        id_evento_int = evento.get('id_evento')
+        
+        if not id_evento_int:
+            return jsonify({'error': 'Evento sem ID numérico associado'}), 400
+
+        unidade_de_venda = int(evento.get('unidade_de_venda', 1))
+        
+        # O número final que representa este rodapé
+        numero_alvo = rodape * unidade_de_venda
+        numero_alvo_str = str(numero_alvo)
+
+        print(f">>> [RODAPÉ] ------------------------------------------------")
+        print(f">>> [RODAPÉ] Consultando Rodapé: {rodape} no Evento INT: {id_evento_int}")
+        print(f">>> [RODAPÉ] Unidade de Venda: {unidade_de_venda} | Alvo: {numero_alvo}")
+
+        colecao_vendas = f"vendas{id_evento_int}"
+        if colecao_vendas not in db.list_collection_names():
+            print(f">>> [RODAPÉ] Coleção {colecao_vendas} não existe. Retornando LIVRE.")
+            return jsonify({'vendido': False})
+
+        query = {
+            '$or': [
+                {'numero_inicial': {'$lte': numero_alvo}, 'numero_final': {'$gte': numero_alvo}},
+                {'numero_inicial2': {'$lte': numero_alvo}, 'numero_final2': {'$gte': numero_alvo}},
+                {'numero_inicial': {'$lte': numero_alvo_str}, 'numero_final': {'$gte': numero_alvo_str}},
+                {'numero_inicial2': {'$lte': numero_alvo_str}, 'numero_final2': {'$gte': numero_alvo_str}}
+            ],
+            'status': {'$ne': 'cancelada'}
+        }
+
+        venda_existente = db[colecao_vendas].find_one(query)
+
+        if venda_existente:
+            print(f">>> [RODAPÉ] RESULTADO: VENDIDO! Venda ID: {venda_existente.get('id_venda', 'N/A')}")
+            colab = venda_existente.get('id_colaborador', 'N/A')
+            return jsonify({
+                'vendido': True,
+                'detalhes': f"Venda #{venda_existente.get('id_venda', '?')} (Colab: {colab})"
+            })
+        else:
+            print(f">>> [RODAPÉ] RESULTADO: LIVRE!")
+            return jsonify({'vendido': False})
+
+    except ValueError:
+        return jsonify({'error': 'Valor inválido'}), 400
+    except Exception as e:
+        print(f">>> [RODAPÉ] ERRO INTERNO: {e}")
+        return jsonify({'error': str(e)}), 500
+
 
 # Minha Conta 
 # --- ATUALIZAÇÃO DA ROTA MINHA CONTA ---
@@ -5593,6 +5699,138 @@ def excluir_pagamento():
 
 
 # --- ROTA PARA GALERIA DE RESULTADOS (Consulta Pública/Interna) ---
+#from flask import request, flash, redirect, url_for
+
+@app.route('/sincronizar_ganhadores', methods=['POST'])
+@login_required
+def sincronizar_ganhadores():
+    """
+    Lê o JSON gerado offline, cria o cabeçalho completo do evento e mescla 
+    os novos ganhadores com os já existentes, evitando duplicidade.
+    """
+    print(">>> [SINCRONIZAR] Iniciando rota de sincronização...")
+    
+    db = get_vendas_db()
+    if db is None: 
+        return redirect(url_for('login'))
+    
+    if 'arquivo_json' not in request.files:
+        flash("Nenhum arquivo enviado.", "error")
+        return redirect(url_for('consulta_resultados'))
+        
+    arquivo = request.files['arquivo_json']
+    
+    if arquivo.filename == '':
+        flash("Nenhum arquivo selecionado.", "error")
+        return redirect(url_for('consulta_resultados'))
+        
+    if arquivo and arquivo.filename.lower().endswith('.json'):
+        try:
+            dados = json.load(arquivo)
+            novos_registros = 0
+            
+            for rodada in dados:
+                # --- ALTERADO AQUI PARA id_evento ---
+                id_evento = rodada.get('id_evento')
+                
+                try:
+                    id_evento_int = int(id_evento)
+                except (ValueError, TypeError):
+                    print(f"  -> ERRO: id_evento '{id_evento}' inválido. Ignorando.")
+                    continue
+
+                ganhadores_json = rodada.get('ganhadores', [])
+                
+                # --- CAPTURA DE METADADOS DO EVENTO ---
+                descricao_evt = rodada.get('descricao', f"Evento {id_evento_int}")
+                data_evt = rodada.get('data_evento', "")
+                hora_inicial = rodada.get('hora_inicial', "")
+                hora_final = rodada.get('hora_final', "")
+                total_bolas = rodada.get('total_de_bolas', 0)
+                status_evt = rodada.get('status', 'finalizado')
+                
+                # Converte array de bolas para a string exata que o banco espera "[64, 8...]"
+                bolas_raw = rodada.get('bolas_sorteadas', [])
+                bolas_str = str(bolas_raw) if isinstance(bolas_raw, list) else str(bolas_raw)
+
+                # Busca documento existente
+                resultado_doc = db.resultados.find_one({'id_evento': id_evento_int}) or {}
+                ganhadores_existentes = resultado_doc.get('ganhadores', [])
+                
+                chaves_existentes = {
+                    f"{str(g.get('cartela', ''))}-{str(g.get('descricao_premio', '')).upper()}" 
+                    for g in ganhadores_existentes
+                }
+                
+                houve_alteracao_ganhador = False
+
+                for g_novo in ganhadores_json:
+                    cartela_raw = g_novo.get('cartela') or g_novo.get('cartelas') or g_novo.get('cartelas_ganhadoras') or '0'
+                    if isinstance(cartela_raw, list):
+                        num_cartela = ", ".join(str(c) for c in cartela_raw)
+                    else:
+                        num_cartela = str(cartela_raw).strip()
+
+                    premio = str(g_novo.get('premio') or g_novo.get('descricao_premio') or 'Prêmio')
+                    chave_verificacao = f"{num_cartela}-{premio.upper()}"
+                    
+                    if chave_verificacao not in chaves_existentes:
+                        print(f"      + Novo registro: Cartela {num_cartela} | Prêmio: {premio}")
+                        
+                        cliente_obj = g_novo.get('cliente', {})
+                        nome_cliente = cliente_obj.get('nome', 'Desconhecido') if isinstance(cliente_obj, dict) else cliente_obj
+                        
+                        # Captura novos campos de premiação
+                        tipo_prem = g_novo.get('tipo_premiacao', 'Normal')
+                        valor_total = safe_float(g_novo.get('valor_total_premio', g_novo.get('valor_rateado', 0)))
+                        valor_rateio = safe_float(g_novo.get('valor_rateado', 0))
+
+                        novo_ganhador_formatado = {
+                            'descricao_premio': premio,
+                            'valor_total_premio': valor_total,
+                            'valor_rateio': valor_rateio,
+                            'tipo_premiacao': tipo_prem,
+                            'nome': nome_cliente,
+                            'cartela': num_cartela,
+                            'cliente_id': cliente_obj.get('id', '') if isinstance(cliente_obj, dict) else '',
+                            'colaborador': g_novo.get('colaborador', {})
+                        }
+                        
+                        ganhadores_existentes.append(novo_ganhador_formatado)
+                        chaves_existentes.add(chave_verificacao)
+                        novos_registros += 1
+                        houve_alteracao_ganhador = True
+                
+                # A gravacao acontece se houver ganhadores novos OU para atualizar os metadados da rodada
+                db.resultados.update_one(
+                    {'id_evento': id_evento_int},
+                    {'$set': {
+                        'descricao': descricao_evt,
+                        'data_evento': data_evt,
+                        'hora_inicial': hora_inicial,
+                        'hora_final': hora_final,
+                        'total_de_bolas': total_bolas,
+                        'bolas_sorteadas': bolas_str,
+                        'status': status_evt,
+                        'ganhadores': ganhadores_existentes
+                    }},
+                    upsert=True
+                )
+                    
+            print(f">>> [SINCRONIZAR] Sucesso total! {novos_registros} novos ganhadores.")
+            flash(f"Sincronização concluída! {novos_registros} novos ganhadores validados e adicionados.", "success")
+            
+        except json.JSONDecodeError as e:
+            flash("Erro: O arquivo não é um JSON válido. Verifique a formatação.", "error")
+        except Exception as e:
+            flash(f"Erro ao processar o arquivo: {str(e)}", "error")
+            
+    else:
+        flash("Erro: O arquivo enviado precisa ter a extensão .json", "error")
+            
+    return redirect(url_for('consulta_resultados'))
+
+
 @app.route('/consulta_resultados', methods=['GET'])
 @login_required
 def consulta_resultados():
@@ -5675,6 +5913,7 @@ def consulta_resultados():
                                eventos_finalizados=eventos_finalizados,
                                selected_event=None,
                                error=error,
+                               nivel=session.get('nivel', 0),  
                                g=g)
 
     # --- CENÁRIO 2: EXIBIÇÃO DOS RESULTADOS (Se ID for passado) ---
@@ -5724,6 +5963,9 @@ def consulta_resultados():
                     # Acessa o ARRAY de ganhadores (Lista de 5 itens no seu exemplo)
                     raw_ganhadores = resultado_doc.get('ganhadores', [])
                     
+                    if isinstance(raw_ganhadores, dict):
+                        raw_ganhadores = list(raw_ganhadores.values())
+
                     # Garante que é uma lista antes de iterar
                     if isinstance(raw_ganhadores, list):
                         for item in raw_ganhadores:
@@ -5774,6 +6016,7 @@ def consulta_resultados():
                                eventos_finalizados=[], 
                                selected_event=selected_event,
                                resultados=resultados,
+                               nivel=session.get('nivel', 0),
                                error=error,
                                g=g)
 

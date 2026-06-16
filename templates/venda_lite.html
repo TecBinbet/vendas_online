@@ -131,10 +131,9 @@
                     🕒
                 </button>
                 
-                <button type="button" id="btn-copy-list" onclick="copiarListagemVendas()" 
-                        class="p-2 rounded-full transition-colors shadow-sm bg-green-100 text-green-800 border border-green-400 hover:bg-green-200" 
-                        title="Copiar Relatório de Vendas (Texto)">
-                    📋
+                <button type="button" id="btn-consulta-numeral" onclick="abrirModalRodape()" 
+                    class="bg-blue-200 hover:bg-blue-300 text-gray-700 font-bold py-2 px-2 rounded-lg shadow transition flex items-center gap-2">
+                    <span class="text-xl">🚦</span> Consultar
                 </button>
 
                 <button type="button" id="btn-printer-toggle" onclick="togglePrinter()" 
@@ -417,6 +416,28 @@
         </div>
     </div>
 
+<div id="modal-consulta-rodape" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+    <div class="bg-white rounded-xl p-2 max-w-sm w-full shadow-2xl">
+        <h3 class="text-xl font-bold mb-3 text-gray-600 flex items-center gap-2">🚦 Consultar Rodapé</h3>
+        
+        <div class="mb-2">
+            <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Número do Rodapé</label>
+            <input type="number" id="input-rodape" min="1" placeholder="número do rodapé" 
+                   class="w-full p-3 border-2 border-gray-200 rounded-lg text-2xl font-semibold text-center focus:border-blue-500 outline-none transition-colors"
+                   onkeypress="if(event.key === 'Enter') consultarRodape()">
+        </div>
+        
+        <div id="resultado-rodape" class="hidden p-4 rounded-lg font-bold text-center mb-4 text-xl tracking-tight shadow-inner"></div>
+        
+        <div class="flex gap-2">
+            <button type="button" onclick="fecharModalRodape()" class="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300">Fechar</button>
+            <button type="button" onclick="consultarRodape()" class="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-md">🔍 Consultar</button>
+        </div>
+    </div>
+</div>
+
+
+
     <script>
         let venda_ValorUnitario = parseFloat("{{ selected_event.valor_de_venda_float | default('0.0') }}");
         let Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default('0') }}");
@@ -488,7 +509,63 @@
             });
         }
 
-// Variável global para evitar que o sistema faça a mesma busca 2 vezes seguidas
+        function abrirModalRodape() {
+    const modal = document.getElementById('modal-consulta-rodape');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    
+    document.getElementById('input-rodape').value = '';
+    document.getElementById('resultado-rodape').classList.add('hidden');
+    
+    // Foca automaticamente no campo para o caixa já sair digitando
+    setTimeout(() => document.getElementById('input-rodape').focus(), 100);
+}
+
+function fecharModalRodape() {
+    const modal = document.getElementById('modal-consulta-rodape');
+    modal.classList.add('hidden');
+    modal.classList.remove('flex');
+}
+
+async function consultarRodape() {
+    const rodape = document.getElementById('input-rodape').value;
+    const resDiv = document.getElementById('resultado-rodape');
+    
+    if (!rodape || rodape <= 0) {
+        document.getElementById('input-rodape').focus();
+        return;
+    }
+
+    // Estado de carregamento
+    resDiv.className = 'p-4 rounded-lg font-bold text-center mb-4 text-lg shadow-inner bg-gray-100 text-gray-500 animate-pulse';
+    resDiv.innerText = 'Buscando...';
+
+    try {
+        // Pega o ID do evento atual da tela (ajuste o seletor conforme o seu HTML)
+        const idEvento = document.querySelector('input[name="id_evento"]').value;
+        
+        const response = await fetch(`/api/checar_rodape?id_evento=${idEvento}&rodape=${rodape}`);
+        const data = await response.json();
+
+        if (data.vendido) {
+            resDiv.className = 'p-4 rounded-lg font-black text-center mb-4 text-2xl shadow-inner bg-red-100 text-red-700 border-2 border-red-500';
+            resDiv.innerHTML = `🚫 VENDIDO!<br><span class="text-sm font-bold text-red-900/50 mt-1 block">${data.detalhes}</span>`;
+        } else {
+            resDiv.className = 'p-4 rounded-lg font-black text-center mb-4 text-2xl shadow-inner bg-green-100 text-green-700 border-2 border-green-500';
+            resDiv.innerText = '✅ LIVRE!';
+        }
+        
+        // Foca no input novamente, caso ele queira apagar e consultar outro logo em seguida
+        document.getElementById('input-rodape').focus();
+        
+    } catch (err) {
+        resDiv.className = 'p-4 rounded-lg font-bold text-center mb-4 text-lg shadow-inner bg-red-50 text-red-500';
+        resDiv.innerText = 'Erro de conexão.';
+    }
+} 
+
+
+        // Variável global para evitar que o sistema faça a mesma busca 2 vezes seguidas
         let ultimoWhatsAppBuscado = ''; 
 
         function formatarTelefone(input) {
@@ -1087,95 +1164,6 @@ async function openUltimasVendas() {
             }
         }
 
-        function copiarListagemVendas() {
-            const idEvento = '{{ evento.id_evento if evento else request.args.get("id_evento", "") }}';
-            
-            if (!idEvento) {
-                alert("Nenhum evento selecionado!");
-                return;
-            }
-
-            const btn = document.getElementById('btn-copy-list');
-            const originalIcon = btn.innerHTML;
-            btn.innerHTML = "⏳"; 
-
-            fetch(`/api/copiar_listagem_vendas?id_evento=${idEvento}`)
-                .then(res => res.json())
-                .then(async (data) => { 
-                    if (data.erro) {
-                        alert(data.erro);
-                        btn.innerHTML = originalIcon;
-                        return;
-                    }
-                    
-                    if (!data.texto) {
-                        alert("Nenhuma venda registrada para este evento ainda.");
-                        btn.innerHTML = originalIcon;
-                        return;
-                    }
-
-                    const textoRelatorio = data.texto;
-
-                    if (navigator.share) {
-                        try {
-                            await navigator.share({
-                                title: 'Relatório de Vendas',
-                                text: textoRelatorio
-                            });
-                            btn.innerHTML = originalIcon; 
-                            return; 
-                        } catch (err) {
-                            console.log("Compartilhamento cancelado pelo usuário ou falhou.", err);
-                        }
-                    }
-
-                    if (navigator.clipboard && window.isSecureContext) {
-                        navigator.clipboard.writeText(textoRelatorio).then(() => {
-                            feedbackCopiaSucesso(btn, originalIcon); 
-                        }).catch(() => fallbackCopiaTexto(textoRelatorio, btn, originalIcon));
-                    } else {
-                        fallbackCopiaTexto(textoRelatorio, btn, originalIcon);
-                    }
-                })
-                .catch(err => {
-                    console.error("Erro no fetch:", err);
-                    alert("Falha de conexão com o servidor.");
-                    btn.innerHTML = originalIcon;
-                });
-        }
-
-        function fallbackCopiaTexto(texto, btn, originalIcon) {
-            const textArea = document.createElement("textarea");
-            textArea.value = texto;
-            textArea.style.top = "0";
-            textArea.style.left = "0";
-            textArea.style.position = "fixed";
-
-            document.body.appendChild(textArea);
-            textArea.focus();
-            textArea.select();
-
-            try {
-                const successful = document.execCommand('copy');
-                if (successful) {
-                    feedbackCopiaSucesso(btn, originalIcon);
-                } else {
-                    alert('Seu navegador bloqueou a cópia. Tente atualizar a página.');
-                    btn.innerHTML = originalIcon;
-                }
-            } catch (err) {
-                alert('Erro ao copiar.');
-                btn.innerHTML = originalIcon;
-            }
-            document.body.removeChild(textArea);
-        }
-
-        function feedbackCopiaSucesso(btn, originalIcon) {
-            btn.innerHTML = "✅";
-            setTimeout(() => {
-                btn.innerHTML = originalIcon;
-            }, 2000);
-        }
 
 async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
     const baseUrl = `/gerar_pdf_lote_hibrido`;
