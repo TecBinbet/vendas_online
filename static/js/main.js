@@ -91,12 +91,12 @@ function bingoConfirm(msg, callback) {
     confirmBox.style.cssText = "display: flex; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 5000; justify-content: center; align-items: center;";
     
     confirmBox.innerHTML = `
-        <div style="background: #ffffff; color: #333333; width: 450px; padding: 40px; border-radius: 15px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-            <h3 style="margin-top: 0; color: #2c3e50; font-size: 24px; border-bottom: 2px solid #27ae60; padding-bottom: 15px;">Confirmação</h3>
+        <div style="background: #ffffff; color: #333333; width: 450px; padding: 20px; border-radius: 15px; text-align: center; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <h3 style="margin-top: 0; color: #2c3e50; font-size: 24px; border-bottom: 2px solid #27ae60; padding-bottom: 5px;">Confirmação</h3>
             <p style="margin: 25px 0; font-size: 19px; line-height: 1.4; font-weight: 500;">${msg}</p>
             <div style="display: flex; gap: 20px; justify-content: center;">
-                <button id="confirm-sim" style="background: #27ae60; color: white; padding: 20px 40px; font-size: 22px; min-width: 160px; cursor: pointer; border-radius: 10px; border: none; font-weight: bold; transition: 0.2s; outline: none; box-shadow: 0 0 0 4px rgba(39, 174, 96, 0.4);">SIM</button>
-                <button id="confirm-nao" style="background: #e74c3c; color: white; padding: 20px 40px; font-size: 22px; min-width: 160px; cursor: pointer; border-radius: 10px; border: none; font-weight: bold; transition: 0.2s;">NÃO</button>
+                <button id="confirm-sim" style="background: #27ae60; color: white; padding: 20px 40px; font-size: 20px; min-width: 160px; cursor: pointer; border-radius: 10px; border: none; font-weight: bold; transition: 0.2s; outline: none; box-shadow: 0 0 0 4px rgba(39, 174, 96, 0.4);">SIM</button>
+                <button id="confirm-nao" style="background: #e74c3c; color: white; padding: 20px 40px; font-size: 20px; min-width: 160px; cursor: pointer; border-radius: 10px; border: none; font-weight: bold; transition: 0.2s;">NÃO</button>
             </div>
         </div>
     `;

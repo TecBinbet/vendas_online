@@ -6,6 +6,7 @@
     <title>Menu de Operações</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script> 
     <style>
         /* --- CSS DO SPINNER --- */
         .spinner-overlay {
@@ -160,7 +161,13 @@
             {% endif %}
             
         </div>
-        <a href="{{ url_for('login_page') }}" class="menu-item menu-item-exit" style="margin-top: 30px;">🚪 Sair</a>
+        <a href="#" 
+            onclick="event.preventDefault(); bingoConfirm('Deseja realmente sair do sistema?', () => { window.location.href = '{{ url_for('logout') }}'; });" 
+            class="menu-item menu-item-exit" 
+            style="margin-top: 30px;">
+            🚪 Sair / Logout
+       </a>
+
     </div>
 
     <script>

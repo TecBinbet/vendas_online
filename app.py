@@ -195,7 +195,8 @@ class PDFCartelas(FPDF):
 # --- CONFIGURAÇÃO E CONEXÃO MONGODB (DINÂMICA) ---
 app = Flask(__name__)
 app.secret_key = 'sua_chave_secreta_aqui' 
-app.permanent_session_lifetime = timedelta(minutes=60) 
+#app.permanent_session_lifetime = timedelta(minutes=60) 
+app.permanent_session_lifetime = timedelta(hours=12) 
 app.register_blueprint(venda_lite_bp)
 
 # ---- UTILITARIOS
@@ -1514,9 +1515,7 @@ def login_page():
 
 @app.route('/login', methods=['POST'])
 def login():
-    
-    #print("\n=== [DEBUG] INÍCIO DO LOGIN ===")
-    
+   
     nome_raw = request.form.get('nome', '')
     senha_raw = request.form.get('senha', '')
     
@@ -1612,6 +1611,7 @@ def login():
 
             if tipo_usuario == 'colaborador':
                 # 🎛️ INTEGRAÇÃO DA CHAVE GERAL DO MÓDULO LITE
+                session.permanent = True
                 parametros = db.parametros.find_one({}) or {}
                 usar_modo_lite = parametros.get('venda_lite', False) # Captura o Booleano do banco
                 usar_modo_aleatorio = parametros.get('venda_aleatoria', False) # Captura o Booleano do banco
@@ -1633,6 +1633,11 @@ def login():
 
     return redirect(url_for('login_page', error="Usuário ou senha inválidos.", id_sala=id_sala_to_redirect))
 
+@app.route('/logout')
+def logout():
+    """Encerra a sessão atual e devolve o utilizador à tela de login"""
+    session.clear() # Limpa os dados
+    return redirect(url_for('login_page')) 
 
 @app.route('/auto_cadastro_colaborador', methods=['GET'])
 def auto_cadastro_colaborador():
