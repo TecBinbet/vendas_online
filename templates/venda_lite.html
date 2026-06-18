@@ -204,14 +204,18 @@
                                 </button>
                             </div>
                             
-                            <div class="flex gap-2">
-                                <input type="text" id="nick_cliente_lite" name="nick_cliente_lite" 
-                                       class="form-control flex-grow transition-colors" placeholder="Nome do cliente..." required autocomplete="off"
-                                       onkeydown="irParaProximoCampo(event, this)"
-                                       onkeyup="handleLiteSearchInput(this)"> <button type="button" onclick="limparClienteLite()" class="bg-white hover:bg-gray-100 text-red-600 px-3 py-1 rounded text-sm font-bold border border-red-200 transition shadow-sm">
-                                    Limpar
-                                </button>
-                            </div>
+<div class="flex gap-2">
+    <input type="text" id="nick_cliente_lite" name="nick_cliente_lite" 
+           class="form-control flex-grow transition-colors bg-gray-100 cursor-not-allowed" 
+           placeholder="Nome do cliente..." required autocomplete="off"
+           onkeydown="irParaProximoCampo(event, this)"
+           onkeyup="handleLiteSearchInput(this)"
+           readonly>
+    
+    <button type="button" onclick="limparClienteLite()" class="bg-white hover:bg-gray-100 text-red-600 px-3 py-1 rounded text-sm font-bold border border-red-200 transition shadow-sm">
+        Limpar
+    </button>
+</div>
                             
                             <span id="badge_cliente" class="absolute -top-1 right-20 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow hidden">Cadastrado!</span>
                             
@@ -586,70 +590,87 @@ async function consultarRodape() {
             }
         }
 
-        async function buscarClienteWhatsApp() {
-            const telInput = document.getElementById('telefone_cliente_lite');
-            const nickInput = document.getElementById('nick_cliente_lite');
-            const idInput = document.getElementById('id_cliente_lite');
-            const colabInput = document.getElementById('colaborador_cliente_lite');
-            const badge = document.getElementById('badge_cliente');
+async function buscarClienteWhatsApp() {
+    const telInput = document.getElementById('telefone_cliente_lite');
+    const nickInput = document.getElementById('nick_cliente_lite');
+    const idInput = document.getElementById('id_cliente_lite');
+    const colabInput = document.getElementById('colaborador_cliente_lite');
+    const badge = document.getElementById('badge_cliente');
+    
+    const telefoneLimpo = telInput.value.replace(/\D/g, '');
+    if (telefoneLimpo.length < 10) return;
+    
+    // Evita requisição duplicada se o número não mudou
+    if (telefoneLimpo === ultimoWhatsAppBuscado) return; 
+    ultimoWhatsAppBuscado = telefoneLimpo;
+
+    try {
+        telInput.classList.add('opacity-70');
+        
+        const res = await fetch('/api/buscar_cliente_whatsapp', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ telefone: telefoneLimpo })
+        });
+        const data = await res.json();
+
+        if (data.status === 'success') {
+            // ✅ CLIENTE ENCONTRADO
+            bloquearNickLite(); // Já aplica o readonly
+            nickInput.value = data.nick;
+            idInput.value = data.id_cliente;
+            if(data.id_colaborador) colabInput.value = data.id_colaborador; 
             
-            const telefoneLimpo = telInput.value.replace(/\D/g, '');
-            if (telefoneLimpo.length < 10) return;
+            // Aplica os estilos visuais de SUCESSO
+            nickInput.classList.add('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+            badge.classList.remove('hidden');
+
+            // 🚀 DIRECIONA O FOCO PARA A VENDA (Kit Inicial ou Quantidade)
+            const kitInput = document.getElementById('numero_kit_inicial');
+            const qtdInput = document.getElementById('quantidade') || document.querySelector('input[name="quantidade"]');
             
-            // Evita requisição duplicada se o número não mudou
-            if (telefoneLimpo === ultimoWhatsAppBuscado) return; 
-            ultimoWhatsAppBuscado = telefoneLimpo;
-
-            try {
-                telInput.classList.add('opacity-70');
-                
-                const res = await fetch('/api/buscar_cliente_whatsapp', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ telefone: telefoneLimpo })
-                });
-                const data = await res.json();
-
-                if (data.status === 'success') {
-                    // ✅ CLIENTE ENCONTRADO
-                    nickInput.value = data.nick;
-                    idInput.value = data.id_cliente;
-                    if(data.id_colaborador) colabInput.value = data.id_colaborador; 
-                    
-                    nickInput.readOnly = true;
-                    nickInput.classList.add('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
-                    badge.classList.remove('hidden');
-
-                    // 🚀 DIRECIONA O FOCO PARA A VENDA (Kit Inicial ou Quantidade)
-                    const kitInput = document.getElementById('numero_kit_inicial');
-                    const qtdInput = document.getElementById('quantidade') || document.querySelector('input[name="quantidade"]');
-                    
-                    if (kitInput && !kitInput.disabled) {
-                        setTimeout(() => kitInput.focus(), 100);
-                    } else if (qtdInput && !qtdInput.disabled) {
-                        setTimeout(() => qtdInput.focus(), 100);
-                    } else {
-                        telInput.blur(); // Apenas esconde o teclado se não achar o próximo campo
-                    }
-
-                } else {
-                    // 🆕 NOVO CLIENTE
-                    idInput.value = '0';
-                    nickInput.readOnly = false;
-                    nickInput.value = ''; 
-                    nickInput.classList.remove('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
-                    badge.classList.add('hidden');
-                    
-                    // 🚀 DIRECIONA O FOCO PARA O NOME
-                    setTimeout(() => nickInput.focus(), 100);
-                }
-            } catch (e) { 
-                console.error("Erro ao buscar WhatsApp", e); 
-                ultimoWhatsAppBuscado = ''; // Libera a busca em caso de erro
-            } finally {
-                telInput.classList.remove('opacity-70');
+            if (kitInput && !kitInput.disabled) {
+                setTimeout(() => kitInput.focus(), 100);
+            } else if (qtdInput && !qtdInput.disabled) {
+                setTimeout(() => qtdInput.focus(), 100);
+            } else {
+                telInput.blur(); // Apenas esconde o teclado se não achar o próximo campo
             }
+
+        } else {
+            // 🆕 NOVO CLIENTE
+            desbloquearNickLite(); // Já remove o readonly e joga o foco!
+            idInput.value = '0';
+            nickInput.value = ''; 
+            
+            // Remove os estilos azuis caso tenham sido aplicados antes
+            nickInput.classList.remove('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+            badge.classList.add('hidden');
         }
+    } catch (e) { 
+        console.error("Erro ao buscar WhatsApp", e); 
+        ultimoWhatsAppBuscado = ''; // Libera a busca em caso de erro
+    } finally {
+        telInput.classList.remove('opacity-70');
+    }
+}
+
+        // 🔓 Destranca o campo e já joga o cursor (foco) para ele digitar
+function desbloquearNickLite() {
+    const inputNick = document.getElementById('nick_cliente_lite');
+    inputNick.removeAttribute('readonly');
+    inputNick.classList.remove('bg-gray-100', 'cursor-not-allowed');
+    inputNick.classList.add('bg-white');
+    inputNick.focus();
+}
+
+// 🔒 Tranca o campo novamente (útil para o botão limpar)
+function bloquearNickLite() {
+    const inputNick = document.getElementById('nick_cliente_lite');
+    inputNick.setAttribute('readonly', 'true');
+    inputNick.classList.remove('bg-white');
+    inputNick.classList.add('bg-gray-100', 'cursor-not-allowed');
+}
 
         function limparCliente() {
             const telInput = document.getElementById('telefone_cliente_lite');
@@ -1535,6 +1556,7 @@ async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
 
         // 2. Ativar modo busca (Limpando o telefone)
         function ativarBuscaNickLite() {
+            desbloquearNickLite();
             isBuscaNickAtiva = true;
             const inputNome = document.getElementById('nick_cliente_lite');
             const inputTelefone = document.getElementById('telefone_cliente_lite') || document.getElementById('telefone_lite');
@@ -1676,56 +1698,48 @@ async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
         }
 
         // 6. Função de limpar e reativar a tela (Voltando à cor padrão)
-        function limparClienteLite() {
-            const telInput = document.getElementById('telefone_cliente_lite') || document.getElementById('telefone_lite');
-            const nickInput = document.getElementById('nick_cliente_lite');
-            const badge = document.getElementById('badge_cliente');
-            const resultsDiv = document.getElementById('search-results-list');
+// 6. Função de limpar e reativar a tela (Voltando ao padrão trancado)
+function limparClienteLite() {
+    const telInput = document.getElementById('telefone_cliente_lite') || document.getElementById('telefone_lite');
+    const nickInput = document.getElementById('nick_cliente_lite');
+    const badge = document.getElementById('badge_cliente');
+    const resultsDiv = document.getElementById('search-results-list');
 
-            if(telInput) telInput.value = '';
-            
-            if (nickInput) {
-                nickInput.value = '';
-                nickInput.placeholder = 'Nome do cliente...';
-                
-                // 2 - Remove todas as cores para garantir o fundo branco padrão
-                nickInput.classList.remove('ring-2', 'ring-blue-500', 'border-blue-500', 'bg-yellow-100', 'bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
-                nickInput.readOnly = false; // Destranca o campo
-            }
-            
-            const idInput = document.getElementById('id_cliente_lite');
-            const colabInput = document.getElementById('colaborador_cliente_lite');
-            if (idInput) idInput.value = '0';
-            if (colabInput) colabInput.value = '';
-            
-            if(badge) badge.classList.add('hidden');
-            if(resultsDiv) resultsDiv.style.display = 'none';
-            
-            if (typeof ultimoWhatsAppBuscado !== 'undefined') {
-                ultimoWhatsAppBuscado = ''; 
-            }
-            
-            localStorage.removeItem('lite_telefone');
-            localStorage.removeItem('lite_nick');
-            localStorage.removeItem('lite_id');
-            localStorage.removeItem('lite_colab');
-            
-            isBuscaNickAtiva = false;
-            
-            // Retorna o foco para o Nick para que possa digitar normalmente
-            if(telInput) telInput.focus();
-        }
-
-        // Esconde a lista se clicar fora
-        document.addEventListener('click', function(event) {
-            const resultsDiv = document.getElementById('search-results-list');
-            const inputNome = document.getElementById('nick_cliente_lite');
-            
-            if (resultsDiv && event.target !== inputNome && event.target !== resultsDiv && !resultsDiv.contains(event.target)) {
-                resultsDiv.style.display = 'none';
-            }
-        });
-
+    if(telInput) telInput.value = '';
+    
+    if (nickInput) {
+        nickInput.value = '';
+        nickInput.placeholder = 'Nome do cliente...';
+        
+        // 1 - Remove todas as cores (Amarelo da busca, Azul do sucesso)
+        nickInput.classList.remove('ring-2', 'ring-blue-500', 'border-blue-500', 'bg-yellow-100', 'bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+        
+        // 2 - Tranca o campo com a função mestre que criámos
+        bloquearNickLite(); 
+    }
+    
+    const idInput = document.getElementById('id_cliente_lite');
+    const colabInput = document.getElementById('colaborador_cliente_lite');
+    if (idInput) idInput.value = '0';
+    if (colabInput) colabInput.value = '';
+    
+    if(badge) badge.classList.add('hidden');
+    if(resultsDiv) resultsDiv.style.display = 'none';
+    
+    if (typeof ultimoWhatsAppBuscado !== 'undefined') {
+        ultimoWhatsAppBuscado = ''; 
+    }
+    
+    localStorage.removeItem('lite_telefone');
+    localStorage.removeItem('lite_nick');
+    localStorage.removeItem('lite_id');
+    localStorage.removeItem('lite_colab');
+    
+    isBuscaNickAtiva = false;
+    
+    // 3 - Devolve o foco ao telefone para recomeçar o fluxo natural
+    if(telInput) telInput.focus();
+}
 
     </script>
 
