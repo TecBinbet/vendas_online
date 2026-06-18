@@ -217,7 +217,7 @@
         };
 
         document.addEventListener('keydown', function(event) {
-            if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'c') {
+            if (event.ctrlKey && event.shiftKey && event.key.toLowerCase() === 'x') {
                 event.preventDefault();
                 activarSpinner("A aceder ao painel técnico...");
                 window.location.href = "{{ url_for('configuracoes_sistema') }}";

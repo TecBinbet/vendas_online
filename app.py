@@ -6359,29 +6359,27 @@ def reimprimir_comprovante_json():
             "linhas": []
         }
 
-        # Função auxiliar limpa para adicionar linhas ao JSON
-        def add_linha(texto, alinhamento="esquerda", tamanho="normal", negrito=False):
+        # 🚀 ALTERAÇÃO 1: Adicionado o parâmetro 'tipo' na função
+        def add_linha(texto, alinhamento="esquerda", tamanho="normal", negrito=False, tipo="texto"):
             if not texto or str(texto).strip() == "": texto = " "
             recibo["linhas"].append({
                 "texto": str(texto),
                 "alinhamento": alinhamento,
                 "tamanho": tamanho,
-                "negrito": negrito
+                "negrito": negrito,
+                "tipo": tipo
             })
 
         # ==========================================
         # MODO 1: REIMPRESSÃO DE VENDA ÚNICA
         # ==========================================
         if tipo_reimpressao == 'unica':
-            # 🚀 CORREÇÃO CRÍTICA: Agora usamos .find() para apanhar todas as fatias de uma venda (Pilar 1)
             fatias_venda = list(db[nome_colecao_venda].find({'id_venda': id_venda_str}).sort('numero_inicial', 1))
             if not fatias_venda:
                 return jsonify({'status': 'error', 'message': 'Venda não encontrada'})
             
-            # Pega os dados principais da primeira fatia (são todos iguais)
             venda_base = fatias_venda[0]
             
-            # Calcula os totais reais somando todas as fatias
             quantidade_total_unidades = sum([v.get('quantidade_unidades', 1) for v in fatias_venda])
             quantidade_total_cartelas = venda_base.get('quantidade_cartelas', unidade_de_venda)
             valor_total_real = sum([safe_float(v.get('valor_total', 0)) for v in fatias_venda])
@@ -6403,7 +6401,6 @@ def reimprimir_comprovante_json():
 
             add_linha("> PERIODO DE CARTELAS <", "centro", "normal", True)
             
-            # 🚀 LÓGICA DO COMBO EM MATRIZ NA REIMPRESSÃO (Igual à tela de sucesso)
             for rodada in range(1, combo_qtde + 1):
                 
                 for fatia in fatias_venda:
@@ -6476,7 +6473,6 @@ def reimprimir_comprovante_json():
             
             add_linha("> PERIODOS ADQUIRIDOS <", "centro", "normal", True)
             for venda in vendas_cliente:
-                # 🚀 LÓGICA DO COMBO NAS VENDAS TOTAIS DO CLIENTE
                 qtd_cartelas = (venda['numero_final'] - venda['numero_inicial']) + 1
                 kit_base = ((venda['numero_inicial'] - 1) // unidade_de_venda) + 1
                 
@@ -6508,8 +6504,11 @@ def reimprimir_comprovante_json():
             return jsonify({'status': 'error', 'message': 'Tipo de reimpressão inválido.'})
         
         # --- RODAPÉ COMUM PARA AMBOS OS MODOS ---
-        add_linha("Acesse o Canal do Sorteio", "centro", "normal", False)
-        add_linha(link_final_limpo, "centro", "normal", False)
+        add_linha("Aponte a camera para o link:", "centro", "normal", False)
+        
+        # 🚀 ALTERAÇÃO 2: Passa a flag 'qrcode' e o sistema Android fará o desenho!
+        add_linha(link_final_limpo, "centro", "normal", False, tipo="qrcode")
+        
         add_linha(" ", "centro", "normal", False)
 
         return jsonify({
@@ -7261,7 +7260,7 @@ def imprimir_cartelas_58mm_15():
                 if unidade_de_venda > 1:
                     texto_rodada += f" - KIT {kit_atual}"
                 
-                recibo["linhas"].append({"texto": texto_rodada, "alinhamento": "centro", "tamanho": "duplo", "negrito": True})
+                recibo["linhas"].append({"texto": texto_rodada, "alinhamento": "centro", "tamanho": "largura", "negrito": True})
                 recibo["linhas"].append({"texto": "===============================", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
             # --- LAÇO GERADOR (Cartelas da Rodada Atual) ---
@@ -7280,15 +7279,15 @@ def imprimir_cartelas_58mm_15():
                     recibo["linhas"].append({"texto": linha_formatada, "alinhamento": "centro", "tamanho": "duplo", "negrito": False})
 
                 # Espaçamento e linha pontilhada entre cartelas do MESMO kit
-                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                #<<recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 recibo["linhas"].append({"texto": "- - - - - - - - - - - - - - - -", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
             # 🚀 MARCA DE CORTE E AVANÇO (Se for combo e não for a última rodada)
             if combo_qtde > 1 and rodada < combo_qtde:
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                #<<recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 recibo["linhas"].append({"texto": "✂ - - CORTE AQUI - - ✂", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                #<<recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================
@@ -7296,8 +7295,18 @@ def imprimir_cartelas_58mm_15():
         # ==========================================
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         if imprime_qr and http_apk:
-            recibo["linhas"].append({"texto": "Acompanhe o Sorteio no Link::", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-            recibo["linhas"].append({"texto": http_apk, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            # Texto indicativo antes do QR Code
+            recibo["linhas"].append({"texto": "Aponte a camera para o link:", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            
+            # 🚀 A MÁGICA ACONTECE AQUI: Adicionamos o "tipo": "qrcode"
+            recibo["linhas"].append({
+                "texto": http_apk, 
+                "alinhamento": "centro", 
+                "tamanho": "normal", 
+                "negrito": False, 
+                "tipo": "qrcode"
+            })
+            
             recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
         recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
@@ -7472,7 +7481,7 @@ def imprimir_cartelas_58mm_25():
                 if unidade_de_venda > 1:
                     texto_rodada += f" - KIT {kit_atual}"
                 
-                recibo["linhas"].append({"texto": texto_rodada, "alinhamento": "centro", "tamanho": "duplo", "negrito": True})
+                recibo["linhas"].append({"texto": texto_rodada, "alinhamento": "centro", "tamanho":"largura", "negrito": True})
                 recibo["linhas"].append({"texto": "===============================", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
             # --- LAÇO GERADOR (Cartelas da Rodada Atual) ---
@@ -7494,15 +7503,15 @@ def imprimir_cartelas_58mm_25():
                     recibo["linhas"].append({"texto": linha_formatada, "alinhamento": "centro", "tamanho": "duplo", "negrito": False})
 
                 # Espaçamento e linha de corte suave entre cartelas do MESMO kit
-                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                #<<recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 recibo["linhas"].append({"texto": "- - - - - - - - - - - - - - - -", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
             # 🚀 MARCA DE CORTE E AVANÇO (Se for combo e não for a última rodada)
             if combo_qtde > 1 and rodada < combo_qtde:
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                #<<recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 recibo["linhas"].append({"texto": "✂ - - CORTE AQUI - - ✂", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                #<<recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================
@@ -7510,8 +7519,18 @@ def imprimir_cartelas_58mm_25():
         # ==========================================
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         if imprime_qr and http_apk:
-            recibo["linhas"].append({"texto": "Acompanhe o Sorteio no Link:", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-            recibo["linhas"].append({"texto": http_apk, "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+            # Texto indicativo antes do QR Code
+            recibo["linhas"].append({"texto": "Aponte a camera para o link:", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            
+            # 🚀 A MÁGICA ACONTECE AQUI: Adicionamos o "tipo": "qrcode"
+            recibo["linhas"].append({
+                "texto": http_apk, 
+                "alinhamento": "centro", 
+                "tamanho": "normal", 
+                "negrito": False, 
+                "tipo": "qrcode"
+            })
+            
             recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
         recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
