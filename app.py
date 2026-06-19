@@ -1,5 +1,7 @@
 # app.py (Versão Refatorada para Conexão Dinâmica por Sala)
 
+import hmac
+import hashlib
 import time
 import threading
 import traceback
@@ -9,7 +11,7 @@ import random
 import json
 #from flask import request, flash, redirect, url_for
 
-from flask import Blueprint, Flask, flash, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response, send_file, render_template_string
+from flask import Blueprint, Flask, flash, render_template, request, redirect, url_for, session, g, jsonify, make_response, Response, send_file, render_template_string, current_app
 #from flask_login import login_required, current_user
 from fpdf import FPDF
 # import pdfkit
@@ -341,7 +343,6 @@ def sortear_combos_livres(db, id_evento_pai, limite_maximo_cartelas, unidade_de_
     # Retorna os números ordenados para a impressão do recibo ficar bonita
     return sorted(numeros_iniciais_sorteados)
 
-
 def calcular_faturamento_evento(id_evento):
     db = get_vendas_db()
     evento = db.eventos.find_one({"id_evento": id_evento})
@@ -373,6 +374,20 @@ def calcular_faturamento_evento(id_evento):
         "lucro_liquido": lucro_liquido
     }
 
+
+def gerar_token_venda(id_venda):
+    """Gera um token criptográfico único para a venda baseada no ID."""
+    # Usa a chave secreta global do Flask (garante que cada servidor gere hashes únicos)
+    chave_secreta = current_app.secret_key or "ChaveSecretaDeEmergenciaBingo2026"
+    
+    # Mistura a chave secreta com o ID da venda usando SHA-256
+    assinatura = hmac.new(
+        chave_secreta.encode('utf-8'), 
+        str(id_venda).encode('utf-8'), 
+        hashlib.sha256
+    ).hexdigest()
+    
+    return assinatura
 
 #########################################
 # INICIAR ROTAS
@@ -2956,25 +2971,25 @@ def processar_venda():
         )
        
         # 💸 CHAMADA DA NOVA FUNÇÃO FINANCEIRA BLINDADA
-        valor_debito = 0.0
-        saldo_verificacao = safe_float(cliente_doc.get('saldo_atual', 0.0))
+        #valor_debito = 0.0
+        #saldo_verificacao = safe_float(cliente_doc.get('saldo_atual', 0.0))
         
-        if saldo_verificacao > 0:
-            desconto_real = min(abs(valor_total_atual), saldo_verificacao)
-            valor_debito = -abs(desconto_real)
-        
-        if valor_debito != 0.0:
-            desc_transacao = f"Compra de {quantidade} -( {colaborador_id}: {nick_colaborador} )- {selected_event.get('descricao')}"
-            # O registrar_transacao_cliente que criamos na fase do terminal já processa o Livro Razão
-            registrar_transacao_cliente(
-                db=db, # Assumindo que mudou o nome do param ou db_vendas=db
-                id_cliente=id_cliente_final,
-                valor=valor_debito,
-                tipo='compra_cartela', 
-                descricao=desc_transacao,
-                id_evento=id_evento_int_para_controle,
-                id_venda=id_venda_formatado
-            )
+        #if saldo_verificacao > 0:
+        #    desconto_real = min(abs(valor_total_atual), saldo_verificacao)
+        #    valor_debito = -abs(desconto_real)
+        #
+        #if valor_debito != 0.0:
+        #    desc_transacao = f"Compra de {quantidade} -( {colaborador_id}: {nick_colaborador} )- {selected_event.get('descricao')}"
+        #    # O registrar_transacao_cliente que criamos na fase do terminal já processa o Livro Razão
+        #    registrar_transacao_cliente(
+        #        db=db, # Assumindo que mudou o nome do param ou db_vendas=db
+        #        id_cliente=id_cliente_final,
+        #        valor=valor_debito,
+        #        tipo='compra_cartela', 
+        #        descricao=desc_transacao,
+        #        id_evento=id_evento_int_para_controle,
+        #        id_venda=id_venda_formatado
+        #    )
 
         # 1. Vendedor que está a OPERAR o balcão (Comissão Direta)
         taxa_operador = g.parametros_globais.get('perc_venda_direta', 15.0) 
@@ -3032,43 +3047,6 @@ def processar_venda():
     # ==============================================================================
 
     try:
-        vendas_cliente_cursor = db[nome_colecao_venda].find(
-            {'id_cliente': id_cliente_final}
-        ).sort('data_venda', pymongo.ASCENDING) 
-        
-        lista_periodos_antigos_html = []
-        periodo_atual_html = ""
-        link_periodos_completos = "" 
-        
-        total_unidades_cliente = 0
-        total_cartelas_cliente = 0
-        total_valor_cliente = 0.0
-
-        for venda in vendas_cliente_cursor:
-            total_unidades_cliente += venda['quantidade_unidades']
-            total_cartelas_cliente += venda['quantidade_cartelas']
-            total_valor_cliente += safe_float(venda['valor_total'])
-            
-            link_periodos_completos += f"&periodo={venda['numero_inicial']},{venda['numero_final']}"
-            if venda.get('numero_inicial2', 0) > 0:
-                link_periodos_completos += f"&periodo={venda['numero_inicial2']},{venda['numero_final2']}"
-            
-            periodo_str = f" > {venda['numero_inicial']} a {venda['numero_final']}<br>"
-            if venda.get('numero_inicial2', 0) > 0:
-                periodo_str += f" > {venda['numero_inicial2']} a {venda['numero_final2']}<br>"
-
-            if venda['id_venda'] == id_venda_formatado:
-                periodo_atual_html = (
-                    f"<strong> > PERÍODO ATUAL (Qtd: {quantidade}) <strong><br>"
-                    f"<span style='font-size: 1.4rem; color: #0047AB;'><strong>{periodo_str}</strong></span>"
-                )
-            else:
-                lista_periodos_antigos_html.append(
-                    f"<span style='font-size: 0.9rem; color: #555;'>{periodo_str}</span>"
-                )
-
-        periodos_anteriores_html = "".join(lista_periodos_antigos_html)
-
         tipo_de_cartela = int(selected_event.get('tipo_de_cartela', 25))
         nome_sala = g.parametros_globais.get('nome_sala', '')
         data_evento_str = selected_event.get('data_evento', 'N/A')
@@ -3076,9 +3054,16 @@ def processar_venda():
         data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
 
         http_apk = g.parametros_globais.get('http_apk', '')
-
         link_final_limpo = f"{http_apk}?idcliente={id_cliente_final}"
         
+        # --- MONTA APENAS O PERÍODO DA VENDA ATUAL (Sem Histórico) ---
+        periodo_atual_html = (
+            f"<strong> > PERÍODO ADQUIRIDO < </strong><br>"
+            f"<span style='font-size: 1.4rem; color: #0047AB;'><strong> > {numero_inicial_atual} a {numero_final_atual}</strong></span><br>"
+        )
+        if numero_inicial2_atual > 0:
+            periodo_atual_html += f"<span style='font-size: 1.4rem; color: #0047AB;'><strong> > Adic: {numero_inicial2_atual} a {numero_final2_atual}</strong></span><br>"
+
         success_msg = (
             f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
             f"  <span style='font-size: 1.2rem; color: #B91C1C;'>{nome_sala}</span><br>"
@@ -3089,14 +3074,11 @@ def processar_venda():
             f"<strong>Data: {data_evento_formatada} às {hora_evento_str}</strong><br>"
             f"Colaborador:{colaborador_id}-{nick_colaborador}<br>"
             f"----------------------------<br>"
-            f"<strong> > Períodos Anteriores <</strong><br>"
-            f"{periodos_anteriores_html}"
-            f"----------------------------<br>"
             f"{periodo_atual_html}"
             f"----------------------------<br>"
-            f"Total Unidades: <strong>{total_unidades_cliente}</strong><br>"
-            f"Total Cartelas: <strong>{total_cartelas_cliente}</strong><br>"
-            f"  VALOR TOTAL: <span style='font-size: 1.2rem; color: #B91C1C;'>R$ {total_valor_cliente:.2f}</span><br>"
+            f"Total Unidades: <strong>{quantidade}</strong><br>"
+            f"Total Cartelas: <strong>{quantidade_cartelas_atual}</strong><br>"
+            f"  VALOR TOTAL: <span style='font-size: 1.2rem; color: #B91C1C;'>R$ {valor_total_atual:.2f}</span><br>"
             f"<br>"
             f"   🔑   CHAVE PIX   💸<br>"
             f"   <strong>{chave_pix_colaborador}</strong><br>"
@@ -3108,13 +3090,38 @@ def processar_venda():
         )
         
         session['success_message'] = success_msg 
+        
+        # =======================================================
+        # 🚀 CORREÇÃO CRÍTICA: Preparando o Modal e a Segurança
+        # =======================================================
+        token_seguranca = gerar_token_venda(id_venda_formatado)
+        
         session['print_data'] = { 
+            'id_venda_recente': id_venda_formatado,
+            'id_cliente_recente': id_cliente_final,
+            'telefone_cliente': cliente_doc.get('telefone', ''),
             'id_evento': id_evento_int_para_controle,
             'nome_cliente': cliente_doc.get('nick'),
             'numero_inicial': numero_inicial_atual,
             'numero_final': numero_final_atual,
-            'tipo_cartela': tipo_de_cartela
+            'tipo_cartela': tipo_de_cartela,
+            'token': token_seguranca  # 🔒 O cadeado viaja para o HTML aqui!
         }
+        
+        redirect_kwargs = {
+            'id_evento': id_evento_string,
+            'quantidade': '',
+            'id_cliente_busca':  '' 
+        }
+        return redirect(url_for('nova_venda', **redirect_kwargs))
+
+    except Exception as e:
+        print(f"{log_prefix} LOG 7 (ERRO PÓS-VENDA): Erro ao montar comprovante: {e}")
+        session['success_message'] = (
+            f"<strong>VENDA {id_venda_formatado} GRAVADA!</strong><br>"
+            f"Ocorreu um erro ao gerar o comprovante completo, mas a venda foi registrada."
+        )
+        return redirect(url_for('nova_venda', id_evento=id_evento_string))
         
         redirect_kwargs = {
             'id_evento': id_evento_string,
@@ -3404,6 +3411,24 @@ def processar_venda_combo_quantidade():
         )
         
         session['success_message'] = success_msg 
+
+        # =======================================================
+        # 🚀 ATIVAÇÃO DO MODAL PARA O COMBO COM SEGURANÇA
+        # =======================================================
+        token_seguranca = gerar_token_venda(id_venda_formatado)
+        
+        session['print_data'] = { 
+            'id_venda_recente': id_venda_formatado,
+            'id_cliente_recente': id_cliente_final,
+            'telefone_cliente': cliente_db.get('telefone', ''),
+            'id_evento': id_evento_pai_int,
+            'nome_cliente': cliente_db.get('nick'),
+            # No combo, usamos o bloco do Pai como referência para o HTML
+            'numero_inicial': numero_base_banco, 
+            'numero_final': numero_base_banco + unidade_de_venda - 1,
+            'tipo_cartela': tipo_cartela,
+            'token': token_seguranca  # 🔒 Cadeado do Combo!
+        }
         
         return redirect(url_for('venda_lite.nova_venda_lite', id_evento=id_evento_string))
 
@@ -7038,8 +7063,20 @@ def gerar_pdf_lote_hibrido():
         tipo_cartela_str = request.args.get('tipo_cartela', '15')
         nome_cliente = request.args.get('nome_cliente', 'cliente')
         
+        # 🚀 1. Recebe o token enviado na URL
+        token_recebido = request.args.get('token')
+        
         if not id_venda or valor_id_evento == '0':
             return "Erro: id_venda e id_evento são obrigatórios."
+            
+        # 🚀 2. FECHADURA DE SEGURANÇA (IDOR Protection)
+        # Calcula qual deveria ser o token verdadeiro para esta venda
+        token_esperado = gerar_token_venda(id_venda)
+        
+        # Compara de forma segura (seguro contra ataques de timing)
+        if not token_recebido or not hmac.compare_digest(token_recebido, token_esperado):
+            print(f"⚠️ TENTATIVA DE INVASÃO BLOQUEADA: Acesso inválido à venda {id_venda}.")
+            return "Acesso Negado: O link desta cartela é inválido ou expirou.", 403
             
         TIPO_CARTELA = int(tipo_cartela_str)
 
@@ -9209,7 +9246,7 @@ def gravar_parametros():
 @app.route('/configuracoes_sistema', methods=['GET', 'POST'])
 @login_required
 def configuracoes_sistema():
-    from flask import flash  # 🚀 CORREÇÃO: Importando o flash aqui!
+    from flask import flash, session # 🚀 Adicionado o import do session (caso não esteja global)
     
     db = get_vendas_db()
     if db is None:
@@ -9250,8 +9287,16 @@ def configuracoes_sistema():
             # Atualiza no MongoDB (upsert=True cria o documento se a sala for nova)
             db.parametros.update_one(query_sala, {'$set': novos_dados}, upsert=True)
             
-            flash('✅ Configurações do sistema atualizadas com sucesso!', 'success')
-            return redirect(url_for('menu_operacoes'))
+            # ==========================================================
+            # 🚀 A "GUILHOTINA" DA SESSÃO ENTRA AQUI
+            # ==========================================================
+            session.clear() # Destrói todas as variáveis de sessão instantaneamente
+            
+            # Usando a categoria 'info' para não parecer um erro vermelho na tela de login
+            flash('✅ Configurações atualizadas! Por segurança e para aplicar as mudanças, faça o login novamente.', 'info')
+            
+            # Certifique-se de que o nome da sua rota de login seja 'login' mesmo. Se for diferente (ex: 'auth_login'), ajuste abaixo:
+            return redirect(url_for('login')) 
             
         except Exception as e:
             flash(f'❌ Erro ao salvar configurações: {str(e)}', 'error')
@@ -9259,7 +9304,6 @@ def configuracoes_sistema():
 
     # Para requisições GET, renderiza a tela enviando os parâmetros atuais
     return render_template('configuracoes_sistema.html', p=parametros_atuais)
-
 
 def motor_background_premios():
     """

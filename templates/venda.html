@@ -142,20 +142,6 @@
             <div class="alert alert-danger">{{ error }}</div>
         {% endif %}
         
-        {% if success %}
-          <div id="success-block">
-            <div class="alert alert-success text-center">
-                <h3 class="text-lg font-bold -mt-2">Venda Registrada com Sucesso!</h3>
-                <div id="receipt-content" style="display: none;">{{ success | safe }}</div>
-            </div>
-            <div class="flex justify-center mb-1 gap-3 flex-wrap">
-                <button onclick="copyReceiptText()" class="btn btn-primary shadow-lg">📋 Copiar Texto</button>
-                <button onclick="shareReceiptImage()" class="btn btn-warning shadow-lg">🖼️ Gerar Imagem</button>
-                <button id="btn-toggle-cupom" onclick="toggleReceipt()" class="btn bg-green-500 text-white hover:bg-green-700 shadow-lg">👁️ Mostrar Cupom</button>
-            </div>
-          </div>
-        {% endif %}
-
         <form method="GET" action="{{ url_for('nova_venda') }}" class="form-venda" id="main-form">
             <input type="hidden" name="id_evento" id="input_id_evento" 
                    value="{% if selected_event %}{{ selected_event._id }}{% endif %}">
@@ -198,16 +184,20 @@
                 </div>
 
                 {% if cliente_encontrado %}
-                    <div class="alert alert-success mt-1 -mb-3">
+                    <div class="alert alert-success mt-1 -mb-1">
                         <strong>{{ cliente_encontrado.nick }}</strong> - ID: <strong>{{ id_cliente_final }}</strong>
                         <input type="hidden" name="id_cliente_final" id="id_cliente_final_hidden" value="{{ id_cliente_final }}">
                     </div>
+
+                    {# --- INÍCIO DO COMENTÁRIO ---
                     <div class="bg-white px-3 -mt-2 rounded shadow-sm border border-gray-200">
                         <span class="text-xs font-bold text-gray-500 uppercase mr-1">Carteira:</span>
                         <span class="text-lg font-black {{ 'text-red-600' if cliente_encontrado.saldo_float < 0 else 'text-green-700' }}">
                             R$ {{ "%.2f"|format(cliente_encontrado.saldo_float)|replace('.', ',') }}
                         </span>
                     </div>
+                    --- FIM DO COMENTÁRIO --- #}
+
                 {% endif %}
 
                 <div class="form-group mt-1">
@@ -503,63 +493,6 @@ function syncAndConfirm(event) {
     return false;
 }
 
-        function copyReceiptText() {
-            const content = document.getElementById('receipt-content');
-            if (!content) return;
-            const text = content.innerText.trim();
-            const el = document.createElement('textarea');
-            el.value = text;
-            document.body.appendChild(el);
-            el.select();
-            document.execCommand('copy');
-            document.body.removeChild(el);
-            
-            const rawTelefone = "{{ cliente_encontrado.telefone if cliente_encontrado else '' }}";
-            const tel = rawTelefone.replace(/\D/g, '');
-            let telFinal = tel;
-            if (tel.length > 0) {
-                if (tel.length <= 9) telFinal = "11" + tel;
-                if (telFinal.length <= 11) telFinal = "55" + telFinal;
-            }
-            window.open(`https://wa.me/${telFinal}?text=${encodeURIComponent(text)}`, '_blank');
-        }
-
-        function shareReceiptImage() {
-            const content = document.getElementById('receipt-content');
-            if (!content) return;
-            html2canvas(content, { scale: 2, backgroundColor: '#FFFFFF' }).then(canvas => {
-                const img = canvas.toDataURL('image/png');
-                const w = window.open('about:blank');
-                w.document.write(`<img src="${img}"/>`);
-            });
-        }
-
-        // Variável para guardar o tempo do sumiço automático
-        let autoHideTimeout;
-
-        function toggleReceipt() {
-            const content = document.getElementById('receipt-content');
-            const btn = document.getElementById('btn-toggle-cupom');
-            const inputBusca = document.getElementById('id_cliente_busca');
-            const successBlock = document.getElementById('success-block');
-            
-            // Se o usuário interagiu com o botão, cancelamos o cronômetro de auto-ocultar
-            if (autoHideTimeout) clearTimeout(autoHideTimeout);
-            
-            // Garante que o bloco fique 100% visível caso estivesse no meio da animação de sumir
-            if (successBlock) {
-                successBlock.style.opacity = "1";
-            }
-
-            if (content.style.display === 'none') {
-                content.style.display = 'block';
-                btn.innerHTML = '👁️ Ocultar Cupom';
-            } else {
-                content.style.display = 'none';
-                btn.innerHTML = '👁️ Mostrar Cupom';
-                if (inputBusca) inputBusca.focus();
-            }
-        }
 
         function clearSearch() {
             const inputBusca = document.getElementById('id_cliente_busca');
@@ -777,19 +710,6 @@ function syncAndConfirm(event) {
                 }
             {% endif %}
 
-            // --- NOVA LÓGICA: Auto-ocultar o bloco de sucesso após 5 segundos ---
-            const successBlock = document.getElementById('success-block');
-            if (successBlock) {
-                autoHideTimeout = setTimeout(() => {
-                    // Adiciona um efeito suave de "esmaecer" (fade out)
-                    successBlock.style.transition = "opacity 0.5s ease";
-                    successBlock.style.opacity = "0";
-                    // Após os 0.5s da animação, remove o bloco da tela
-                    setTimeout(() => {
-                        successBlock.style.display = 'none';
-                    }, 500);
-                }, 8000); // 8000 milissegundos = 8 segundos
-            }
         });
 
 
@@ -880,5 +800,113 @@ async function handleGerarPdf(numInicial, numFinal, idEvento, nomeCliente, tipoC
 }
 
     </script>
+
+{% if success and print_data %}
+    <div id="modal-sucesso-lite" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+        <div class="bg-gray-300 rounded-xl shadow-2xl p-4 w-11/12 max-w-md border-t-4 border-green-500 transform transition-all scale-100">
+            
+            <div class="text-center mb-4">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-green-100 mb-2">
+                    <span class="text-green-600 text-2xl">✓</span>
+                </div>
+                <h2 class="text-xl font-bold text-gray-800">Venda Registrada!</h2>
+                <div class="text-sm text-gray-700 mt-3 bg-gray-50 p-3 rounded border max-h-52 overflow-y-auto text-left shadow-inner">
+                    {{ success | safe }}
+                </div>
+            </div>
+
+            <input type="hidden" id="sucesso-id-venda" value="{{ print_data.id_venda_recente }}">
+            <input type="hidden" id="sucesso-id-cliente" value="{{ print_data.id_cliente_recente }}">
+            <input type="hidden" id="sucesso-id-evento" value="{{ print_data.id_evento }}">
+            <input type="hidden" id="sucesso-num-ini" value="{{ print_data.numero_inicial }}">
+            <input type="hidden" id="sucesso-num-fin" value="{{ print_data.numero_final }}">
+            <input type="hidden" id="sucesso-nome-cli" value="{{ print_data.nome_cliente }}">
+            <input type="hidden" id="sucesso-tipo-cart" value="{{ print_data.tipo_cartela }}">
+            <input type="hidden" id="sucesso-tel-cli" value="{{ print_data.telefone_cliente }}">
+
+            <div class="mb-2 -mt-3 border border-gray-200 rounded-lg p-2">
+                <h3 class="text-xl font-bold text-gray-500 uppercase tracking-wider -mt-2 mb-0">Recibo (Cupom)</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="dispararAcaoModalSucesso('cupom', 'imprimir')" class="bg-blue-50 text-blue-700 hover:bg-blue-100 py-2 rounded text-sm font-semibold  transition-colors border border-blue-200">
+                        🖨️ Imprimir
+                    </button>
+                    <button onclick="dispararAcaoModalSucesso('cupom', 'whatsapp')" class="bg-green-50 text-green-700 hover:bg-green-100 py-2 rounded text-sm font-semibold transition-colors border border-green-200">
+                        💬 WhatsApp / Copiar
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-3 border border-gray-200 rounded-lg p-2">
+                <h3 class="text-xl font-bold text-gray-500 uppercase tracking-wider mb-0">Cartelas Compradas</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="dispararAcaoModalSucesso('cartelas', 'imprimir')" class="bg-blue-50 text-blue-700 hover:bg-blue-100 py-2 rounded text-sm font-semibold transition-colors border border-blue-200">
+                        🖨️ Imprimir
+                    </button>
+                    <button onclick="dispararAcaoModalSucesso('cartelas', 'empdf')" class="bg-green-50 text-green-700 hover:bg-green-100 py-2 rounded text-sm font-semibold transition-colors border border-green-200">
+                        📲 Enviar App / PDF
+                    </button>
+                </div>
+            </div>
+
+            <button id="btn-fechar-modal-sucesso" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-colors text-lg flex items-center justify-center">
+                <span>➕ Nova Venda (Enter)</span>
+            </button>
+        </div>
+    </div>
+    
+    <script>
+        // Foca automaticamente no botão "Nova Venda" para o operador fechar rápido com Enter
+        document.addEventListener('DOMContentLoaded', function() {
+            const btnFechar = document.getElementById('btn-fechar-modal-sucesso');
+            if (btnFechar) {
+                setTimeout(() => { btnFechar.focus(); }, 100);
+                
+                btnFechar.addEventListener('click', function() {
+                    document.getElementById('modal-sucesso-lite').style.display = 'none';
+                    
+                    // 🚀 LÓGICA DE FOCO ADAPTADA PARA O VENDA.HTML
+                    const inputBusca = document.getElementById('id_cliente_busca');
+                    if (inputBusca) {
+                        inputBusca.value = ''; // Limpa a busca anterior
+                        inputBusca.focus();
+                    }
+                });
+            }
+        });
+
+        // O Motor de Ações adaptado para as rotas do Venda.html
+        async function dispararAcaoModalSucesso(tipo, acao) {
+            const idVenda = document.getElementById('sucesso-id-venda').value;
+            const idCliente = document.getElementById('sucesso-id-cliente').value;
+            
+            if (tipo === 'cupom') {
+                await executarReimpressao(idVenda, idCliente, acao);
+            } 
+            else if (tipo === 'cartelas') {
+                const idEvento = document.getElementById('sucesso-id-evento').value;
+                const numIni = document.getElementById('sucesso-num-ini').value;
+                const numFin = document.getElementById('sucesso-num-fin').value;
+                const nomeCli = document.getElementById('sucesso-nome-cli').value;
+                const tipoCart = parseInt(document.getElementById('sucesso-tipo-cart').value) || 15;
+
+                if (acao === 'imprimir') {
+                    // Constrói o objeto igual ao backend para enviar à impressora
+                    imprimirCartelas58mm({
+                        id_evento: idEvento,
+                        numero_inicial: numIni,
+                        numero_final: numFin,
+                        tipo_cartela: tipoCart,
+                        nome_cliente: nomeCli
+                    });
+                } else if (acao === 'empdf' || acao === 'whatsapp') {
+                    // Usa a função nativa do venda.html que já intercepta o app Android ou abre navegador
+                    await handleGerarPdf(numIni, numFin, idEvento, nomeCli, tipoCart);
+                }
+            }
+        }
+    </script>
+    {% endif %}
+
+
 </body>
 </html>

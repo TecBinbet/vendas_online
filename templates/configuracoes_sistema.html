@@ -100,7 +100,9 @@
                 🔙 Voltar ao Menu
             </a>
 
-            <button type="submit" class="bg-blue-600 border border-transparent rounded-md shadow-sm py-3 px-8 inline-flex justify-center text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
+            <button type="submit" 
+                    onclick="return confirm('⚠️ ATENÇÃO: Salvar novas configurações reiniciará o sistema e exigirá um novo login. Deseja continuar?');" 
+                    class="bg-blue-600 border border-transparent rounded-md shadow-sm py-3 px-8 inline-flex justify-center text-sm font-medium text-white hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors">
                 💾 Salvar Configurações
             </button>
             
