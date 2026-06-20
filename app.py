@@ -6726,7 +6726,7 @@ def gerar_lista_vendas():
         file_name = f"periodo.{ordem_rodada}" if ordem_rodada else f"periodo.{id_evento_int}"
         
         io_buffer = io.StringIO()
-        header = f"{selected_event.get('unidade_de_venda', 6)}!{selected_event.get('numero_maximo', 12000)}!{selected_event.get('tipo_de_cartela', 15)}!{safe_float(selected_event.get('valor_de_venda', 0))}!{selected_event.get('descricao', 'N/A')}!{safe_float(selected_event.get('premio_quadra', 0))}!{selected_event.get('quantidade_de_linhas', 1)}!{safe_float(selected_event.get('premio_linha', 0))}!{safe_float(selected_event.get('premio_faltaum', 0))}!{safe_float(selected_event.get('premio_bingo', 0))}!{safe_float(selected_event.get('premio_segundobingo', 0))}!{safe_float(selected_event.get('premio_acumulado', 0))}!{selected_event.get('bola_tope_acumulado', 0)}!{nome_sala}\r\n"
+        header = f"{selected_event.get('unidade_de_venda', 6)}!{selected_event.get('numero_maximo', 12000)}!{selected_event.get('tipo_de_cartela', 15)}!{safe_float(selected_event.get('valor_de_venda', 0))}!{selected_event.get('id_sorteio', '0')}!{selected_event.get('descricao', 'N/A')}!{safe_float(selected_event.get('premio_quadra', 0))}!{selected_event.get('quantidade_de_linhas', 1)}!{safe_float(selected_event.get('premio_linha', 0))}!{safe_float(selected_event.get('premio_faltaum', 0))}!{safe_float(selected_event.get('premio_bingo', 0))}!{safe_float(selected_event.get('premio_segundobingo', 0))}!{safe_float(selected_event.get('premio_acumulado', 0))}!{selected_event.get('bola_tope_acumulado', 0)}!{nome_sala}\r\n"
         io_buffer.write(header)
 
         vendas = list(db[nome_colecao_venda].find({'id_evento': id_evento_int}).sort('numero_inicial', pymongo.ASCENDING))
@@ -10185,59 +10185,41 @@ def migrar_regionais():
         <a href='/admin/regionais' style='padding: 10px; background: blue; color: white; text-decoration: none; border-radius: 5px;'>Ir para Gestão de Regionais</a>
     """
 
-# >>>  http://localhost:5001/admin/corrigir_tipo_data_e_treino
-@app.route('/admin/corrigir_tipo_data_e_treino')
+# >>>  http://localhost:5001/admin/corrigir_cidade_e_saldo
+from bson.decimal128 import Decimal128
+@app.route('/admin/corrigir_cidade_e_saldo')
 @login_required
-def corrigir_tipo_data_e_treino():
+def corrigir_cidade_e_saldo():
+    # Mantemos sua trava de segurança de nível de acesso
     if session.get('nivel', 0) < 4:
         return redirect(url_for('menu_operacoes', error="Acesso negado."))
 
     db = get_vendas_db()
-    if db is None: return redirect(url_for('cadastro_cliente', error="Erro de conexão."))
+    if db is None: 
+        return redirect(url_for('cadastro_cliente', error="Erro de conexão com o banco de dados."))
 
     try:
-        clientes = list(db.clientes.find({}))
-        contagem_convertidos = 0
-        contagem_treino = 0
-        data_corte = datetime(2026, 3, 21, 0, 0, 0)
+        # Define os novos valores
+        nova_cidade = "São José dos Campos"
+        novo_saldo = Decimal128("0.00")
 
-        for cli in clientes:
-            data_original = cli.get('data_cadastro')
-            data_objeto = None
-            atualizacao = {}
+        # Atualiza todos os documentos da coleção clientes
+        # update_many({}, ...) aplica a alteração em todos os registros sem filtro
+        resultado = db.clientes.update_many(
+            {}, 
+            {
+                "$set": {
+                    "cidade": nova_cidade,
+                    "saldo_atual": novo_saldo
+                }
+            }
+        )
 
-            if isinstance(data_original, str):
-                # Tenta primeiro o formato ISO (que apareceu no seu log: 2026-01-31...)
-                try:
-                    data_objeto = datetime.strptime(data_original[:19], "%Y-%m-%d %H:%M:%S")
-                except:
-                    # Se falhar, tenta o formato Brasileiro (DD/MM/AAAA...)
-                    try:
-                        data_objeto = datetime.strptime(data_original[:19], "%d/%m/%Y %H:%M:%S")
-                    except:
-                        print(f"Não foi possível converter a data do cliente {cli.get('nick')}: {data_original}")
-
-                if data_objeto:
-                    atualizacao["data_cadastro"] = data_objeto
-                    contagem_convertidos += 1
-            else:
-                data_objeto = data_original
-
-            # Aplica regra de treino se a data (já convertida) for após o corte
-            if data_objeto and isinstance(data_objeto, datetime):
-                if data_objeto >= data_corte:
-                    atualizacao["em_treinamento"] = True
-                    atualizacao["saldo_atual"] = Decimal128("1000.00")
-                    contagem_treino += 1
-
-            if atualizacao:
-                db.clientes.update_one({"_id": cli['_id']}, {"$set": atualizacao})
-
-        msg = f"Sucesso! Convertidos: {contagem_convertidos}. Em treino: {contagem_treino}."
+        msg = f"Sucesso! Atualizados {resultado.modified_count} clientes com Cidade: {nova_cidade} e Saldo: 0.00."
         return redirect(url_for('cadastro_cliente', success=msg, view='listar'))
 
     except Exception as e:
-        return redirect(url_for('cadastro_cliente', error=f"Erro crítico: {e}"))
+        return redirect(url_for('cadastro_cliente', error=f"Erro crítico ao atualizar clientes: {e}"))
 
 
 # >>>  http://localhost:5001/admin/manutencao_clientes_regional

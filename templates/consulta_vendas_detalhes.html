@@ -530,9 +530,9 @@
             const numeroBuscado = isBuscaNumerica ? parseInt(termo, 10) : null;
 
             linhas.forEach(linha => {
-                // A coluna 0 é a dos Números e a coluna 3 é a do Cliente
+                // A coluna 0 é a dos Números e a coluna 4 é a do Cliente
                 const textoNumeros = linha.cells[0].innerText.toLowerCase();
-                const textoCliente = linha.cells[3].innerText.toLowerCase();
+                const textoCliente = linha.cells[4].innerText.toLowerCase();
 
                 let mostrar = false;
 
