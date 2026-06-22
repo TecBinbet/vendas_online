@@ -7611,7 +7611,21 @@ def imprimir_cartelas_58mm_15():
 
         imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True)
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
-        http_apk = g.parametros_globais.get('http_apk', '')
+        
+        http_apk = g.parametros_globais.get('http_apk', '')   
+        url_canal_live = parametros.get('url_canal_live', '')
+
+        tipo_de_venda = g.parametros_globais.get('tipo_das_vendas')
+        if not tipo_de_venda:
+           tipo_de_venda = 'lite' if g.parametros_globais.get('venda_lite', False) else 'classica'
+        
+        if id_cliente_int > 0 and tipo_de_venda == 'classica':
+           # 🚀 ALERTA: Recoloquei o ?idcliente= para garantir que o QR Code abra o cliente certo
+           link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
+        else:
+           link_final_limpo = f"{url_canal_live}" 
+
+        
         tipo_cartela = 15 
 
         data_str = evento.get('data_evento', '')
@@ -7688,25 +7702,24 @@ def imprimir_cartelas_58mm_15():
         # ==========================================
         # 3. RODAPÉ GERAL (Uma única vez no final)
         # ==========================================
-        recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         
-        if imprime_qr and http_apk:
+        if imprime_qr and link_final_limpo:
             if ocultar_qr:
                 # Se veio o parâmetro, coloca a tesoura e avança o papel
                 recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-                recibo["linhas"].append({"texto": ">> 8< --- CORTE AQUI --- >8 <<", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+                recibo["linhas"].append({"texto": ">  > --- CORTE AQUI --- <  <", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
                 recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 
                 # Linhas em branco para dar o espaço do corte da guilhotina (Ajuste a quantidade se precisar de mais espaço)
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
-                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
             else:
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 # Texto indicativo antes do QR Code
                 recibo["linhas"].append({"texto": "Aponte a camera para o link:", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
                 # 🚀 A MÁGICA ACONTECE AQUI: Adicionamos o "tipo": "qrcode"
                 recibo["linhas"].append({
-                    "texto": http_apk, 
+                    "texto": link_final_limpo, 
                     "alinhamento": "centro", 
                     "tamanho": "normal", 
                     "negrito": False, 
@@ -7716,6 +7729,7 @@ def imprimir_cartelas_58mm_15():
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
         recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+        recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # Retorna o JSON limpo para o front-end processar e mandar para o Android/PC
         return jsonify(recibo)
@@ -7928,7 +7942,19 @@ def imprimir_cartelas_58mm_25():
 
         imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True)
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
-        http_apk = g.parametros_globais.get('http_apk', '')
+        http_apk = g.parametros_globais.get('http_apk', '')   
+        url_canal_live = parametros.get('url_canal_live', '')
+
+        tipo_de_venda = g.parametros_globais.get('tipo_das_vendas')
+        if not tipo_de_venda:
+           tipo_de_venda = 'lite' if g.parametros_globais.get('venda_lite', False) else 'classica'
+        
+        if id_cliente_int > 0 and tipo_de_venda == 'classica':
+           # 🚀 ALERTA: Recoloquei o ?idcliente= para garantir que o QR Code abra o cliente certo
+           link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
+        else:
+           link_final_limpo = f"{url_canal_live}" 
+
         tipo_cartela = 25 # Define a busca estrita para dezenas da matriz 5x5
 
         data_str = evento.get('data_evento', '')
@@ -8006,26 +8032,24 @@ def imprimir_cartelas_58mm_25():
 
         # ==========================================
         # 3. RODAPÉ GERAL (Uma única vez no final)
-        # ==========================================
-        recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        
-        if imprime_qr and http_apk:
+        # ==========================================       
+        if imprime_qr and link_final_limpo:
             if ocultar_qr:
                 # Se veio o parâmetro, coloca a tesoura e avança o papel
                 recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-                recibo["linhas"].append({"texto": "> > 8< --- CORTE AQUI --- >8 < <", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+                recibo["linhas"].append({"texto": ">  > --- CORTE AQUI --- <  <", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
                 recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 
                 # Linhas em branco para dar o espaço do corte da guilhotina (Ajuste a quantidade se precisar de mais espaço)
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
-                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
             else:
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 # Texto indicativo antes do QR Code
                 recibo["linhas"].append({"texto": "Aponte a camera para o link:", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
                 # 🚀 A MÁGICA ACONTECE AQUI: Adicionamos o "tipo": "qrcode"
                 recibo["linhas"].append({
-                    "texto": http_apk, 
+                    "texto": link_final_limpo, 
                     "alinhamento": "centro", 
                     "tamanho": "normal", 
                     "negrito": False, 
@@ -8035,7 +8059,7 @@ def imprimir_cartelas_58mm_25():
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
         recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
-        
+        recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         # Retorna o payload estruturado para consumo da função assíncrona do front-end
         return jsonify(recibo)
 
