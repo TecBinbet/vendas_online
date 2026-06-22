@@ -8038,10 +8038,8 @@ def imprimir_cartelas_58mm_25():
                 # Se veio o parâmetro, coloca a tesoura e avança o papel
                 recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 recibo["linhas"].append({"texto": ">  > --- CORTE AQUI --- <  <", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
-                recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-                
-                # Linhas em branco para dar o espaço do corte da guilhotina (Ajuste a quantidade se precisar de mais espaço)
-                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
+                recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})               
+                #recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
             else:
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 # Texto indicativo antes do QR Code
@@ -8058,7 +8056,8 @@ def imprimir_cartelas_58mm_25():
             
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
                 recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
-        recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         # Retorna o payload estruturado para consumo da função assíncrona do front-end
         return jsonify(recibo)
 
