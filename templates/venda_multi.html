@@ -788,39 +788,27 @@
                 }
 
                 const baseUrl = (tipoCartela === 15) ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
-                
-                // Vamos guardar as strings brutas do Python aqui
-                let pacotesDeTexto = []; 
 
-                for (let fatia of dadosFatias.fatias) {
-                    const url = `${window.location.origin}${baseUrl}?numero_inicial=${fatia.numero_inicial}&numero_final=${fatia.numero_final}&id_evento=${fatia.id_evento}&nome_cliente=${encodeURIComponent(nomeCliente)}`;
+                // TÁTICA DA FILA: Envia um evento, espera imprimir, envia o próximo.
+                for (let i = 0; i < dadosFatias.fatias.length; i++) {
+                    let fatia = dadosFatias.fatias[i];
+                    let url = `${window.location.origin}${baseUrl}?numero_inicial=${fatia.numero_inicial}&numero_final=${fatia.numero_final}&id_evento=${fatia.id_evento}&nome_cliente=${encodeURIComponent(nomeCliente)}`;
                     
-                    const resFatia = await fetch(url);
-                    let textoCru = await resFatia.text(); // 🚀 Puxa o texto 100% puro do Python
+                    let resFatia = await fetch(url);
+                    let textoCruDoPython = await resFatia.text(); // Pega a matriz exata que a impressora ama
                     
-                    textoCru = textoCru.trim();
+                    // Dispara para o Android!
+                    imprimirComprovanteUniversal(textoCruDoPython);
                     
-                    // O Python manda assim: [ {"text": "..."} ]
-                    // Nós removemos o '[' do início e o ']' do final para podermos colar tudo
-                    if (textoCru.startsWith('[') && textoCru.endsWith(']')) {
-                        textoCru = textoCru.substring(1, textoCru.length - 1);
-                    }
-                    
-                    // Se sobrou conteúdo, guardamos na lista
-                    if (textoCru.length > 5) {
-                        pacotesDeTexto.push(textoCru);
+                    // Se não for o último evento da lista, aguarda 2 segundos antes de mandar o próximo pacote
+                    if (i < dadosFatias.fatias.length - 1) {
+                        await new Promise(resolve => setTimeout(resolve, 2000));
                     }
                 }
-
-                // 🚀 Cola todas as fatias de texto colocando uma vírgula no meio e fechando os colchetes
-                const superPacotePuro = "[" + pacotesDeTexto.join(",") + "]";
-
-                // Envia para o Android exatamente do jeito que o Python gerou!
-                imprimirComprovanteUniversal(superPacotePuro);
                 
             } catch (error) {
                 console.error(error);
-                alert("Erro no Teste Modular 3: " + error.message);
+                alert("Erro na Fila de Impressão: " + error.message);
             }
         }
 
