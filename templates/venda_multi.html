@@ -772,7 +772,7 @@
 
         async function imprimirCartelasMulti(idVenda, eventosArray, nomeCliente, tipoCartela) {
             try {
-                // 1. Busca as fatias no backend (Onde começam e terminam as cartelas de cada evento)
+                // 1. Busca as fatias no backend
                 const res = await fetch('/api/buscar_fatias_venda_multi', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -787,7 +787,7 @@
                 let pacoteMestre = [];
                 const baseUrl = tipoCartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
 
-                // 2. Faz um loop por cada evento comprado e puxa o recibo visual dele
+                // 2. Loop por cada evento
                 for (let fatia of dadosFatias.fatias) {
                     const params = new URLSearchParams({
                         numero_inicial: fatia.numero_inicial,
@@ -797,22 +797,35 @@
                     });
                     
                     const urlAbsoluta = window.location.origin + baseUrl + '?' + params.toString();
-                    
                     const resFatia = await fetch(urlAbsoluta);
+                    
                     if (!resFatia.ok) throw new Error(`Erro ao puxar cartelas do evento ${fatia.id_evento}`);
                     
-                    const jsonFatia = await resFatia.json();
+                    let jsonFatia = await resFatia.json();
 
-                    // 🚀 CORREÇÃO: Emojis e '\n' removidos para não quebrar o motor do Android Studio
-                    pacoteMestre.push({ text: "--------------------------------", align: 1, bold: false });
-                    pacoteMestre.push({ text: ">>> " + fatia.descricao_evento.toUpperCase() + " <<<", align: 1, bold: true });
-                    pacoteMestre.push({ text: "--------------------------------", align: 1, bold: false });
+                    // Cabeçalho do evento com chaves perfeitamente tipadas
+                    pacoteMestre.push({ "text": "--------------------------------", "align": 1, "bold": false });
+                    pacoteMestre.push({ "text": ">>> " + String(fatia.descricao_evento).toUpperCase() + " <<<", "align": 1, "bold": true });
+                    pacoteMestre.push({ "text": "--------------------------------", "align": 1, "bold": false });
                     
-                    // Concatena as linhas do recibo deste evento no pacotão principal
-                    pacoteMestre = pacoteMestre.concat(jsonFatia);
+                    // 🚀 O FILTRO PURIFICADOR: Achata a matriz e força os tipos do Java
+                    if (Array.isArray(jsonFatia)) {
+                        for (let i = 0; i < jsonFatia.length; i++) {
+                            // Limpa quebras de linha ocultas e força os tipos primitivos
+                            let textoLimpo = String(jsonFatia[i].text || "").replace(/[\n\r]/g, "");
+                            let alinhamento = Number(jsonFatia[i].align || 0);
+                            let negrito = Boolean(jsonFatia[i].bold);
+
+                            pacoteMestre.push({
+                                "text": textoLimpo,
+                                "align": alinhamento,
+                                "bold": negrito
+                            });
+                        }
+                    }
                 }
 
-                // 3. Envia o pacote mestre para o Android Studio processar e imprimir
+                // 3. Serializa o pacote limpo e envia para o Android
                 const pacoteFinalJSON = JSON.stringify(pacoteMestre);
                 imprimirComprovanteUniversal(pacoteFinalJSON);
                 
