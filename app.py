@@ -6481,8 +6481,10 @@ def reimprimir_comprovante_txt():
         parametros = db.parametros.find_one({}) or {}
         http_apk = parametros.get('http_apk', '')
         url_canal_live = parametros.get('url_canal_live', '')
-        nome_sala = parametros.get('nome_sala', '')
-        venda_lite_ativa = parametros.get('venda_lite', False)
+        nome_sala = parametros.get('nome_sala', '')       
+        tipo_de_venda = g.parametros_globais.get('tipo_das_vendas')
+        if not tipo_de_venda:
+           tipo_de_venda = 'lite' if g.parametros_globais.get('venda_lite', False) else 'classica'
 
         data_evento_str = evento.get('data_evento', 'N/A')
         hora_evento_str = evento.get('hora_evento', 'N/A')
@@ -6493,7 +6495,7 @@ def reimprimir_comprovante_txt():
         receipt_html = "" 
         
         # 🚀 LÓGICA DO LINK COM FALLBACK (Plano B)
-        if id_cliente_int > 0 and not venda_lite_ativa:
+        if id_cliente_int > 0 and tipo_de_venda == 'classica':
             link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
         else:
             link_final_limpo = f"{url_canal_live}"
@@ -6717,9 +6719,14 @@ def reimprimir_comprovante_json():
         
         nome_colecao_venda = f"vendas{id_evento_int}"
 
-        venda_lite_ativa = g.parametros_globais.get('venda_lite') == True
-
-        if id_cliente_int > 0 and not venda_lite_ativa:
+        #venda_lite_ativa = g.parametros_globais.get('venda_lite') == True
+        #if id_cliente_int > 0 and not venda_lite_ativa:
+ 
+        tipo_de_venda = g.parametros_globais.get('tipo_das_vendas')
+        if not tipo_de_venda:
+           tipo_de_venda = 'lite' if g.parametros_globais.get('venda_lite', False) else 'classica'
+        
+        if id_cliente_int > 0 and tipo_de_venda == 'classica':
            link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
         else:
            link_final_limpo = f"{url_canal_live}" 
@@ -6907,10 +6914,14 @@ def excluir_venda():
 
     # Sincroniza a trava de segurança com a regra do Front-end (Lite ou Admin)
     parametros = db.parametros.find_one({}) or {}
-    venda_lite_ativa = parametros.get('venda_lite') == True
+
+    tipo_de_venda = g.parametros_globais.get('tipo_das_vendas')
+    if not tipo_de_venda:
+       tipo_de_venda = 'lite' if g.parametros_globais.get('venda_lite', False) else 'classica'
+
     nivel_usuario = session.get('nivel', 0)
 
-    if not venda_lite_ativa and nivel_usuario < 3:
+    if tipo_de_venda == 'classica' and nivel_usuario < 3:
         return jsonify({'status': 'error', 'message': 'Acesso Negado. Sem permissão para excluir vendas.'})
 
     try:
