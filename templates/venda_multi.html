@@ -775,7 +775,6 @@
 
         async function imprimirCartelasMulti(idVenda, eventosArray, nomeCliente, tipoCartela) {
             try {
-                // 1. Busca as fatias
                 const res = await fetch('/api/buscar_fatias_venda_multi', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -788,26 +787,40 @@
                     return;
                 }
 
-                let pacoteMestre = [];
                 const baseUrl = (tipoCartela === 15) ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
+                
+                // Vamos guardar as strings brutas do Python aqui
+                let pacotesDeTexto = []; 
 
-                // TESTE MODULAR 2: Juntar os eventos puros, sem nenhuma maquiagem visual
                 for (let fatia of dadosFatias.fatias) {
                     const url = `${window.location.origin}${baseUrl}?numero_inicial=${fatia.numero_inicial}&numero_final=${fatia.numero_final}&id_evento=${fatia.id_evento}&nome_cliente=${encodeURIComponent(nomeCliente)}`;
                     
                     const resFatia = await fetch(url);
-                    const jsonCartelas = await resFatia.json();
+                    let textoCru = await resFatia.text(); // 🚀 Puxa o texto 100% puro do Python
                     
-                    // Apenas cola o array do Python diretamente no pacote mestre
-                    pacoteMestre = pacoteMestre.concat(jsonCartelas);
+                    textoCru = textoCru.trim();
+                    
+                    // O Python manda assim: [ {"text": "..."} ]
+                    // Nós removemos o '[' do início e o ']' do final para podermos colar tudo
+                    if (textoCru.startsWith('[') && textoCru.endsWith(']')) {
+                        textoCru = textoCru.substring(1, textoCru.length - 1);
+                    }
+                    
+                    // Se sobrou conteúdo, guardamos na lista
+                    if (textoCru.length > 5) {
+                        pacotesDeTexto.push(textoCru);
+                    }
                 }
 
-                // Envia para o Android
-                imprimirComprovanteUniversal(JSON.stringify(pacoteMestre));
+                // 🚀 Cola todas as fatias de texto colocando uma vírgula no meio e fechando os colchetes
+                const superPacotePuro = "[" + pacotesDeTexto.join(",") + "]";
+
+                // Envia para o Android exatamente do jeito que o Python gerou!
+                imprimirComprovanteUniversal(superPacotePuro);
                 
             } catch (error) {
                 console.error(error);
-                alert("Erro no Teste Modular 2: " + error.message);
+                alert("Erro no Teste Modular 3: " + error.message);
             }
         }
 
