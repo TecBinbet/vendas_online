@@ -957,8 +957,16 @@
                     window.open(linkZAPCartelas, '_blank');
                     
                 } else if (acao === 'imprimir') {
-                    bingoAlert("Enviando lote híbrido para a impressora térmica...", 3000, '#f39c12');
-                    imprimirCartelasMulti(idVenda, eventosArray, nomeCli, tipoCartela);
+                   // 1. Ativa o spinner global que você já tem no HTML
+                    document.getElementById('loading').style.display = 'flex';
+                    
+                    try {
+                        await imprimirCartelasMulti(idVenda, eventosArray, nomeCli, tipoCartela);
+                    } finally {
+                        // 2. Garante que o spinner suma mesmo se houver erro
+                        document.getElementById('loading').style.display = 'none';
+                    }               
+                    bingoAlert("Envio para impressora concluído!", 3000, '#27ae60');
                 }
             }
         }
