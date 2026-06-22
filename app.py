@@ -7613,15 +7613,15 @@ def imprimir_cartelas_58mm_15():
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
         
         http_apk = g.parametros_globais.get('http_apk', '')   
-        url_canal_live = parametros.get('url_canal_live', '')
+        url_canal_live = g.parametros_globais.get('url_canal_live', '')
 
         tipo_de_venda = g.parametros_globais.get('tipo_das_vendas')
         if not tipo_de_venda:
            tipo_de_venda = 'lite' if g.parametros_globais.get('venda_lite', False) else 'classica'
         
-        if id_cliente_int > 0 and tipo_de_venda == 'classica':
+        if tipo_de_venda == 'classica':
            # 🚀 ALERTA: Recoloquei o ?idcliente= para garantir que o QR Code abra o cliente certo
-           link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
+           link_final_limpo = f"{http_apk}"
         else:
            link_final_limpo = f"{url_canal_live}" 
 
@@ -7943,15 +7943,15 @@ def imprimir_cartelas_58mm_25():
         imprime_qr = g.parametros_globais.get('imprimir_qrcode_na_venda', True)
         nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
         http_apk = g.parametros_globais.get('http_apk', '')   
-        url_canal_live = parametros.get('url_canal_live', '')
+        url_canal_live = g.parametros_globais.get('url_canal_live', '')
 
         tipo_de_venda = g.parametros_globais.get('tipo_das_vendas')
         if not tipo_de_venda:
            tipo_de_venda = 'lite' if g.parametros_globais.get('venda_lite', False) else 'classica'
         
-        if id_cliente_int > 0 and tipo_de_venda == 'classica':
+        if tipo_de_venda == 'classica':
            # 🚀 ALERTA: Recoloquei o ?idcliente= para garantir que o QR Code abra o cliente certo
-           link_final_limpo = f"{http_apk}?idcliente={id_cliente_int}"
+           link_final_limpo = f"{http_apk}"
         else:
            link_final_limpo = f"{url_canal_live}" 
 
