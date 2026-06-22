@@ -3778,8 +3778,7 @@ def ultimas_vendas_multi():
     
     try:
         # Busca as últimas 5 vendas multi feitas por quem está logado no caixa
-        vendas = list(db.vendas_multi.find({"id_colaborador": colab_id}).sort([("_id", -1)]).limit(5))
-        
+        vendas = list(db.vendas_multi.find({"id_colaborador": colab_id}).sort([("_id", -1)]).limit(5))       
         # Prepara para enviar como JSON (O ObjectId do Mongo precisa ser convertido para string)
         for v in vendas:
             v['_id'] = str(v['_id']) 
@@ -3790,8 +3789,6 @@ def ultimas_vendas_multi():
 
 
 # --- ROTAS DE CADASTRO DE CLIENTE ---
-# No seu arquivo app.py
-
 @app.route('/buscar_clientes_json', methods=['GET'])
 @login_required
 def buscar_clientes_json():
@@ -3823,7 +3820,6 @@ def buscar_clientes_json():
     except Exception as e:
         print(f"Erro na busca dinâmica json: {e}")
         return jsonify([]), 500
-
 
 @app.route('/api/aplicar_cortesia_evento/<int:id_evento>', methods=['POST'])
 @login_required

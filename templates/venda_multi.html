@@ -345,7 +345,7 @@
                             </div>
                             
                             <div class="flex gap-2 w-full sm:w-auto justify-end mt-1 sm:mt-0">
-                                <button onclick='imprimirCartelasMulti58mm("${v.id_venda}", ${eventosArrayJson}, "${v.nome_cliente}", ${v.tipo_cartela})' class="bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 text-xs shadow rounded font-bold transition" title="Reimprimir">
+                                <button onclick='imprimirCartelasMulti("${v.id_venda}", ${eventosArrayJson}, "${v.nome_cliente}", ${v.tipo_cartela})' class="bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 text-xs shadow rounded font-bold transition" title="Reimprimir">
                                     🖨️
                                 </button>
                                 <button onclick="bingoAlert('Função PDF/WhatsApp será ativada na Etapa 3!', 3000, '#3498db')" class="bg-green-600 hover:bg-green-700 text-white py-1 px-3 text-xs shadow rounded font-bold transition" title="Enviar Link">
@@ -767,7 +767,7 @@
             return false; 
         }
 
-        async function imprimirCartelasMulti58mm(idVenda, eventosArray, nomeCliente, tipoCartela) {
+        async function imprimirCartelasMulti(idVenda, eventosArray, nomeCliente, tipoCartela) {
             try {
                 // 1. Busca as fatias no backend (Onde começam e terminam as cartelas de cada evento)
                 const res = await fetch('/api/buscar_fatias_venda_multi', {
@@ -947,7 +947,7 @@
                     // Lógica do WhatsApp que criaremos na Etapa 3
                 } else if (acao === 'imprimir') {
                     bingoAlert("Enviando lote para a impressora térmica...", 3000, '#f39c12');
-                    imprimirCartelasMulti58mm(idVenda, eventosArray, nomeCli, tipoCart);
+                    imprimirCartelasMulti(idVenda, eventosArray, nomeCli, tipoCart);
                 }
             }
         }
