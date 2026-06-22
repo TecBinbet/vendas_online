@@ -7633,8 +7633,9 @@ def imprimir_cartelas_58mm_15():
             try: data_str = datetime.strptime(str(data_str), '%Y-%m-%d').strftime('%d/%m/%Y')
             except: pass
             
-        data_hora_formatada = f"{data_str} as {evento.get('hora_evento', '')}"
-
+        #data_hora_formatada = f"{data_str} as {evento.get('hora_evento', '')}"
+        data_formatada = data_str
+        hora_formatada = evento.get('hora_evento', '')
         # 1. Cria a estrutura do pacote (Contrato JSON)
         recibo = {
             "config": { "avanco_linhas": 0, "cortar_papel": False },
@@ -7647,9 +7648,10 @@ def imprimir_cartelas_58mm_15():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "largura", "negrito": True})
+        recibo["linhas"].append({"texto": f"Data: {data_formatada}, "alinhamento": "centro", "tamanho": "largura", "negrito": false})
+        recibo["linhas"].append({"texto": f"Hora: {hora_formatada}, "alinhamento": "centro", "tamanho": "largura", "negrito": false})
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": f"Cli.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": f"Doa.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================
@@ -7960,7 +7962,9 @@ def imprimir_cartelas_58mm_25():
             try: data_str = datetime.strptime(str(data_str), '%Y-%m-%d').strftime('%d/%m/%Y')
             except: pass
             
-        data_hora_formatada = f"{data_str} as {evento.get('hora_evento', '')}"
+        #data_hora_formatada = f"{data_str} as {evento.get('hora_evento', '')}"
+        data_formatada = data_str
+        hora_formatada = evento.get('hora_evento', '')
 
         # 1. Cria a estrutura do pacote (Contrato JSON)
         recibo = {
@@ -7974,7 +7978,9 @@ def imprimir_cartelas_58mm_25():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "largura", "negrito": True})
+        recibo["linhas"].append({"texto": f"Data: {data_formatada}, "alinhamento": "centro", "tamanho": "largura", "negrito": false})
+        recibo["linhas"].append({"texto": f"Hora: {hora_formatada}, "alinhamento": "centro", "tamanho": "largura", "negrito": false})  
+        #recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "largura", "negrito": True})
         recibo["linhas"].append({"texto": f"Cli.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
