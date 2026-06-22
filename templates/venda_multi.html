@@ -33,7 +33,7 @@
         
         <div class="bg-gray-300 text-gray-800 p-2 flex flex-col md:flex-row justify-between items-center gap-4 shadow-md">
             <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
-                <h2 class="text-xl md:text-1xl font-semibold tracking-tight m-0">🛒 Venda Múltipla</h2>
+                <h2 class="text-xl md:text-1xl font-semibold tracking-tight m-0">🛒</h2>
                 
                 <div class="flex gap-2">
                     <button type="button" onclick="openUltimasVendas()" class="p-2 rounded-full transition-colors shadow-sm bg-blue-200 hover:bg-blue-300 border border-blue-500" title="Últimas 5 Vendas">🕒</button>
@@ -800,16 +800,16 @@
                     
                     const jsonFatia = await resFatia.json();
 
-                    // Adiciona um separador visual entre os eventos no papel
-                    pacoteMestre.push({ text: `--------------------------------\n`, align: 1, bold: false });
-                    pacoteMestre.push({ text: `📦 ${fatia.descricao_evento.toUpperCase()}\n`, align: 1, bold: true });
-                    pacoteMestre.push({ text: `--------------------------------\n`, align: 1, bold: false });
+                    // 🚀 CORREÇÃO: Emojis e '\n' removidos para não quebrar o motor do Android Studio
+                    pacoteMestre.push({ text: "--------------------------------", align: 1, bold: false });
+                    pacoteMestre.push({ text: ">>> " + fatia.descricao_evento.toUpperCase() + " <<<", align: 1, bold: true });
+                    pacoteMestre.push({ text: "--------------------------------", align: 1, bold: false });
                     
                     // Concatena as linhas do recibo deste evento no pacotão principal
                     pacoteMestre = pacoteMestre.concat(jsonFatia);
                 }
 
-                // 3. Envia o pacote mestre gigantesco para o Android Studio processar e imprimir
+                // 3. Envia o pacote mestre para o Android Studio processar e imprimir
                 const pacoteFinalJSON = JSON.stringify(pacoteMestre);
                 imprimirComprovanteUniversal(pacoteFinalJSON);
                 
