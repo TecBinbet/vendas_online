@@ -775,7 +775,7 @@
 
         async function imprimirCartelasMulti(idVenda, eventosArray, nomeCliente, tipoCartela) {
             try {
-                // 1. Busca as fatias no banco de dados
+                // 1. Busca as fatias
                 const res = await fetch('/api/buscar_fatias_venda_multi', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -784,43 +784,26 @@
                 const dadosFatias = await res.json();
 
                 if (!dadosFatias.fatias || dadosFatias.fatias.length === 0) {
-                    alert("Erro: Nenhuma fatia encontrada para esta venda no banco de dados.");
+                    alert("Erro: Nenhuma fatia encontrada.");
                     return;
                 }
 
-                let pacoteMestre = [];
+                // TESTE MODULAR 1: Isolar apenas o PRIMEIRO evento do carrinho
+                const fatia = dadosFatias.fatias[0];
                 const baseUrl = (tipoCartela === 15) ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
+                const url = `${window.location.origin}${baseUrl}?numero_inicial=${fatia.numero_inicial}&numero_final=${fatia.numero_final}&id_evento=${fatia.id_evento}&nome_cliente=${encodeURIComponent(nomeCliente)}`;
 
-                // 2. O laço óbvio: Busca as cartelas e cola no pacote mestre
-                for (let fatia of dadosFatias.fatias) {
-                    let url = `${window.location.origin}${baseUrl}?numero_inicial=${fatia.numero_inicial}&numero_final=${fatia.numero_final}&id_evento=${fatia.id_evento}&nome_cliente=${encodeURIComponent(nomeCliente)}`;
-                    
-                    let resFatia = await fetch(url);
-                    let jsonCartelas = await resFatia.json();
-                    
-                    // Cria o título básico
-                    let separadorCima = { text: "--------------------------------", align: 1, bold: false };
-                    let titulo = { text: ">>> " + fatia.descricao_evento.toUpperCase() + " <<<", align: 1, bold: true };
-                    let separadorBaixo = { text: "--------------------------------", align: 1, bold: false };
-                    
-                    // Empurra o título e DEPOIS concatena as cartelas originais idênticas ao Lite
-                    pacoteMestre.push(separadorCima, titulo, separadorBaixo);
-                    pacoteMestre = pacoteMestre.concat(jsonCartelas);
-                }
+                const resFatia = await fetch(url);
+                
+                // Em vez de transformar em JSON e depois stringify, pegamos a string exata que o Python gerou.
+                const textoCruDoPython = await resFatia.text(); 
 
-                // 3. Trava de segurança: O pacote realmente tem dados?
-                if (pacoteMestre.length <= 3) { // Se tiver 3 ou menos, só tem o separador do título
-                    alert("Erro: O pacote final ficou vazio. A rota original de cartelas não retornou dados.");
-                    return;
-                }
-
-                // 4. Envia o JSON exato para o Android
-                const pacoteFinalJSON = JSON.stringify(pacoteMestre);
-                imprimirComprovanteUniversal(pacoteFinalJSON);
+                // Manda o texto exato do Python direto para o Android, sem o JavaScript tocar.
+                imprimirComprovanteUniversal(textoCruDoPython);
                 
             } catch (error) {
                 console.error(error);
-                alert("Erro ao executar a rotina de impressão: " + error.message);
+                alert("Erro no Teste Modular 1: " + error.message);
             }
         }
 
