@@ -7647,9 +7647,9 @@ def imprimir_cartelas_58mm_15():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "largura", "negrito": True})
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": f"Cliente: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": f"Cli.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================
@@ -7709,9 +7709,7 @@ def imprimir_cartelas_58mm_15():
                 recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 recibo["linhas"].append({"texto": ">  > --- CORTE AQUI --- <  <", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
                 recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-                
-                # Linhas em branco para dar o espaço do corte da guilhotina (Ajuste a quantidade se precisar de mais espaço)
-                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
+                #recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
             else:
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 # Texto indicativo antes do QR Code
@@ -7727,9 +7725,9 @@ def imprimir_cartelas_58mm_15():
                 })
             
                 recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-                recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
-        
-        recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})       
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
 
         # Retorna o JSON limpo para o front-end processar e mandar para o Android/PC
         return jsonify(recibo)
@@ -7976,8 +7974,8 @@ def imprimir_cartelas_58mm_25():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": f"Cliente: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "largura", "negrito": True})
+        recibo["linhas"].append({"texto": f"Cli.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================
