@@ -2761,7 +2761,7 @@ def nova_venda():
                 #print(f"[DEBUG - ÚLTIMAS VENDAS] Query montada: {query_ultimas}")
                 
                 # 3. Executa a busca
-                cursor = db[nome_colecao_venda].find(query_ultimas).sort('data_venda', pymongo.DESCENDING).limit(5)
+                cursor = db[nome_colecao_venda].find(query_ultimas).sort('data_venda', pymongo.DESCENDING).limit(7)
                 
                 for v in cursor:
                     v['valor_total_float'] = safe_float(v.get('valor_total'))
@@ -3777,8 +3777,8 @@ def ultimas_vendas_multi():
     colab_id = session.get('id_colaborador')
     
     try:
-        # Busca as últimas 5 vendas multi feitas por quem está logado no caixa
-        vendas = list(db.vendas_multi.find({"id_colaborador": colab_id}).sort([("_id", -1)]).limit(5))       
+        # Busca as últimas 7 vendas multi feitas por quem está logado no caixa
+        vendas = list(db.vendas_multi.find({"id_colaborador": colab_id}).sort([("_id", -1)]).limit(7))       
         # Prepara para enviar como JSON (O ObjectId do Mongo precisa ser convertido para string)
         for v in vendas:
             v['_id'] = str(v['_id']) 
