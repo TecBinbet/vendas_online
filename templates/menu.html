@@ -112,10 +112,19 @@
         <div class="{% if nivel >= 3 %}menu-layout-grid{% else %}coluna-menu{% endif %}">
             
             <div class="coluna-menu">
-                {% if g.parametros_globais.get('venda_lite') == True %}
+                {% set tipo_venda = g.parametros_globais.get('tipo_das_vendas') %}
+                {% if not tipo_venda %}
+                    {% set tipo_venda = 'lite' if g.parametros_globais.get('venda_lite') else 'classica' %}
+                {% endif %}
+
+                {% if tipo_venda == 'lite' %}
                     <a href="{{ url_for('venda_lite.nova_venda_lite') }}" onclick="activarSpinner('Abrindo Caixa Rápido...')" class="menu-item menu-item-venda" style="background-color: #059669; margin:0;">⚡ Nova Venda (Lite)</a>
+                
+                {% elif tipo_venda == 'multi' %}
+                    <a href="{{ url_for('venda_multi') }}" onclick="activarSpinner('Abrindo Carrinho Múltiplo...')" class="menu-item menu-item-venda" style="background-color: #2563EB; color: white; margin:0;">🛒 Venda Múltipla</a>
+                
                 {% else %}
-                    <a href="{{ url_for('nova_venda') }}" onclick="activarSpinner('Abrindo Terminal de Venda...')" class="menu-item menu-item-venda" style="margin:0;">⭐ Nova Venda</a>
+                    <a href="{{ url_for('nova_venda') }}" onclick="activarSpinner('Abrindo Terminal de Venda...')" class="menu-item menu-item-venda" style="margin:0;">⭐ Nova Venda (Clássica)</a>
                 {% endif %}
                 
                 <a href="{{ url_for('consulta_status_eventos', mode='simple') }}" onclick="activarSpinner('Consultando Eventos...')" class="menu-item" style="margin:0;">🗓️ Consulta de Eventos Ativos</a>

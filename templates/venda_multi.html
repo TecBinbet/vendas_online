@@ -1,0 +1,958 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Venda Múltipla (Carrinho)</title>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #F3F4F6; }
+        .spinner-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 9999; justify-content: center; align-items: center; }
+        .spinner { border: 4px solid rgba(255,255,255,0.3); border-top: 4px solid #3B82F6; border-radius: 50%; width: 50px; height: 50px; animation: spin 1s linear infinite; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Estilos do Scroll do Carrinho */
+        .carrinho-scroll { max-height: 35vh; overflow-y: auto; }
+        /* Scrollbar mais fina para mobile */
+        .carrinho-scroll::-webkit-scrollbar { width: 6px; }
+        .carrinho-scroll::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .carrinho-scroll::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        .carrinho-scroll::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    </style>
+</head>
+<body class="p-2 md:p-8">
+
+    <div id="loading" class="spinner-overlay">
+        <div class="flex flex-col items-center">
+            <div class="spinner"></div>
+            <p class="text-white mt-4 font-bold tracking-widest uppercase">Processando Carrinho...</p>
+        </div>
+    </div>
+
+    <div class="max-w-4xl mx-auto bg-white rounded-xl shadow-xl overflow-hidden">
+        
+        <div class="bg-gray-300 text-gray-800 p-2 flex flex-col md:flex-row justify-between items-center gap-4 shadow-md">
+            <div class="flex items-center gap-3 w-full md:w-auto justify-between md:justify-start">
+                <h2 class="text-xl md:text-1xl font-semibold tracking-tight m-0">🛒 Venda Múltipla</h2>
+                
+                <div class="flex gap-2">
+                    <button type="button" onclick="openUltimasVendas()" class="p-2 rounded-full transition-colors shadow-sm bg-blue-200 hover:bg-blue-300 border border-blue-500" title="Últimas 5 Vendas">🕒</button>
+                    
+                    <button type="button" id="btn-consulta-numeral" onclick="abrirModalRodape()" class="bg-blue-200 hover:bg-blue-300 font-bold py-1 px-3 rounded-lg shadow transition flex items-center gap-2 text-sm border border-blue-500">
+                        <span class="text-lg">🚦</span> Consultar
+                    </button>
+                    
+                    <button type="button" id="btn-printer-toggle" onclick="togglePrinter()" class="p-2 rounded-full transition-colors shadow-sm bg-blue-200 hover:bg-blue-300 border border-blue-500" title="Configurar Impressora">🖨️</button>
+                </div>
+            </div>
+            <a href="{{ url_for('menu_operacoes') }}" class="text-blue-500 hover:text-white font-black text-sm whitespace-nowrap bg-blue-200 px-4 py-2.5 rounded hover:bg-blue-300 transition">← Voltar</a>
+        </div>
+
+        <div class="p-4 md:p-6">
+            
+            <div class="bg-green-50 border border-green-200 p-2 rounded-lg mb-2 -mt-4 shadow-sm">
+                <h3 class="text-sm font-black text-green-800 uppercase mb-1 border-b border-green-200 pb-1">1. Cliente</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="telefone_cliente_lite" class="font-bold text-gray-700 text-sm">N° WhatsApp:</label>
+                        <input type="tel" id="telefone_cliente_lite" 
+                               class="w-full p-2 border border-green-400 rounded font-bold text-lg focus:ring-green-500 shadow-inner placeholder-gray-300" 
+                               placeholder="(11) 99999-9999" autocomplete="off"
+                               oninput="formatarTelefone(this)" onblur="buscarClienteWhatsApp()">
+                    </div>
+                    
+                    <div class="relative">
+                        <div class="flex justify-between items-center mb-1">
+                            <label for="nick_cliente_lite" class="font-bold text-gray-700 text-sm">Nome / Apelido:</label>
+                            
+                            <button type="button" onclick="ativarBuscaNickLite()" class="text-[11px] bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-1 rounded border border-blue-200 transition-colors flex items-center gap-1 font-semibold">
+                                🔍 Busca Nick
+                            </button>
+                        </div>
+                        
+                        <div class="flex gap-2">
+                            <input type="text" id="nick_cliente_lite" 
+                                   class="w-full p-2 border border-gray-300 rounded font-bold transition-colors bg-gray-100 cursor-not-allowed" 
+                                   placeholder="Nome do cliente..." autocomplete="off"
+                                   onkeydown="irParaProximoCampo(event, this)"
+                                   onkeyup="handleLiteSearchInput(this)"
+                                   readonly>
+                            
+                            <button type="button" onclick="limparClienteLite()" class="bg-white hover:bg-gray-100 text-red-600 px-3 py-1 rounded text-sm font-bold border border-red-200 transition shadow-sm">
+                                Limpar
+                            </button>
+                        </div>
+                                               
+                        <div id="search-results-list" class="absolute z-50 w-full bg-white border border-gray-300 rounded-md shadow-xl mt-1" style="display: none; max-height: 250px; overflow-y: auto;"></div>
+                    </div>
+                </div>
+                
+                <input type="hidden" id="id_cliente_lite" value="0">
+                <input type="hidden" id="colaborador_cliente_lite" value="">
+            </div>
+
+            <div class="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-6 shadow-sm">
+                <h3 class="text-sm font-black text-gray-800 uppercase mb-1 -mt-3 border-b border-gray-200 pb-1">2. Adicionar ao Carrinho</h3>
+                
+                <div class="flex flex-col md:flex-row gap-3 items-end">
+                    <div class="flex-grow">
+                        <label class="font-bold text-gray-700 text-sm">Selecione o Evento:</label>
+                        <select id="seletor_evento" class="w-full p-3 border border-gray-300 rounded font-bold text-gray-800 bg-white shadow-sm" onkeydown="if(event.key==='Enter'){document.getElementById('quantidade_kits').focus(); event.preventDefault();}">
+                            <option value="" class="py-2 text-gray-600">-- Escolha um evento ativo --</option>
+                            {% for e in eventos %}
+                                <option value="{{ e.id_evento }}" 
+                                        class="py-5 text-base {% if loop.index0 % 2 == 0 %}bg-gray-300{% else %}bg-white{% endif %}"
+                                        data-nome="{{ e.descricao }}" 
+                                        data-tipo="{{ e.tipo_de_cartela | default(15) }}" 
+                                        data-valor="{{ e.valor_de_venda_float }}" 
+                                        data-unidade="{{ e.unidade_de_venda }}">
+                                    {{ e.descricao }} (R$ {{ "%.2f" | format(e.valor_de_venda_float) }} / kit) - {{ e.tipo_de_cartela | default(15) }}
+                                </option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="w-full md:w-32">
+                        <label class="font-bold text-gray-700 text-sm">Qtd. Kits:</label>
+                        <input type="number" id="quantidade_kits" min="1" value="1" class="w-full p-3 border border-gray-300 rounded font-bold text-center text-xl" onkeydown="if(event.key==='Enter'){adicionarItem(); event.preventDefault();}">
+                    </div>
+
+                    <button type="button" id="btn_add_carrinho" onclick="adicionarItem()" class="w-full md:w-auto bg-blue-400 hover:bg-blue-500 text-white font-black py-1 px-6 rounded shadow-md transition-colors">
+                        ➕ Adicionar
+                    </button>
+                </div>
+                <p id="aviso_trava" class="text-xs font-bold text-red-500 mt-2 hidden">⚠️ O carrinho está bloqueado para eventos de cartelas com <span id="tipo_trava"></span> dezenas.</p>
+            </div>
+
+            <div class="border-2 border-dashed border-gray-300 -mt-3 p-3 md:p-4 rounded-lg bg-white relative">
+                <h3 class="text-lg font-black text-gray-800 mb-1 -mt-3 flex justify-between items-center">
+                    Resumo da Compra
+                    <span id="badge_itens" class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full border border-blue-300">0 itens</span>
+                </h3>
+
+                <div class="carrinho-scroll w-full border-b border-gray-100 mb-4 pb-2">
+                    <table class="w-full text-left border-collapse">
+                        <thead>
+                            <tr class="bg-gray-100 text-gray-600 text-xs md:text-sm sticky top-0 shadow-sm z-10">
+                                <th class="p-2 border-b">Evento</th>
+                                <th class="p-2 border-b text-center hidden md:table-cell">Tipo</th>
+                                <th class="p-2 border-b text-center">Qtd</th>
+                                <th class="p-2 border-b text-right">Subtotal</th>
+                                <th class="p-2 border-b text-center">Ação</th>
+                            </tr>
+                        </thead>
+                        <tbody id="corpo_carrinho">
+                            <tr><td colspan="5" class="p-4 text-center text-gray-400 italic">O carrinho está vazio.</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="flex flex-col md:flex-row justify-between items-center gap-4 pt-2">
+                    <div class="text-xl md:text-2xl w-full md:w-auto font-black text-red-600 bg-red-50 px-4 py-2 rounded border border-red-200 text-center">
+                        Total: <span id="valor_total_carrinho">R$ 0,00</span>
+                    </div>
+
+                    <form id="form_multi_venda" method="POST" action="{{ url_for('processar_venda_multi') }}" onsubmit="return prepararEnvio(event)" class="w-full md:w-auto">
+                        <input type="hidden" name="telefone_cliente" id="form_tel">
+                        <input type="hidden" name="nome_cliente" id="form_nome">
+                        <input type="hidden" name="id_cliente" id="form_id_cli">
+                        <input type="hidden" name="carrinho_json" id="form_payload">
+                        
+                        <button type="submit" id="btn_finalizar" disabled class="w-full bg-green-600 hover:bg-green-700 text-white font-black py-3 md:py-4 px-8 rounded-lg shadow-xl text-lg transition-all opacity-50 cursor-not-allowed">
+                            ✅ Finalizar Venda
+                        </button>
+                    </form>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <div id="modal-consulta-rodape" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-4 max-w-sm w-full shadow-2xl transform transition-all scale-100">
+            <h3 class="text-xl font-bold mb-3 text-gray-600 flex items-center gap-2">🚦 Consultar Rodapé</h3>
+            <p id="lbl-evento-rodape" class="text-xs text-blue-600 font-bold mb-2 uppercase"></p>
+            
+            <div class="mb-2">
+                <label class="block text-xs font-bold text-gray-500 uppercase tracking-widest mb-1">Número do Rodapé</label>
+                <input type="number" id="input-rodape" min="1" placeholder="N° da cartela..." 
+                       class="w-full p-3 border-2 border-gray-200 rounded-lg text-2xl font-semibold text-center focus:border-blue-500 outline-none transition-colors"
+                       onkeypress="if(event.key === 'Enter') consultarRodape()">
+            </div>
+            
+            <div id="resultado-rodape" class="hidden p-4 rounded-lg font-bold text-center mb-4 text-xl tracking-tight shadow-inner"></div>
+            
+            <div class="flex gap-2">
+                <button type="button" onclick="fecharModalRodape()" class="flex-1 py-3 bg-gray-200 text-gray-700 rounded-lg font-bold hover:bg-gray-300">Fechar</button>
+                <button type="button" onclick="consultarRodape()" class="flex-1 py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 shadow-md">🔍 Consultar</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="ultimas-vendas-modal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
+        <div class="bg-white rounded-xl p-4 max-w-lg w-full shadow-2xl">
+            <h3 class="text-lg font-bold text-gray-800 border-b pb-2 mb-2">🕒 Suas Últimas 5 Vendas (Multi)</h3>
+            
+            <div id="lista-ultimas-vendas-multi" class="mb-4 max-h-80 overflow-y-auto">
+                </div>
+            
+            <button onclick="closeUltimasVendas()" class="w-full py-3 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 shadow-md">Fechar Janela</button>
+        </div>
+    </div>
+
+
+    <script>
+        // --- VARIÁVEIS GLOBAIS ---
+        let carrinho = [];
+        let tipoCartelaTravado = null; 
+        let ultimoWhatsAppBuscado = ''; 
+        let isBuscaNickAtiva = false;
+        let searchTimeout2 = null;
+
+        // ==========================================
+        // 4. FERRAMENTAS DO CAIXA (Semaforo e Impressora)
+        // ==========================================
+
+        // --- LÓGICA DO RODAPÉ (SEMAFORO) ---
+        function abrirModalRodape() {
+            const seletor = document.getElementById('seletor_evento');
+            
+            // Exige que o operador escolha o evento no dropdown para saber ONDE consultar
+            if (seletor && seletor.selectedIndex <= 0) {
+                bingoAlert("⚠️ Selecione um evento no carrinho primeiro para consultar o rodapé!", 3000, '#e67e22');
+                seletor.focus();
+                return;
+            }
+
+            const nomeEvento = seletor.options[seletor.selectedIndex].dataset.nome;
+            document.getElementById('lbl-evento-rodape').innerText = `Evento: ${nomeEvento}`;
+
+            const modal = document.getElementById('modal-consulta-rodape');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            document.getElementById('input-rodape').value = '';
+            document.getElementById('resultado-rodape').classList.add('hidden');
+            
+            setTimeout(() => document.getElementById('input-rodape').focus(), 100);
+        }
+
+        function fecharModalRodape() {
+            const modal = document.getElementById('modal-consulta-rodape');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        async function consultarRodape() {
+            const rodape = document.getElementById('input-rodape').value;
+            const resDiv = document.getElementById('resultado-rodape');
+            const seletor = document.getElementById('seletor_evento');
+            const idEvento = seletor ? seletor.value : null;
+            
+            if (!rodape || rodape <= 0) {
+                document.getElementById('input-rodape').focus();
+                return;
+            }
+
+            resDiv.classList.remove('hidden');
+            resDiv.className = 'p-4 rounded-lg font-bold text-center mb-4 text-lg shadow-inner bg-gray-100 text-gray-500 animate-pulse';
+            resDiv.innerText = 'Buscando...';
+
+            try {
+                const response = await fetch(`/api/checar_rodape?id_evento=${idEvento}&rodape=${rodape}`);
+                const data = await response.json();
+
+                if (data.vendido) {
+                    resDiv.className = 'p-4 rounded-lg font-black text-center mb-4 text-2xl shadow-inner bg-red-100 text-red-700 border-2 border-red-500';
+                    resDiv.innerHTML = `🚫 VENDIDO!<br><span class="text-sm font-bold text-red-900/50 mt-1 block">${data.detalhes}</span>`;
+                } else {
+                    resDiv.className = 'p-4 rounded-lg font-black text-center mb-4 text-2xl shadow-inner bg-green-100 text-green-700 border-2 border-green-500';
+                    resDiv.innerText = '✅ LIVRE!';
+                }
+                
+                document.getElementById('input-rodape').focus();
+            } catch (err) {
+                resDiv.className = 'p-4 rounded-lg font-bold text-center mb-4 text-lg shadow-inner bg-red-50 text-red-500';
+                resDiv.innerText = 'Erro de conexão.';
+            }
+        } 
+
+        // --- LÓGICA DA IMPRESSORA 58MM ---
+        function initPrinterConfig() {
+            let printConfig = localStorage.getItem('imprimirCartelas');
+            
+            if (printConfig === null) {
+                localStorage.setItem('imprimirCartelas', 'false');
+                updatePrinterUI(false);
+            } else {
+                updatePrinterUI(printConfig === 'true');
+            }
+        }
+
+        function togglePrinter() {
+            let currentState = localStorage.getItem('imprimirCartelas') === 'true';
+            let newState = !currentState; 
+            
+            localStorage.setItem('imprimirCartelas', newState ? 'true' : 'false');
+            updatePrinterUI(newState);
+            
+            const msg = newState ? "🖨️ Impressão Automática ATIVADA!" : "🚫 Impressão Automática DESATIVADA!";
+            bingoAlert(msg, 3000, newState ? '#27ae60' : '#e74c3c');
+        }
+
+        function updatePrinterUI(isActive) {
+            const btn = document.getElementById('btn-printer-toggle');
+            if (!btn) return;
+            
+            if (isActive) {
+                btn.classList.remove('bg-blue-700', 'text-white', 'border-blue-500');
+                btn.classList.add('bg-green-400', 'text-green-900', 'border', 'border-green-300');
+            } else {
+                btn.classList.remove('bg-green-400', 'text-green-900', 'border', 'border-green-300');
+                btn.classList.add('bg-gray-200', 'text-white', 'border-gray-400');
+            }
+        }
+
+        // --- LÓGICA DAS ÚLTIMAS VENDAS ---
+        async function openUltimasVendas() {
+            const modal = document.getElementById('ultimas-vendas-modal');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+            
+            const container = document.getElementById('lista-ultimas-vendas-multi');
+            container.innerHTML = '<p class="text-center text-gray-500 py-4 font-bold animate-pulse">Buscando histórico...</p>';
+            
+            try {
+                const response = await fetch('/api/ultimas_vendas_multi');
+                const vendas = await response.json();
+                
+                if (vendas.length === 0) {
+                    container.innerHTML = '<p class="text-center text-gray-500 py-4 font-semibold">Nenhuma venda múltipla registrada ainda.</p>';
+                    return;
+                }
+                
+                let html = '<div class="space-y-2">';
+                vendas.forEach(v => {
+                    // Transforma a lista de eventos (ex: [3, 8]) em texto seguro para a função do botão
+                    const eventosArrayJson = JSON.stringify(v.eventos_array);
+                    
+                    html += `
+                        <div class="border rounded p-2 shadow-sm bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-2 hover:bg-blue-50 transition-colors">
+                            <div class="text-left w-full sm:w-auto">
+                                <p class="text-sm font-bold text-blue-800">${v.id_venda} - ${v.nome_cliente}</p>
+                                <p class="text-xs text-gray-600">Total: <strong>${v.total_kits} Kits</strong> (${v.eventos_array.length} evento(s))</p>
+                                <p class="text-sm font-black text-green-700">R$ ${parseFloat(v.valor_total).toFixed(2).replace('.', ',')}</p>
+                            </div>
+                            
+                            <div class="flex gap-2 w-full sm:w-auto justify-end mt-1 sm:mt-0">
+                                <button onclick='imprimirCartelasMulti58mm("${v.id_venda}", ${eventosArrayJson}, "${v.nome_cliente}", ${v.tipo_cartela})' class="bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 text-xs shadow rounded font-bold transition" title="Reimprimir">
+                                    🖨️
+                                </button>
+                                <button onclick="bingoAlert('Função PDF/WhatsApp será ativada na Etapa 3!', 3000, '#3498db')" class="bg-green-600 hover:bg-green-700 text-white py-1 px-3 text-xs shadow rounded font-bold transition" title="Enviar Link">
+                                    📲
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                });
+                html += '</div>';
+                container.innerHTML = html;
+                
+            } catch (err) {
+                container.innerHTML = '<p class="text-center text-red-500 py-4 font-bold">Erro ao conectar com a base de dados.</p>';
+            }
+        }
+
+        function closeUltimasVendas() {
+            const modal = document.getElementById('ultimas-vendas-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+
+        // ==========================================
+        // 1. LÓGICA DO CLIENTE (Importada do Lite)
+        // ==========================================
+        
+        function formatarTelefone(input) {
+            let v = input.value.replace(/\D/g, '');
+            if (v.length > 11) v = v.slice(0, 11);
+            if (v.length >= 3) {
+                input.value = `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7)}`;
+            } else {
+                input.value = v;
+            }
+
+            if (v.length === 11) {
+                buscarClienteWhatsApp();
+            } else {
+                ultimoWhatsAppBuscado = ''; 
+            }
+        }
+
+        async function buscarClienteWhatsApp() {
+            const telInput = document.getElementById('telefone_cliente_lite');
+            const nickInput = document.getElementById('nick_cliente_lite');
+            const idInput = document.getElementById('id_cliente_lite');
+            const colabInput = document.getElementById('colaborador_cliente_lite');
+           
+            const telefoneLimpo = telInput.value.replace(/\D/g, '');
+            if (telefoneLimpo.length < 10) return;
+            if (telefoneLimpo === ultimoWhatsAppBuscado) return; 
+            ultimoWhatsAppBuscado = telefoneLimpo;
+
+            try {
+                telInput.classList.add('opacity-70');
+                
+                const res = await fetch('/api/buscar_cliente_whatsapp', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ telefone: telefoneLimpo })
+                });
+                const data = await res.json();
+
+                if (data.status === 'success') {
+                    // CLIENTE EXISTE
+                    bloquearNickLite(); 
+                    nickInput.value = data.nick;
+                    idInput.value = data.id_cliente;
+                    if(data.id_colaborador) colabInput.value = data.id_colaborador; 
+                    
+                    nickInput.classList.add('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+                    
+                    // Joga o foco para a seleção de evento
+                    setTimeout(() => document.getElementById('seletor_evento').focus(), 100);
+
+                } else {
+                    // NOVO CLIENTE
+                    desbloquearNickLite(); 
+                    idInput.value = '0';
+                    nickInput.value = ''; 
+                    nickInput.classList.remove('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+                    
+                }
+            } catch (e) { 
+                console.error("Erro ao buscar WhatsApp", e); 
+                ultimoWhatsAppBuscado = ''; 
+            } finally {
+                telInput.classList.remove('opacity-70');
+            }
+        }
+
+        function desbloquearNickLite() {
+            const inputNick = document.getElementById('nick_cliente_lite');
+            inputNick.removeAttribute('readonly');
+            inputNick.classList.remove('bg-gray-100', 'cursor-not-allowed');
+            inputNick.classList.add('bg-white');
+            inputNick.focus();
+        }
+
+        function bloquearNickLite() {
+            const inputNick = document.getElementById('nick_cliente_lite');
+            inputNick.setAttribute('readonly', 'true');
+            inputNick.classList.remove('bg-white');
+            inputNick.classList.add('bg-gray-100', 'cursor-not-allowed');
+        }
+
+        function limparClienteLite() {
+            const telInput = document.getElementById('telefone_cliente_lite');
+            const nickInput = document.getElementById('nick_cliente_lite');
+            const resultsDiv = document.getElementById('search-results-list');
+
+            if(telInput) telInput.value = '';
+            
+            if (nickInput) {
+                nickInput.value = '';
+                nickInput.placeholder = 'Nome do cliente...';
+                nickInput.classList.remove('ring-2', 'ring-blue-500', 'border-blue-500', 'bg-yellow-100', 'bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+                bloquearNickLite(); 
+            }
+            
+            document.getElementById('id_cliente_lite').value = '0';
+            document.getElementById('colaborador_cliente_lite').value = '';
+            
+            if(resultsDiv) resultsDiv.style.display = 'none';
+            
+            ultimoWhatsAppBuscado = ''; 
+            isBuscaNickAtiva = false;
+            
+            localStorage.removeItem('lite_telefone');
+            localStorage.removeItem('lite_nick');
+            localStorage.removeItem('lite_id');
+            localStorage.removeItem('lite_colab');
+            
+            if(telInput) telInput.focus();
+        }
+
+        function irParaProximoCampo(event, input) {
+            if (event.key === 'Enter') {
+                event.preventDefault(); 
+                if (input.value.trim() !== '') {
+                    input.value = input.value.toLowerCase().split(' ').map(palavra => palavra.charAt(0).toUpperCase() + palavra.slice(1)).join(' ');
+                    document.getElementById('seletor_evento').focus();
+                }
+            }
+        }
+
+        function ativarBuscaNickLite() {
+            desbloquearNickLite();
+            isBuscaNickAtiva = true;
+            const inputNome = document.getElementById('nick_cliente_lite');
+            const inputTelefone = document.getElementById('telefone_cliente_lite');
+            
+            if (inputTelefone) inputTelefone.value = '';
+            ultimoWhatsAppBuscado = ''; 
+            
+            inputNome.readOnly = false;
+            inputNome.classList.remove('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+            inputNome.value = ''; 
+            inputNome.placeholder = 'Digite o Nick...';
+            inputNome.focus();
+            inputNome.classList.add('ring-2', 'ring-blue-500', 'border-blue-500', 'bg-yellow-100');
+        }
+
+        function handleLiteSearchInput(inputElement) {
+            if (!isBuscaNickAtiva) return; 
+            const termo = inputElement.value.trim();
+            const resultsDiv = document.getElementById('search-results-list');
+            
+            if (searchTimeout2) clearTimeout(searchTimeout2);
+            if (termo.length < 2) { 
+                resultsDiv.style.display = 'none'; 
+                return; 
+            }
+            searchTimeout2 = setTimeout(() => { executarBuscaLite(termo); }, 250);
+        }
+
+        function formatarTelefoneString(v) {
+            if (!v) return '';
+            v = String(v).replace(/\D/g, ''); 
+            if (v.length > 11) v = v.slice(0, 11);
+            if (v.length >= 3) { return `(${v.slice(0, 2)}) ${v.slice(2, 7)}-${v.slice(7)}`; }
+            return v;
+        }
+
+        async function executarBuscaLite(termo) {
+            const resultsDiv = document.getElementById('search-results-list');
+            resultsDiv.style.display = 'block';
+            resultsDiv.innerHTML = '<div class="p-3 text-gray-500 text-center text-sm">⏳ Buscando...</div>';
+            
+            try {
+                const response = await fetch(`/buscar_clientes?termo=${encodeURIComponent(termo)}&tipo=nick`);
+                const data = await response.json();
+                resultsDiv.innerHTML = '';
+                
+                if (data.clientes && data.clientes.length > 0) {
+                    data.clientes.forEach(cli => {
+                        const div = document.createElement('div');
+                        div.className = 'p-3 border-b border-gray-100 hover:bg-blue-50 cursor-pointer transition-colors';
+                        const telFormatado = formatarTelefoneString(cli.telefone);
+                        const nomeColab = cli.nome_colaborador && cli.nome_colaborador !== 'S/C' ? cli.nome_colaborador : cli.id_colaborador;
+                        
+                        div.innerHTML = `
+                            <div class="font-bold text-gray-800 text-sm">${cli.nick || cli.nome}</div>
+                            <div class="text-xs text-gray-500 mt-1">Colab: ${nomeColab} ${telFormatado ? '| Tel: ' + telFormatado : ''}</div>
+                        `;
+                        div.onclick = () => selecionarClienteLite(cli);
+                        resultsDiv.appendChild(div);
+                    });
+                } else { 
+                    resultsDiv.innerHTML = '<div class="p-3 text-gray-500 text-center text-sm">Nenhum nick encontrado.</div>'; 
+                }
+            } catch (err) { 
+                resultsDiv.innerHTML = '<div class="p-3 text-red-500 text-center text-sm">Erro na busca.</div>'; 
+            }
+        }
+
+        function selecionarClienteLite(cliente) {
+            const inputNome = document.getElementById('nick_cliente_lite');
+            const inputTelefone = document.getElementById('telefone_cliente_lite');
+            const idInput = document.getElementById('id_cliente_lite');
+            const colabInput = document.getElementById('colaborador_cliente_lite');
+            
+            if (inputNome) inputNome.value = cliente.nick || cliente.nome;
+            if (idInput) idInput.value = cliente.id;
+            if (colabInput && cliente.colaborador) colabInput.value = cliente.colaborador;
+            
+            if (inputTelefone && cliente.telefone) {
+                inputTelefone.value = cliente.telefone;
+                formatarTelefone(inputTelefone); 
+                ultimoWhatsAppBuscado = cliente.telefone.replace(/\D/g, ''); 
+            }
+
+            isBuscaNickAtiva = false;
+            document.getElementById('search-results-list').style.display = 'none';
+            
+            if (inputNome) {
+                inputNome.placeholder = 'Nome do cliente...';
+                inputNome.classList.remove('ring-2', 'ring-blue-500', 'border-blue-500', 'bg-yellow-100', 'bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+                inputNome.readOnly = true; 
+            }
+            setTimeout(() => document.getElementById('seletor_evento').focus(), 100);
+        }
+
+        function salvarClienteNoLocalStorage() {
+            const telInput = document.getElementById('telefone_cliente_lite');
+            if (telInput && telInput.value) {
+                localStorage.setItem('lite_telefone', telInput.value);
+                localStorage.setItem('lite_nick', document.getElementById('nick_cliente_lite').value);
+                localStorage.setItem('lite_id', document.getElementById('id_cliente_lite').value);
+                localStorage.setItem('lite_colab', document.getElementById('colaborador_cliente_lite').value);
+            }
+        }
+
+
+        // ==========================================
+        // 2. LÓGICA DO CARRINHO
+        // ==========================================
+        
+        function formatarMoeda(valor) {
+            return valor.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+        }
+
+        function atualizarInterface() {
+            const tbody = document.getElementById('corpo_carrinho');
+            const seletor = document.getElementById('seletor_evento');
+            const btnFinalizar = document.getElementById('btn_finalizar');
+            const avisoTrava = document.getElementById('aviso_trava');
+            let total = 0;
+
+            if (carrinho.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-400 italic font-bold">O carrinho está vazio.</td></tr>';
+                tipoCartelaTravado = null; 
+                avisoTrava.classList.add('hidden');
+                btnFinalizar.disabled = true;
+                btnFinalizar.classList.add('opacity-50', 'cursor-not-allowed');
+            } else {
+                tbody.innerHTML = '';
+                carrinho.forEach((item, index) => {
+                    total += item.subtotal;
+                    const tr = document.createElement('tr');
+                    tr.className = "border-b hover:bg-gray-50";
+                    tr.innerHTML = `
+                        <td class="p-2 font-bold text-gray-800 text-xs md:text-sm">${item.nome}</td>
+                        <td class="p-2 text-center text-xs font-black text-purple-700 hidden md:table-cell">${item.tipo} dez</td>
+                        <td class="p-2 text-center font-bold text-blue-700">${item.quantidade}</td>
+                        <td class="p-2 text-right font-bold text-green-700 text-sm">${formatarMoeda(item.subtotal)}</td>
+                        <td class="p-2 text-center">
+                            <button type="button" onclick="removerItem(${index})" class="text-red-500 hover:text-red-700 font-bold p-1 md:p-2 bg-red-50 rounded border border-red-200">❌</button>
+                        </td>
+                    `;
+                    tbody.appendChild(tr);
+                });
+                
+                avisoTrava.classList.remove('hidden');
+                document.getElementById('tipo_trava').innerText = tipoCartelaTravado;
+                
+                btnFinalizar.disabled = false;
+                btnFinalizar.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
+
+            document.getElementById('valor_total_carrinho').innerText = formatarMoeda(total);
+            document.getElementById('badge_itens').innerText = `${carrinho.length} itens`;
+
+            // A MÁGICA DA TRAVA: Desabilita opções no dropdown que não batem com o carrinho
+            Array.from(seletor.options).forEach(opt => {
+                if (opt.value === "") return;
+                if (tipoCartelaTravado !== null && parseInt(opt.dataset.tipo) !== tipoCartelaTravado) {
+                    opt.disabled = true;
+                    opt.text = `🚫 BLOQUEADO - ` + opt.dataset.nome;
+                } else {
+                    opt.disabled = false;
+                    // Novo formato: Nome (Valor) - Tipo
+                    opt.text = `${opt.dataset.nome} (R$ ${parseFloat(opt.dataset.valor).toFixed(2).replace('.', ',')} / kit) - ${opt.dataset.tipo}`;
+                }
+            });
+        }
+
+        function adicionarItem() {
+            const seletor = document.getElementById('seletor_evento');
+            const inputQtd = document.getElementById('quantidade_kits');
+            
+            if (seletor.selectedIndex <= 0) {
+                bingoAlert("⚠️ Selecione um evento!", 3000, '#e74c3c');
+                seletor.focus();
+                return;
+            }
+
+            const option = seletor.options[seletor.selectedIndex];
+            const qtd = parseInt(inputQtd.value);
+
+            if (isNaN(qtd) || qtd <= 0) {
+                bingoAlert("⚠️ Quantidade inválida!", 3000, '#e74c3c');
+                inputQtd.focus();
+                return;
+            }
+
+            const idEvento = parseInt(option.value);
+            const nome = option.dataset.nome;
+            const tipo = parseInt(option.dataset.tipo);
+            const valorUnitario = parseFloat(option.dataset.valor);
+            const subtotal = valorUnitario * qtd;
+
+            if (carrinho.length === 0) tipoCartelaTravado = tipo;
+
+            const itemExistente = carrinho.find(i => i.id_evento === idEvento);
+            if (itemExistente) {
+                itemExistente.quantidade += qtd;
+                itemExistente.subtotal += subtotal;
+            } else {
+                carrinho.push({
+                    id_evento: idEvento, nome: nome, tipo: tipo, quantidade: qtd,
+                    valor_unitario: valorUnitario, subtotal: subtotal
+                });
+            }
+
+            seletor.selectedIndex = 0;
+            inputQtd.value = 1;
+            atualizarInterface();
+            seletor.focus();
+        }
+
+        function removerItem(index) {
+            carrinho.splice(index, 1);
+            atualizarInterface();
+        }
+
+        function prepararEnvio(event) {
+            event.preventDefault(); // Impede o envio padrão imediatamente
+
+            const tel = document.getElementById('telefone_cliente_lite').value.trim();
+            const nome = document.getElementById('nick_cliente_lite').value.trim();
+            
+            if (!tel || !nome) {
+                bingoAlert("⚠️ Preencha o Telefone e o Nome do Cliente antes de finalizar!", 3000, '#e74c3c');
+                if (!tel) document.getElementById('telefone_cliente_lite').focus();
+                else document.getElementById('nick_cliente_lite').focus();
+                return false;
+            }
+
+            if (carrinho.length === 0) {
+                bingoAlert("⚠️ O carrinho está vazio!", 3000, '#e74c3c');
+                return false;
+            }
+
+            // Guarda o cliente no cache
+            salvarClienteNoLocalStorage(); 
+
+            // Chama o modal de confirmação bonito
+            bingoConfirm(
+                `Confirmar Venda Múltipla de ${carrinho.length} itens para ${nome}?`, 
+                () => {
+                    document.getElementById('loading').style.display = 'flex';
+
+                    // Alimenta o formulário invisível
+                    document.getElementById('form_tel').value = tel;
+                    document.getElementById('form_nome').value = nome;
+                    document.getElementById('form_id_cli').value = document.getElementById('id_cliente_lite').value;
+                    document.getElementById('form_payload').value = JSON.stringify(carrinho);
+                    
+                    const btn = document.getElementById('btn_finalizar');
+                    const form = document.getElementById('form_multi_venda');
+                    
+                    btn.disabled = true;
+                    btn.innerHTML = '⏳ Gravando...';
+                    
+                    if (typeof ativarSpinner === 'function') {
+                        ativarSpinner('A processar carrinho e a gerar bilhetes...');
+                    }
+
+                    form.submit();
+                },
+                () => {
+                    console.log("Venda cancelada pelo operador.");
+                }
+            );
+
+            return false; 
+        }
+
+        async function imprimirCartelasMulti58mm(idVenda, eventosArray, nomeCliente, tipoCartela) {
+            try {
+                // 1. Busca as fatias no backend (Onde começam e terminam as cartelas de cada evento)
+                const res = await fetch('/api/buscar_fatias_venda_multi', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ id_venda: idVenda, eventos: eventosArray })
+                });
+                const dadosFatias = await res.json();
+
+                if (dadosFatias.status !== 'success') {
+                    throw new Error(dadosFatias.message);
+                }
+
+                let pacoteMestre = [];
+                const baseUrl = tipoCartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
+
+                // 2. Faz um loop por cada evento comprado e puxa o recibo visual dele
+                for (let fatia of dadosFatias.fatias) {
+                    const params = new URLSearchParams({
+                        numero_inicial: fatia.numero_inicial,
+                        numero_final: fatia.numero_final,
+                        id_evento: fatia.id_evento,
+                        nome_cliente: nomeCliente
+                    });
+                    
+                    const urlAbsoluta = window.location.origin + baseUrl + '?' + params.toString();
+                    
+                    const resFatia = await fetch(urlAbsoluta);
+                    if (!resFatia.ok) throw new Error(`Erro ao puxar cartelas do evento ${fatia.id_evento}`);
+                    
+                    const jsonFatia = await resFatia.json();
+
+                    // Adiciona um separador visual entre os eventos no papel
+                    pacoteMestre.push({ text: `--------------------------------\n`, align: 1, bold: false });
+                    pacoteMestre.push({ text: `📦 ${fatia.descricao_evento.toUpperCase()}\n`, align: 1, bold: true });
+                    pacoteMestre.push({ text: `--------------------------------\n`, align: 1, bold: false });
+                    
+                    // Concatena as linhas do recibo deste evento no pacotão principal
+                    pacoteMestre = pacoteMestre.concat(jsonFatia);
+                }
+
+                // 3. Envia o pacote mestre gigantesco para o Android Studio processar e imprimir
+                const pacoteFinalJSON = JSON.stringify(pacoteMestre);
+                imprimirComprovanteUniversal(pacoteFinalJSON);
+                
+            } catch (error) {
+                console.error("Erro ao processar impressão da Venda Multi:", error);
+                bingoAlert("Falha ao montar o ticket unificado.", 3000, '#e74c3c');
+            }
+        }
+
+
+        // ==========================================
+        // 3. INICIALIZAÇÃO E RESTAURAÇÃO
+        // ==========================================
+        document.addEventListener('DOMContentLoaded', () => {
+            initPrinterConfig();
+            const savedTel = localStorage.getItem('lite_telefone');
+            const savedNick = localStorage.getItem('lite_nick');
+            
+            if (savedTel && savedNick) {
+                const telInput = document.getElementById('telefone_cliente_lite');
+                const nickInput = document.getElementById('nick_cliente_lite');
+                const idInput = document.getElementById('id_cliente_lite');
+                const colabInput = document.getElementById('colaborador_cliente_lite');
+
+                if (telInput) telInput.value = savedTel;
+                if (nickInput) {
+                    nickInput.value = savedNick;
+                    nickInput.readOnly = true;
+                    nickInput.classList.add('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
+                }
+                
+                const savedId = localStorage.getItem('lite_id');
+                const savedColab = localStorage.getItem('lite_colab');
+                if (idInput && savedId) idInput.value = savedId;
+                if (colabInput && savedColab) colabInput.value = savedColab;
+               
+                ultimoWhatsAppBuscado = savedTel.replace(/\D/g, ''); 
+                setTimeout(() => document.getElementById('seletor_evento').focus(), 100);
+            } else {
+                setTimeout(() => document.getElementById('telefone_cliente_lite').focus(), 100);
+            }
+        });
+    </script>
+
+    {% if success_message and print_data_multi %}
+    <div id="modal-sucesso-multi" class="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+        <div class="bg-gray-300 rounded-xl shadow-2xl p-4 w-11/12 max-w-md border-t-4 border-blue-500 transform transition-all scale-100">
+            
+            <div class="text-center mb-4">
+                <div class="inline-flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 mb-2">
+                    <span class="text-blue-600 text-2xl">✓</span>
+                </div>
+                <h2 class="text-xl font-bold text-gray-800">Carrinho Registrado!</h2>
+                <div class="text-sm text-gray-700 mt-3 bg-gray-50 p-3 rounded border max-h-52 overflow-y-auto text-left shadow-inner">
+                    {{ success_message | safe }}
+                </div>
+            </div>
+
+            <input type="hidden" id="sucesso-id-venda" value="{{ print_data_multi.id_venda_recente }}">
+            <input type="hidden" id="sucesso-id-cliente" value="{{ print_data_multi.id_cliente_recente }}">
+            <input type="hidden" id="sucesso-eventos-array" value="{{ print_data_multi.eventos_array | tojson }}">
+            <input type="hidden" id="sucesso-nome-cli" value="{{ print_data_multi.nome_cliente }}">
+            <input type="hidden" id="sucesso-tipo-cart" value="{{ print_data_multi.tipo_cartela }}">
+            <input type="hidden" id="sucesso-tel-cli" value="{{ print_data_multi.telefone_cliente }}">
+
+            <div class="mb-2 -mt-3 border border-gray-200 rounded-lg p-2">
+                <h3 class="text-xl font-bold text-gray-500 uppercase tracking-wider -mt-2 mb-0">Recibo Financeiro</h3>
+                <div class="grid grid-cols-2 gap-2">
+                    <button onclick="dispararAcaoModalSucessoMulti('cupom', 'imprimir')" class="bg-blue-50 text-blue-700 hover:bg-blue-100 py-2 rounded text-sm font-semibold transition-colors border border-blue-200">
+                        🖨️ Imprimir
+                    </button>
+                    <button onclick="dispararAcaoModalSucessoMulti('cupom', 'whatsapp')" class="bg-green-50 text-green-700 hover:bg-green-100 py-2 rounded text-sm font-semibold transition-colors border border-green-200">
+                        💬 WhatsApp
+                    </button>
+                </div>
+            </div>
+
+            <div class="mb-3 border border-gray-200 rounded-lg p-2">
+                <h3 class="text-xl font-bold text-gray-500 uppercase tracking-wider mb-0">Lote de Cartelas</h3>
+                <div class="grid grid-cols-3 gap-2">
+                    <button onclick="dispararAcaoModalSucessoMulti('cartelas', 'imprimir')" class="bg-blue-50 text-blue-700 hover:bg-blue-100 py-2 rounded text-sm font-semibold transition-colors border border-blue-200">
+                        🖨️ Imprimir
+                    </button>
+                    <button onclick="dispararAcaoModalSucessoMulti('cartelas', 'empdf')" class="bg-green-50 text-green-700 hover:bg-green-100 py-2 rounded text-sm font-semibold transition-colors border border-green-200">
+                        👁️ Enviar PDF
+                    </button>
+                    <button onclick="dispararAcaoModalSucessoMulti('cartelas', 'whatsapp')" class="bg-green-50 text-green-700 hover:bg-green-100 py-2 rounded text-sm font-semibold transition-colors border border-green-200">
+                        📄 Enviar LINK
+                    </button>
+                </div>
+            </div>
+
+            <button id="btn-fechar-modal-sucesso" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 px-4 rounded-lg shadow-md transition-colors text-lg flex items-center justify-center">
+                <span>➕ Novo Carrinho (Enter)</span>
+            </button>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const btnFechar = document.getElementById('btn-fechar-modal-sucesso');
+            if (btnFechar) {
+                setTimeout(() => { btnFechar.focus(); }, 100);
+                btnFechar.addEventListener('click', function() {
+                    document.getElementById('modal-sucesso-multi').style.display = 'none';
+                    const telInput = document.getElementById('telefone_cliente_lite');
+                    if (telInput) telInput.focus();
+                });
+            }
+        });
+
+        // ==========================================
+        // PONTE PARA A ETAPA 3 (PDF E IMPRESSÃO MULTI)
+        // ==========================================
+        async function dispararAcaoModalSucessoMulti(tipo, acao) {
+            const idVenda = document.getElementById('sucesso-id-venda').value;
+            const idCliente = document.getElementById('sucesso-id-cliente').value;
+            const nomeCli = document.getElementById('sucesso-nome-cli').value;
+            const telCli = document.getElementById('sucesso-tel-cli').value;
+            
+            // Aqui recuperamos o Array com todos os IDs de eventos comprados!
+            const eventosArray = JSON.parse(document.getElementById('sucesso-eventos-array').value || '[]');
+
+            if (tipo === 'cupom') {
+                bingoAlert("Preparando envio do cupom financeiro unificado...", 3000, '#3498db');
+                // Aqui ligaremos a função de recibo de texto na Etapa 3
+            } 
+            else if (tipo === 'cartelas') {
+                if (acao === 'empdf') {
+                    bingoAlert("Gerando PDF unificado do carrinho...", 3000, '#3498db');
+                    // Rota que criaremos na Etapa 3
+                    // window.open(`/gerar_pdf_multi?id_venda=${idVenda}&nome_cliente=${nomeCli}`, '_blank');
+                } else if (acao === 'whatsapp') {
+                    bingoAlert("Preparando envio do PDF unificado via WhatsApp...", 3000, '#27ae60');
+                    // Lógica do WhatsApp que criaremos na Etapa 3
+                } else if (acao === 'imprimir') {
+                    bingoAlert("Enviando lote para a impressora térmica...", 3000, '#f39c12');
+                    imprimirCartelasMulti58mm(idVenda, eventosArray, nomeCli, tipoCart);
+                }
+            }
+        }
+    </script>
+    {% endif %}
+
+</body>
+</html>

@@ -119,11 +119,11 @@
 
     <div class="container">
         <div class="flex justify-center font-bold -mt-4">
-            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-bold">← Voltar ao Menu de Operações</a>
+            <a href="{{ url_for('menu_operacoes') }}" class="text-primary hover:text-secondary font-black">← Voltar ao Menu de Operações</a>
         </div>
 
          <div class="flex justify-center items-center gap-3 mb-2">
-            <h2 class="text-xl font-bold text-gray-900 m-0">⚡Venda (Lite)</h2>
+            <h2 class="text-xl font-bold text-gray-900 m-0">⚡Venda Lite</h2>
             <div class="flex gap-2">
                 <button type="button" onclick="openUltimasVendas()" 
                         class="p-2 rounded-full transition-colors shadow-sm bg-blue-100 text-blue-800 border border-blue-400 hover:bg-blue-200" 
@@ -138,7 +138,7 @@
 
                 <button type="button" id="btn-printer-toggle" onclick="togglePrinter()" 
                         class="p-2 rounded-full transition-colors shadow-sm" 
-                        title="Configurar Impressora 58mm">
+                        title="Configurar Impressora">
                     🖨️
                 </button>
             </div>
@@ -217,7 +217,6 @@
     </button>
 </div>
                             
-                            <span id="badge_cliente" class="absolute -top-1 right-20 bg-blue-600 text-white text-[10px] font-bold px-2 py-0.5 rounded shadow hidden">Cadastrado!</span>
                             
                             <div id="search-results-list" class="absolute z-50 w-full bg-white border border-gray-300 rounded-md shadow-xl mt-1" style="display: none; max-height: 250px; overflow-y: auto;"></div>
                         </div>
@@ -595,8 +594,7 @@ async function buscarClienteWhatsApp() {
     const nickInput = document.getElementById('nick_cliente_lite');
     const idInput = document.getElementById('id_cliente_lite');
     const colabInput = document.getElementById('colaborador_cliente_lite');
-    const badge = document.getElementById('badge_cliente');
-    
+   
     const telefoneLimpo = telInput.value.replace(/\D/g, '');
     if (telefoneLimpo.length < 10) return;
     
@@ -623,7 +621,6 @@ async function buscarClienteWhatsApp() {
             
             // Aplica os estilos visuais de SUCESSO
             nickInput.classList.add('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
-            badge.classList.remove('hidden');
 
             // 🚀 DIRECIONA O FOCO PARA A VENDA (Kit Inicial ou Quantidade)
             const kitInput = document.getElementById('numero_kit_inicial');
@@ -645,7 +642,6 @@ async function buscarClienteWhatsApp() {
             
             // Remove os estilos azuis caso tenham sido aplicados antes
             nickInput.classList.remove('bg-blue-50', 'border-blue-400', 'text-blue-900', 'font-black');
-            badge.classList.add('hidden');
         }
     } catch (e) { 
         console.error("Erro ao buscar WhatsApp", e); 
@@ -683,7 +679,6 @@ function bloquearNickLite() {
             
             document.getElementById('id_cliente_lite').value = '0';
             document.getElementById('colaborador_cliente_lite').value = '';
-            document.getElementById('badge_cliente').classList.add('hidden');
             
             ultimoWhatsAppBuscado = ''; 
             
@@ -1300,7 +1295,6 @@ async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
                 const nickInput = document.getElementById('nick_cliente_lite');
                 const idInput = document.getElementById('id_cliente_lite');
                 const colabInput = document.getElementById('colaborador_cliente_lite');
-                const badge = document.getElementById('badge_cliente');
 
                 if (telInput) telInput.value = savedTel;
                 if (nickInput) {
@@ -1314,10 +1308,7 @@ async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
                 
                 if (idInput && savedId) idInput.value = savedId;
                 if (colabInput && savedColab) colabInput.value = savedColab;
-                
-                // Se o ID for > 0 significa que é um cliente cadastrado e mostramos a tag azul
-                if (badge && savedId !== '0') badge.classList.remove('hidden');
-                
+                               
                 // Trava a requisição automática para não consumir recursos atoa
                 ultimoWhatsAppBuscado = savedTel.replace(/\D/g, ''); 
                 
@@ -1651,7 +1642,6 @@ async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
         function selecionarClienteLite(cliente) {
             const inputNome = document.getElementById('nick_cliente_lite');
             const inputTelefone = document.getElementById('telefone_cliente_lite') || document.getElementById('telefone_lite');
-            const badge = document.getElementById('badge_cliente');
             const idInput = document.getElementById('id_cliente_lite');
             const colabInput = document.getElementById('colaborador_cliente_lite');
             
@@ -1670,8 +1660,6 @@ async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
                     ultimoWhatsAppBuscado = cliente.telefone.replace(/\D/g, ''); 
                 }
             }
-
-            if (badge) badge.classList.remove('hidden');
 
             isBuscaNickAtiva = false;
             const resultsDiv = document.getElementById('search-results-list');
@@ -1702,7 +1690,6 @@ async function handleGerarPdfLite(idVenda, idEvento, nomeCliente, tipoCartela) {
 function limparClienteLite() {
     const telInput = document.getElementById('telefone_cliente_lite') || document.getElementById('telefone_lite');
     const nickInput = document.getElementById('nick_cliente_lite');
-    const badge = document.getElementById('badge_cliente');
     const resultsDiv = document.getElementById('search-results-list');
 
     if(telInput) telInput.value = '';
@@ -1723,7 +1710,6 @@ function limparClienteLite() {
     if (idInput) idInput.value = '0';
     if (colabInput) colabInput.value = '';
     
-    if(badge) badge.classList.add('hidden');
     if(resultsDiv) resultsDiv.style.display = 'none';
     
     if (typeof ultimoWhatsAppBuscado !== 'undefined') {

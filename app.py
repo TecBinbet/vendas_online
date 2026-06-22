@@ -1423,6 +1423,7 @@ def before_request():
                         'http_apk': params.get('http_apk', 'http://localhost:5000'),
                         'id_sala_param': g.id_sala,
                         'venda_lite': params.get('venda_lite', False),
+                        'tipo_das_vendas': params.get('tipo_das_vendas', 'classica'),
                         'venda_aleatoria' :params.get('venda_aleatoria', False),     
                         'limite_de_credito': float(str(val_limite_bruto)),
                         'inicial_randon': inicial_r,  # 🚀 RANGE INICIAL
@@ -1528,18 +1529,26 @@ def login_page():
 
 #from flask import request, redirect, url_for, session, g, render_template
 
-@app.route('/login', methods=['POST'])
+@app.route('/login', methods=['GET', 'POST'])
 def login():
-   
-    nome_raw = request.form.get('nome', '')
-    senha_raw = request.form.get('senha', '')
-    
     id_sala_to_redirect = g.id_sala
     
     # =========================================================================
-    # 🚀 INTERCEPTADOR "NEW" - AUTO CADASTRO DE COLABORADORES
+    # 🚀 CORREÇÃO DO ERRO 405 (METHOD NOT ALLOWED)
+    # Se o sistema tentar aceder a esta rota via link/redirecionamento, manda para o HTML
     # =========================================================================
-    # Agora ele tenta pegar do formulário (POST) primeiro. Se não achar, tenta da URL (GET).
+    if request.method == 'GET':
+        erro_url = request.args.get('error')
+        id_reg_url = request.args.get('id_reg', '0')
+        return redirect(url_for('login_page', error=erro_url, id_sala=id_sala_to_redirect, id_reg=id_reg_url))
+
+    # =========================================================================
+    # FLUXO NORMAL DO POST (PROCESSAMENTO DO FORMULÁRIO)
+    # =========================================================================
+    nome_raw = request.form.get('nome', '')
+    senha_raw = request.form.get('senha', '')
+    
+    # 🚀 INTERCEPTADOR "NEW" - AUTO CADASTRO DE COLABORADORES
     id_reg_raw = request.form.get('id_reg') or request.args.get('id_reg', '0')
     
     if nome_raw.strip().lower() == 'new' and senha_raw.strip().lower() == 'new':
@@ -1550,8 +1559,7 @@ def login():
                 return redirect(url_for('login_page', error="Link de cadastro inválido. Faltando parâmetro da regional.", id_sala=id_sala_to_redirect))
         except ValueError:
             return redirect(url_for('login_page', error="Parâmetro de regional corrompido.", id_sala=id_sala_to_redirect))
-    # =========================================================================
-    
+            
     # Padroniza o nome para busca (Title Case)
     nome_usuario = format_title_case(nome_raw)
     
@@ -1611,42 +1619,44 @@ def login():
                 session['tipo_usuario_logado'] = 'colaborador'
                 
                 # 👉 AQUI ESTÁ A CORREÇÃO CRÍTICA! 👈
-                # Extrai o id_regional do banco e salva na sessão. Se não existir, assume 1.
                 session['id_regional'] = int(usuario.get('id_regional', 1))
             # =================================================================
 
             # --- VERIFICAÇÃO DE SENHA PADRÃO ---
-            # Verifica se a senha que funcionou é "Senha" ou "senha"
             if senha_eficaz.lower() == "senha" and tipo_usuario == 'colaborador':
-                #print("[DEBUG] Senha padrão detectada. Forçando troca.")
                 return render_template('trocar_senha_obrigatoria.html', id_sala=id_sala_to_redirect)
              
             # Redirecionamento Sucesso
             registrar_log("LOGIN", "ACESSO", f"Colaborador {session.get('nick')} (Reg: {session.get('id_regional')}) iniciou sessão.")
 
             if tipo_usuario == 'colaborador':
-                # 🎛️ INTEGRAÇÃO DA CHAVE GERAL DO MÓDULO LITE
+                # 🎛️ INTEGRAÇÃO DA CHAVE GERAL DE MÓDULOS DE VENDA
                 session.permanent = True
                 parametros = db.parametros.find_one({}) or {}
-                usar_modo_lite = parametros.get('venda_lite', False) # Captura o Booleano do banco
-                usar_modo_aleatorio = parametros.get('venda_aleatoria', False) # Captura o Booleano do banco
+                
+                tipo_de_venda = parametros.get('tipo_das_vendas')
+                if not tipo_de_venda:
+                    tipo_de_venda = 'lite' if parametros.get('venda_lite', False) else 'classica'
+                
+                usar_modo_aleatorio = parametros.get('venda_aleatoria', False)
 
                 print("\n" + "="*40)
-                print(f"🚥 [DEBUG LOGIN] Modo Venda Lite no BD: {usar_modo_lite}")
-                print(f"🚥 [DEBUG LOGIN] Modo Aleatório Ativado no BD: {usar_modo_aleatorio}")
+                print(f"🚥 [DEBUG LOGIN] Modo de Venda Ativo: {tipo_de_venda.upper()}")
+                print(f"🚥 [DEBUG LOGIN] Modo Aleatório Ativado: {usar_modo_aleatorio}")
                 print("="*40 + "\n")
 
-                if usar_modo_lite:
-                    # Se estiver ativo, ignora o menu padrão e vai direto pro Caixa Rápido
+                if tipo_de_venda == 'lite':
                     return redirect(url_for('venda_lite.nova_venda_lite'))
+                elif tipo_de_venda == 'multi':
+                    return redirect(url_for('venda_multi'))
                 else:
-                    # Se estiver desativado, segue o fluxo tradicional do sistema
                     return redirect(url_for('menu_operacoes'))
                 
         else:
             print(f"[DEBUG] Falha: Senha incorreta (Testado)")
 
     return redirect(url_for('login_page', error="Usuário ou senha inválidos.", id_sala=id_sala_to_redirect))
+
 
 @app.route('/logout')
 def logout():
@@ -3437,6 +3447,346 @@ def processar_venda_combo_quantidade():
         session['success_message'] = f"<strong>VENDA {id_venda_formatado} GRAVADA!</strong> (Erro no recibo visual)."
         return redirect(url_for('venda_lite.nova_venda_lite', id_evento=id_evento_string))
 
+
+@app.route('/venda_multi')
+@login_required
+def venda_multi():
+    db = get_vendas_db()
+    if db is None:
+        return redirect(url_for('menu_operacoes', error="Erro de conexão com o BD."))
+
+    # =========================================================================
+    # 🚀 O SEGREDO DA MODAL: Resgatar e limpar os dados da sessão
+    # =========================================================================
+    success_message = session.pop('success_message', None)
+    print_data_multi = session.pop('print_data_multi', None)
+
+    # 1. Busca os eventos ativos
+    eventos_cursor = list(db.eventos.find({"status": "ativo"}))
+    
+    # 2. "Mastiga" os dados de preço para garantir o float puro no front-end
+    for e in eventos_cursor:
+        valor_cru = e.get('valor_de_venda', 0)
+        try:
+            e['valor_de_venda_float'] = float(str(valor_cru))
+        except (ValueError, TypeError):
+            e['valor_de_venda_float'] = 0.00
+            
+    # 3. Envia os eventos E as variáveis de sucesso para a tela!
+    return render_template('venda_multi.html', 
+                           eventos=eventos_cursor,
+                           success_message=success_message,
+                           print_data_multi=print_data_multi)
+
+
+@app.route('/processar_venda_multi', methods=['POST'])
+@login_required
+def processar_venda_multi():
+    """
+    Processa o Carrinho de Compras (Venda Multi-Eventos).
+    Gera um único ID de transação (VMxxxx) e distribui as cartelas nas tabelas dos eventos correspondentes.
+    """
+    db = get_vendas_db()
+    if db is None:
+        return redirect(url_for('menu_operacoes', error="DB Offline. Transação falhou."))
+
+    try:
+        # 1. Captura os dados do formulário oculto
+        telefone_cliente = request.form.get('telefone_cliente', '').strip()
+        nome_cru = request.form.get('nome_cliente', 'Cliente').strip()
+        
+        # 🚀 FORÇA A PRIMEIRA LETRA MAIÚSCULA EM CADA PALAVRA
+        # Pode usar o .title() nativo do Python ou a sua função format_title_case(nome_cru)
+        nome_cliente = nome_cru.title()
+        id_cliente_final = int(request.form.get('id_cliente', 0) or 0)
+        carrinho_json = request.form.get('carrinho_json', '[]')
+        
+        carrinho = json.loads(carrinho_json)
+        if not carrinho:
+            raise ValueError("O carrinho chegou vazio ao servidor.")
+
+    except Exception as e:
+        return redirect(url_for('menu_operacoes', error=f"Dados do carrinho inválidos: {e}"))
+
+    # =====================================================================
+    # PREPARAÇÃO DO CLIENTE E COMISSÃO (COM AUTO-REGISTO)
+    # =====================================================================
+    
+    # 🚀 INTERCETADOR: Se o ID for 0, é um cliente novo. Vamos criar o registo!
+    if id_cliente_final == 0 and telefone_cliente and nome_cliente:
+        
+        # 🚀 LIMPEZA MÁGICA: Remove tudo o que não for número (Parênteses, espaços, traços)
+        telefone_limpo = "".join(filter(str.isdigit, telefone_cliente))
+        
+        # Segurança dupla: Verifica se o número já existe (com ou sem máscara)
+        cliente_db = db.clientes.find_one({'$or': [{'telefone': telefone_limpo}, {'telefone': telefone_cliente}]})
+        
+        if not cliente_db:
+            # Descobre o próximo ID disponível de forma segura
+            ultimo_cliente = db.clientes.find_one({}, sort=[("id_cliente", -1)])
+            novo_id_cliente = (ultimo_cliente["id_cliente"] + 1) if ultimo_cliente and "id_cliente" in ultimo_cliente else 1
+            
+            # Cria o documento do novo cliente na base de dados
+            cliente_db = {
+                "id_cliente": novo_id_cliente,
+                "nome": nome_cliente,
+                "nick": nome_cliente,
+                "telefone": telefone_limpo, # 🚀 GRAVA APENAS NÚMEROS AQUI!
+                "data_cadastro": hora_brasil(),
+                "data_ultimo_compra": hora_brasil(),
+                "id_colaborador": int(session.get('id_colaborador', 0)),
+                "nick_colaborador": session.get('nick', 'N/A'),
+                "id_regional": int(session.get('id_regional', 1)),
+                "saldo_atual": Decimal128("0.00"),
+                "cidade": "São Jose dos Campos", 
+                "em_treinamento": False
+            }
+            db.clientes.insert_one(cliente_db)
+            id_cliente_final = novo_id_cliente
+            print(f"✅ Auto-Registo: Cliente {nome_cliente} criado com ID {id_cliente_final}")
+        else:
+            id_cliente_final = cliente_db['id_cliente']
+    else:
+        # Se o ID for maior que 0, apenas procura o cliente existente
+        cliente_db = db.clientes.find_one({'id_cliente': id_cliente_final}) if id_cliente_final > 0 else None
+
+    # Define de quem é a comissão desta venda
+    if cliente_db:
+        # Se achou ou criou o cliente, a comissão (Indireta) é do DONO do cliente
+        id_colab_comissao = int(cliente_db.get('id_colaborador', 0))
+        nick_colab_comissao = cliente_db.get('nick_colaborador', 'N/A')
+    else:
+        # Venda balcão anónima (muito raro agora), a comissão é do OPERADOR que está logado
+        id_colab_comissao = int(session.get('id_colaborador', 0))
+        nick_colab_comissao = session.get('nick', 'N/A')
+
+    # (O resto do código a partir das variáveis do colaborador continua igual...)
+    colaborador_id = session.get('id_colaborador', 'N/A')
+    nick_colaborador = session.get('nick', 'Colaborador')
+    regional_operador = session.get('id_regional', 1)
+    
+    chave_pix_colaborador = "Consulte o Colaborador"
+    try:
+        if colaborador_id != 'N/A':
+            colab_doc = db.colaboradores.find_one({'id_colaborador': int(colaborador_id)})
+            if colab_doc:
+                chave_pix_colaborador = colab_doc.get('chave_pix', chave_pix_colaborador)
+    except Exception:
+        pass
+
+    valor_total_carrinho = 0.0
+    total_kits_carrinho = 0
+    html_fatiamento_recibo = ""
+    eventos_comprados_ids = [] # Para passar ao Modal do Front-end
+    
+    # Define o tipo de cartela geral da venda baseando-se no primeiro item (já que a trava do Front impede misturar)
+    tipo_cartela_geral = int(carrinho[0].get('tipo', 15)) if carrinho else 15
+
+    # ==============================================================================
+    # 🚀 MOTOR DE VENDAS MULTI (ATÓMICO)
+    # ==============================================================================
+    try:
+        # Gera ID Único da Transação Multi
+        novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
+        if novo_id_venda_int is None: raise Exception("Falha ao gerar o ID sequencial da venda multi.")
+        id_venda_formatado = f"VM{novo_id_venda_int:05d}" # Prefixo VM para Venda Multi
+
+        # Processa cada evento do carrinho individualmente
+        for item in carrinho:
+            id_evento_int = item['id_evento']
+            quantidade_kits = item['quantidade']
+            subtotal = float(item['subtotal'])
+            
+            valor_total_carrinho += subtotal
+            total_kits_carrinho += quantidade_kits
+            eventos_comprados_ids.append(id_evento_int)
+
+            evento_db = db.eventos.find_one({'id_evento': id_evento_int})
+            if not evento_db:
+                raise Exception(f"Evento {id_evento_int} não localizado no banco.")
+
+            limite_maximo_cartelas = int(evento_db.get('numero_maximo', 72000))
+            unidade_de_venda = int(evento_db.get('unidade_de_venda', 15))
+            quantidade_cartelas = quantidade_kits * unidade_de_venda
+            
+            # Puxa o ponteiro de numeração para ESTE evento específico
+            numero_inicial_atual = get_next_bilhete_sequence(
+                db, id_evento_int, 'inicial_proxima_venda', 
+                quantidade_cartelas, limite_maximo_cartelas
+            )
+            
+            if numero_inicial_atual is None:
+                raise Exception(f"Falha ao reservar numeração para o evento {id_evento_int}.")
+
+            if numero_inicial_atual == 1: 
+                numero_inicial_atual = int(evento_db.get('numero_inicial', 1))
+                db.controle_venda.update_one(
+                    {'id_evento': id_evento_int},
+                    {'$set': {'inicial_proxima_venda': numero_inicial_atual + quantidade_cartelas}}
+                )
+
+            numero_final_atual = numero_inicial_atual + quantidade_cartelas - 1
+            
+            # Lida com a virada de lote (Se o número final passar do máximo)
+            numero_inicial2_atual = 0
+            numero_final2_atual = 0
+            if numero_final_atual > limite_maximo_cartelas:
+                numero_inicial2_atual = 1
+                numero_final2_atual = numero_final_atual - limite_maximo_cartelas
+                numero_final_atual = limite_maximo_cartelas
+
+            # Cria o documento para ser inserido na tabela vendas{id_evento}
+            registro_venda = {
+                "id_venda": id_venda_formatado,
+                "id_evento_ObjectId": evento_db.get('_id'), 
+                "id_evento": id_evento_int, 
+                "descricao_evento": evento_db.get('descricao'),
+                "id_regional": regional_operador,
+                "id_cliente": id_cliente_final, 
+                "nome_cliente": nome_cliente,
+                "telefone_cliente": telefone_cliente,
+                "id_colaborador": id_colab_comissao,
+                "nick_colaborador": nick_colab_comissao,
+                "id_vendedor": colaborador_id,
+                "data_venda": hora_brasil(),
+                "tipo_cartela": tipo_cartela_geral,  
+                "quantidade_unidades": quantidade_kits,
+                "quantidade_cartelas": quantidade_cartelas,
+                "numero_inicial": numero_inicial_atual,
+                "numero_final": numero_final_atual,
+                "numero_inicial2": numero_inicial2_atual,
+                "numero_final2": numero_final2_atual,
+                "valor_unitario": Decimal128(str(item['valor_unitario'])), 
+                "valor_total": Decimal128(str(subtotal)),
+                "origem": "terminal_multi"
+            }
+            
+            # Grava a fatia na coleção específica do evento
+            db[f"vendas{id_evento_int}"].insert_one(registro_venda)
+            
+            # Atualiza o saldo pendente do evento
+            db.eventos.update_one(
+                {"id_evento": id_evento_int},
+                {"$inc": {"valor_pendente_telemovel": subtotal}}
+            )
+
+            # Monta o visual para o recibo HTML do Carrinho
+            html_fatiamento_recibo += f"<div style='margin-bottom: 4px; border-bottom: 1px dotted #ccc; padding-bottom: 4px;'>"
+            html_fatiamento_recibo += f"<strong>[{id_evento_int}] {evento_db.get('descricao')}</strong><br>"
+            html_fatiamento_recibo += f"<span style='font-size: 0.85rem; color: #555;'>Qtd: {quantidade_kits} kit(s) | Crtls: {numero_inicial_atual} a {numero_final_atual}</span>"
+            html_fatiamento_recibo += "</div>"
+
+        # Após o loop, atualiza a última compra do cliente
+        if id_cliente_final > 0:
+            db.clientes.update_one(
+                {"id_cliente": id_cliente_final}, 
+                {"$set": {"data_ultimo_compra": hora_brasil()}}
+            )
+
+        # ==========================================================
+        # 🚀 NOVO: GRAVAÇÃO DO CABEÇALHO DA VENDA MULTI (Pai)
+        # ==========================================================
+        db.vendas_multi.insert_one({
+            "id_venda": id_venda_formatado,
+            "data_venda": hora_brasil(),
+            "id_cliente": id_cliente_final,
+            "nome_cliente": nome_cliente,
+            "telefone_cliente": telefone_cliente,
+            "id_colaborador": colaborador_id,
+            "valor_total": float(valor_total_carrinho),
+            "total_kits": total_kits_carrinho,
+            "eventos_array": eventos_comprados_ids,
+            "tipo_cartela": tipo_cartela_geral
+        })
+
+        # 💸 REGRAS DE COMISSÃO (Calculadas sobre o valor TOTAL do Carrinho)
+        taxa_operador = g.parametros_globais.get('perc_venda_direta', 15.0) 
+        registrar_comissao_vendedor(
+            db=db, id_colaborador=colaborador_id, valor=valor_total_carrinho * (taxa_operador / 100),
+            tipo='vd', id_evento=9999, id_venda=id_venda_formatado, # 9999 indica venda multi global
+            taxa_aplicada=taxa_operador, descricao=f"Comissão Direta Venda Multi {id_venda_formatado}"
+        )
+
+        id_indicador = cliente_db.get('id_colaborador') if cliente_db else None
+        if id_indicador and int(id_indicador) != int(colaborador_id):
+            taxa_indicador = g.parametros_globais.get('perc_venda_indireta_b', 10.0) 
+            registrar_comissao_vendedor(
+                db=db, id_colaborador=id_indicador, valor=valor_total_carrinho * (taxa_indicador / 100),
+                tipo='ind_b', id_evento=9999, id_venda=id_venda_formatado,
+                taxa_aplicada=taxa_indicador, descricao=f"Comissão Indireta Venda Multi {id_venda_formatado}"
+            )
+
+    except Exception as e:
+        print(f"[ERRO CRÍTICO VENDA MULTI] {e}")
+        import traceback; traceback.print_exc()
+        return redirect(url_for('menu_operacoes', error=f"Falha ao gravar o carrinho no banco: {e}"))
+
+    # ==============================================================================
+    # 🚀 MONTAGEM DO RECIBO
+    # ==============================================================================
+    try:
+        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
+        http_apk = g.parametros_globais.get('http_apk', '')
+        link_final = f"{http_apk}?idcliente={id_cliente_final}"
+        
+        success_msg = (
+            f"<strong>✅ VENDA MÚLTIPLA REGISTRADA</strong><br>"
+            f"  <span style='font-size: 1.2rem; color: #B91C1C;'>{nome_sala}</span><br>"
+            f"</strong>     >  {id_venda_formatado}  < </strong><br>"
+            f"----------------------------<br>"
+            f"Cliente: <strong>{nome_cliente}</strong><br>"
+            f"Data: {hora_brasil().strftime('%d/%m/%Y às %H:%M')}<br>"
+            f"----------------------------<br>"
+            f"{html_fatiamento_recibo}"
+            f"----------------------------<br>"
+            f"Total de Kits: <strong>{total_kits_carrinho}</strong><br>"
+            f"VALOR TOTAL: <span style='font-size: 1.2rem; color: #B91C1C;'>R$ {valor_total_carrinho:.2f}</span><br><br>"
+            f"CLIQUE NO <strong>LINK</strong> PARA ACESSAR<br>"
+            f"<strong> {link_final} </strong>"
+        )
+        
+        session['success_message'] = success_msg 
+        
+        # Gera o token de segurança exigido pela nova arquitetura
+        token_seguranca = gerar_token_venda(id_venda_formatado)
+        
+        # Envia os dados para o Modal do Carrinho exibir as opções de PDF/Impressão
+        session['print_data_multi'] = { 
+            'id_venda_recente': id_venda_formatado,
+            'id_cliente_recente': id_cliente_final,
+            'telefone_cliente': telefone_cliente,
+            'nome_cliente': nome_cliente,
+            'eventos_array': eventos_comprados_ids, # Passamos a lista de IDs para o PDF saber o que puxar
+            'tipo_cartela': tipo_cartela_geral,
+            'token': token_seguranca
+        }
+        
+        # A rota GET correspondente que vamos criar a seguir
+        return redirect(url_for('venda_multi'))
+
+    except Exception as e:
+        print(f"Erro ao montar comprovante Multi: {e}")
+        session['success_message'] = f"<strong>VENDA {id_venda_formatado} GRAVADA!</strong> (Erro no recibo visual)."
+        return redirect(url_for('venda_multi'))
+
+
+@app.route('/api/ultimas_vendas_multi')
+@login_required
+def ultimas_vendas_multi():
+    db = get_vendas_db()
+    colab_id = session.get('id_colaborador')
+    
+    try:
+        # Busca as últimas 5 vendas multi feitas por quem está logado no caixa
+        vendas = list(db.vendas_multi.find({"id_colaborador": colab_id}).sort([("_id", -1)]).limit(5))
+        
+        # Prepara para enviar como JSON (O ObjectId do Mongo precisa ser convertido para string)
+        for v in vendas:
+            v['_id'] = str(v['_id']) 
+            
+        return jsonify(vendas)
+    except Exception as e:
+        return jsonify([]) # Retorna vazio em caso de erro para não quebrar a tela
 
 
 # --- ROTAS DE CADASTRO DE CLIENTE ---
@@ -7356,6 +7706,39 @@ def imprimir_cartelas_58mm_15():
         traceback.print_exc()
         return jsonify({"erro": f"Erro interno: {e}"}), 500
 
+
+@app.route('/api/buscar_fatias_venda_multi', methods=['POST'])
+@login_required
+def buscar_fatias_venda_multi():
+    """
+    Devolve os números iniciais e finais de cada evento dentro de uma Venda Multi (VMxxxx)
+    """
+    try:
+        dados = request.get_json()
+        id_venda = dados.get('id_venda')
+        eventos_array = dados.get('eventos', [])
+        
+        db = get_vendas_db()
+        fatias = []
+        
+        for id_evento in eventos_array:
+            # Procura a fatia específica na coleção de cada evento
+            fatia = db[f"vendas{id_evento}"].find_one({"id_venda": id_venda})
+            if fatia:
+                fatias.append({
+                    "id_evento": int(id_evento),
+                    "numero_inicial": int(fatia.get('numero_inicial', 0)),
+                    "numero_final": int(fatia.get('numero_final', 0)),
+                    "descricao_evento": fatia.get('descricao_evento', f'Evento {id_evento}')
+                })
+        
+        return jsonify({"status": "success", "fatias": fatias})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)})
+
+
+
+
 # vendas 
 @app.route('/api/venda_bluetooth_json')
 @login_required
@@ -9265,8 +9648,12 @@ def configuracoes_sistema():
     if request.method == 'POST':
         try:
             # Captura e converte os dados do formulário
+            # Captura e converte os dados do formulário
             url_canal_live = request.form.get('url_canal_live', '').strip()
-            venda_lite = request.form.get('venda_lite') == 'on' # Checkbox retorna 'on' se marcado
+            
+            # 🚀 CAPTURA DA NOVA STRING (Padrão para 'classica' se vier vazio)
+            tipo_das_vendas = request.form.get('tipo_das_vendas', 'classica') 
+            
             padrao_registro = request.form.get('padrao_registro_vendas', 'quantidade')
             venda_aleatoria = request.form.get('venda_aleatoria') == 'on'
             
@@ -9277,7 +9664,8 @@ def configuracoes_sistema():
             # Prepara o dicionário de atualização
             novos_dados = {
                 'url_canal_live': url_canal_live,
-                'venda_lite': venda_lite,
+                'tipo_das_vendas': tipo_das_vendas, # Salvando a nova String no banco
+                'venda_lite': (tipo_das_vendas == 'lite'), # Mantém a chave antiga atualizada por segurança para outras rotas velhas
                 'padrao_registro_vendas': padrao_registro,
                 'venda_aleatoria': venda_aleatoria,
                 'inicial_randon': inicial_randon,
@@ -9877,11 +10265,11 @@ def popular_bloqueios():
     """
     Popula a tabela 'config_bloqueio' com um único documento contendo 
     o array de termos proibidos, apagando qualquer registro anterior.
-    Acessível apenas para administradores de nível 3.
+    Acessível apenas para administradores de nível 4.
     """
-    # 1. Verificação de segurança: Apenas administradores nível 3
-    if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso negado. Nível 3 requerido."))
+    # 1. Verificação de segurança: Apenas administradores nível 4
+    if session.get('nivel', 0) < 4:
+        return redirect(url_for('menu_operacoes', error="Acesso negado. Nível 4 requerido."))
 
     db = get_vendas_db()
     if db is None:
@@ -9896,7 +10284,7 @@ def popular_bloqueios():
             "piranha", "vagabundo", "vagabunda", "corno", "xoxota", 
             "chupa", "chupeta", "putaria", "bicha", "traveco", "rapariga", 
             "prostituta", "veado", "bichona", "vagina", "bosta", "fuck", 
-            "vaca", "boi", "penis", "xola"
+            "vaca", "boi", "penis", "xola", "h romeu", "boizebu"
         ]
 
         # 3. Limpeza e padronização da lista (remove duplicados e ordena)
@@ -9939,9 +10327,9 @@ def corrigir_senhas_faltantes():
     Localiza clientes sem o campo 'senha' no banco de dados da sala atual 
     e define a senha padrão como 'Senha' (com S maiúsculo) via bcrypt.
     """
-    # 1. Segurança: Permite acesso apenas para administradores nível 3
-    if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso negado. Nível 3 requerido."))
+    # 1. Segurança: Permite acesso apenas para administradores nível 4
+    if session.get('nivel', 0) < 4:
+        return redirect(url_for('menu_operacoes', error="Acesso negado. Nível 4 requerido."))
 
     # 2. Obtém a conexão com o banco de dados dinâmico da sala ativa
     db = get_vendas_db()
@@ -10222,7 +10610,7 @@ def corrigir_cidade_e_saldo():
         return redirect(url_for('cadastro_cliente', error=f"Erro crítico ao atualizar clientes: {e}"))
 
 
-# >>>  http://localhost:5001/admin/manutencao_clientes_regional
+# >>>  http://localhost:5001/migrar_historico_vendas
 @app.route('/migrar_historico_vendas')
 @login_required
 def migrar_historico_vendas():
@@ -10259,6 +10647,7 @@ def criar_indices_regionais(db):
     return "Índices criados com sucesso!"
 
 
+# >>>  http://localhost:5001/admin/manutencao_clientes_regional
 @app.route('/admin/manutencao_clientes_regional', methods=['GET'])
 @login_required
 def manutencao_clientes_regional():

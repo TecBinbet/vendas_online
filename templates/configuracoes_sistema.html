@@ -30,35 +30,57 @@
         </div>
 
         <div class="bg-white shadow rounded-lg p-6 border-t-4 border-green-500">
-            <h3 class="text-lg font-semibold text-gray-800 mb-1">Regras do Terminal (Venda Lite)</h3>
+            <h3 class="text-lg font-semibold text-gray-800 mb-4">Modo de Venda Principal (Tela Inicial)</h3>
             
-            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                
-                <div class="flex items-center">
-                    <input type="checkbox" name="venda_lite" id="venda_lite" 
-                           {% if p.get('venda_lite') %}checked{% endif %}
-                           class="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded">
-                    <label for="venda_lite" class="ml-3 block text-sm font-medium text-gray-700">
-                        Habilitar Venda Lite (Balcão Rápido)
-                    </label>
-                </div>
+            {% set tipo_atual = p.get('tipo_das_vendas') %}
+            {% if not tipo_atual %}
+                {% set tipo_atual = 'lite' if p.get('venda_lite') else 'classica' %}
+            {% endif %}
 
-                <div>
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Padrão de Registro de Vendas</label>
-                    <div class="flex items-center space-x-4">
-                        <label class="inline-flex items-center">
-                            <input type="radio" name="padrao_registro_vendas" value="quantidade" 
-                                   {% if p.get('padrao_registro_vendas', 'quantidade') == 'quantidade' %}checked{% endif %}
-                                   class="form-radio text-blue-600 h-4 w-4">
-                            <span class="ml-2 text-sm text-gray-700">Por Quantidade</span>
-                        </label>
-                        <label class="inline-flex items-center">
-                            <input type="radio" name="padrao_registro_vendas" value="numeracao" 
-                                   {% if p.get('padrao_registro_vendas') == 'numeracao' %}checked{% endif %}
-                                   class="form-radio text-blue-600 h-4 w-4">
-                            <span class="ml-2 text-sm text-gray-700">Por Numeração</span>
-                        </label>
-                    </div>
+            <div class="grid grid-cols-1 gap-3 mb-6">
+                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors {% if tipo_atual == 'classica' %}border-blue-500 bg-blue-50{% else %}border-gray-200 bg-white{% endif %}">
+                    <input type="radio" name="tipo_das_vendas" value="classica" 
+                           {% if tipo_atual == 'classica' %}checked{% endif %}
+                           class="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300">
+                    <span class="ml-3 font-medium text-gray-800">
+                        🖥️ Venda Clássica <span class="text-gray-500 text-sm font-normal ml-1">(Menu de Operações Padrão)</span>
+                    </span>
+                </label>
+
+                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors {% if tipo_atual == 'lite' %}border-blue-500 bg-blue-50{% else %}border-gray-200 bg-white{% endif %}">
+                    <input type="radio" name="tipo_das_vendas" value="lite" 
+                           {% if tipo_atual == 'lite' %}checked{% endif %}
+                           class="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300">
+                    <span class="ml-3 font-medium text-gray-800">
+                        ⚡ Venda Lite <span class="text-gray-500 text-sm font-normal ml-1">(Balcão Rápido 1 a 1)</span>
+                    </span>
+                </label>
+
+                <label class="flex items-center p-3 border rounded-lg cursor-pointer hover:bg-gray-50 transition-colors {% if tipo_atual == 'multi' %}border-blue-500 bg-blue-50{% else %}border-gray-200 bg-white{% endif %}">
+                    <input type="radio" name="tipo_das_vendas" value="multi" 
+                           {% if tipo_atual == 'multi' %}checked{% endif %}
+                           class="h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300">
+                    <span class="ml-3 font-medium text-gray-800">
+                        🛒 Venda Múltipla <span class="text-gray-500 text-sm font-normal ml-1">(Carrinho Multi-Eventos / Vendedor de Rua)</span>
+                    </span>
+                </label>
+            </div>
+
+            <div class="border-t border-gray-200 pt-5">
+                <label class="block text-sm font-bold text-gray-700 mb-3">Padrão de Registro de Vendas</label>
+                <div class="flex items-center space-x-6">
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="radio" name="padrao_registro_vendas" value="quantidade" 
+                               {% if p.get('padrao_registro_vendas', 'quantidade') == 'quantidade' %}checked{% endif %}
+                               class="form-radio text-blue-600 h-5 w-5">
+                        <span class="ml-2 text-sm font-medium text-gray-700">Por Quantidade</span>
+                    </label>
+                    <label class="inline-flex items-center cursor-pointer">
+                        <input type="radio" name="padrao_registro_vendas" value="numeracao" 
+                               {% if p.get('padrao_registro_vendas') == 'numeracao' %}checked{% endif %}
+                               class="form-radio text-blue-600 h-5 w-5">
+                        <span class="ml-2 text-sm font-medium text-gray-700">Por Numeração</span>
+                    </label>
                 </div>
             </div>
         </div>
