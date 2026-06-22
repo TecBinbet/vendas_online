@@ -8013,7 +8013,7 @@ def imprimir_cartelas_58mm_25():
             if ocultar_qr:
                 # Se veio o parâmetro, coloca a tesoura e avança o papel
                 recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-                recibo["linhas"].append({"texto": ">> 8< --- CORTE AQUI --- >8 <<", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+                recibo["linhas"].append({"texto": "> > 8< --- CORTE AQUI --- >8 < <", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
                 recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
                 
                 # Linhas em branco para dar o espaço do corte da guilhotina (Ajuste a quantidade se precisar de mais espaço)
