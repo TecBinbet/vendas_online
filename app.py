@@ -7589,6 +7589,7 @@ def imprimir_cartelas_58mm_15():
         numero_final = int(request.args.get('numero_final', 0))
         id_evento_raw = request.args.get('id_evento', 0)
         nome_cliente = request.args.get('nome_cliente', 'Cliente')
+        ocultar_qr = request.args.get('ocultar_qr') == 'true'
 
         if numero_inicial > numero_final or numero_inicial == 0:
             return jsonify({"erro": "Numeração inválida"}), 400
@@ -7688,20 +7689,31 @@ def imprimir_cartelas_58mm_15():
         # 3. RODAPÉ GERAL (Uma única vez no final)
         # ==========================================
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        
         if imprime_qr and http_apk:
-            # Texto indicativo antes do QR Code
-            recibo["linhas"].append({"texto": "Aponte a camera para o link:", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            if ocultar_qr:
+                # Se veio o parâmetro, coloca a tesoura e avança o papel
+                recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": ">> 8< --- CORTE AQUI --- >8 <<", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+                recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                
+                # Linhas em branco para dar o espaço do corte da guilhotina (Ajuste a quantidade se precisar de mais espaço)
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
+            else:
+                # Texto indicativo antes do QR Code
+                recibo["linhas"].append({"texto": "Aponte a camera para o link:", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
-            # 🚀 A MÁGICA ACONTECE AQUI: Adicionamos o "tipo": "qrcode"
-            recibo["linhas"].append({
-                "texto": http_apk, 
-                "alinhamento": "centro", 
-                "tamanho": "normal", 
-                "negrito": False, 
-                "tipo": "qrcode"
-            })
+                # 🚀 A MÁGICA ACONTECE AQUI: Adicionamos o "tipo": "qrcode"
+                recibo["linhas"].append({
+                    "texto": http_apk, 
+                    "alinhamento": "centro", 
+                    "tamanho": "normal", 
+                    "negrito": False, 
+                    "tipo": "qrcode"
+                })
             
-            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
         recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
 
@@ -7894,6 +7906,7 @@ def imprimir_cartelas_58mm_25():
         numero_final = int(request.args.get('numero_final', 0))
         id_evento_raw = request.args.get('id_evento', 0)
         nome_cliente = request.args.get('nome_cliente', 'Cliente')
+        ocultar_qr = request.args.get('ocultar_qr') == 'true'
 
         if numero_inicial > numero_final or numero_inicial == 0:
             return jsonify({"erro": "Numeração inválida"}), 400
@@ -7995,20 +8008,31 @@ def imprimir_cartelas_58mm_25():
         # 3. RODAPÉ GERAL (Uma única vez no final)
         # ==========================================
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        
         if imprime_qr and http_apk:
-            # Texto indicativo antes do QR Code
-            recibo["linhas"].append({"texto": "Aponte a camera para o link:", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+            if ocultar_qr:
+                # Se veio o parâmetro, coloca a tesoura e avança o papel
+                recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": ">> 8< --- CORTE AQUI --- >8 <<", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+                recibo["linhas"].append({"texto": "--------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                
+                # Linhas em branco para dar o espaço do corte da guilhotina (Ajuste a quantidade se precisar de mais espaço)
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False}) 
+            else:
+                # Texto indicativo antes do QR Code
+                recibo["linhas"].append({"texto": "Aponte a camera para o link:", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
-            # 🚀 A MÁGICA ACONTECE AQUI: Adicionamos o "tipo": "qrcode"
-            recibo["linhas"].append({
-                "texto": http_apk, 
-                "alinhamento": "centro", 
-                "tamanho": "normal", 
-                "negrito": False, 
-                "tipo": "qrcode"
-            })
+                # 🚀 A MÁGICA ACONTECE AQUI: Adicionamos o "tipo": "qrcode"
+                recibo["linhas"].append({
+                    "texto": http_apk, 
+                    "alinhamento": "centro", 
+                    "tamanho": "normal", 
+                    "negrito": False, 
+                    "tipo": "qrcode"
+                })
             
-            recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+                recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
             
         recibo["linhas"].append({"texto": "Boa Sorte!", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
         

@@ -789,19 +789,23 @@
 
                 const baseUrl = (tipoCartela === 15) ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
 
-                // TÁTICA DA FILA: Envia um evento, espera imprimir, envia o próximo.
                 for (let i = 0; i < dadosFatias.fatias.length; i++) {
                     let fatia = dadosFatias.fatias[i];
+                    let ehUltimoEvento = (i === dadosFatias.fatias.length - 1);
+                    
                     let url = `${window.location.origin}${baseUrl}?numero_inicial=${fatia.numero_inicial}&numero_final=${fatia.numero_final}&id_evento=${fatia.id_evento}&nome_cliente=${encodeURIComponent(nomeCliente)}`;
                     
-                    let resFatia = await fetch(url);
-                    let textoCruDoPython = await resFatia.text(); // Pega a matriz exata que a impressora ama
+                    // 🚀 A SUA IDEIA AQUI: Se não for o último, manda esconder o QR Code
+                    if (!ehUltimoEvento) {
+                        url += `&ocultar_qr=true`;
+                    }
                     
-                    // Dispara para o Android!
+                    let resFatia = await fetch(url);
+                    let textoCruDoPython = await resFatia.text(); 
+                    
                     imprimirComprovanteUniversal(textoCruDoPython);
                     
-                    // Se não for o último evento da lista, aguarda 2 segundos antes de mandar o próximo pacote
-                    if (i < dadosFatias.fatias.length - 1) {
+                    if (!ehUltimoEvento) {
                         await new Promise(resolve => setTimeout(resolve, 2000));
                     }
                 }
