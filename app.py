@@ -6900,6 +6900,74 @@ def reimprimir_comprovante_json():
         return jsonify({'status': 'error', 'message': f'Erro interno: {e}'})
 
 
+@app.route('/imprimir_recibo_financeiro_json', methods=['POST'])
+@login_required
+def imprimir_recibo_financeiro_json():
+    """
+    Gera o JSON para impressão do Recibo Financeiro (Resumo de Venda).
+    """
+    db = get_vendas_db()
+    if db is None:
+        return jsonify({'status': 'error', 'message': 'DB Offline'})
+
+    try:
+        data = request.json
+        id_venda_str = data.get('id_venda')
+        # Buscamos a venda na coleção de vendas correspondente ao evento
+        # Nota: O frontend deve enviar também o ID do evento para localizarmos a coleção
+        id_evento_str = str(data.get('id_evento'))
+        
+        # Localiza a venda (pode haver várias fatias para a mesma venda)
+        nome_colecao_venda = f"vendas{id_evento_str}"
+        fatias_venda = list(db[nome_colecao_venda].find({'id_venda': id_venda_str}))
+        
+        if not fatias_venda:
+            return jsonify({'status': 'error', 'message': 'Venda não encontrada.'})
+
+        venda_base = fatias_venda[0]
+        
+        # --- PREPARAÇÃO DO RECIBO ---
+        recibo = {
+            "config": { "avanco_linhas": 2, "cortar_papel": True },
+            "linhas": []
+        }
+
+        def add_linha(texto, alinhamento="centro", tamanho="normal", negrito=False, tipo="texto"):
+            if not texto or str(texto).strip() == "": texto = " "
+            recibo["linhas"].append({
+                "texto": str(texto), "alinhamento": alinhamento,
+                "tamanho": tamanho, "negrito": negrito, "tipo": tipo
+            })
+
+        # --- CABEÇALHO ---
+        add_linha("RECIBO FINANCEIRO", "centro", "normal", True)
+        add_linha("===============================", "centro", "normal", False)
+        add_linha(f"ID Venda: {id_venda_str}", "centro", "normal", False)
+        add_linha(f"Cliente: {venda_base.get('nome_cliente', 'N/A')}", "esquerda", "normal", True)
+        add_linha(f"Data: {venda_base.get('data_venda', 'N/A')}", "esquerda", "normal", False)
+        add_linha("-------------------------------", "centro", "normal", False)
+
+        # --- ITENS DA VENDA ---
+        total_geral = 0.0
+        for item in fatias_venda:
+            desc = f"{item.get('quantidade_unidades', 0)}x Cartelas"
+            valor = safe_float(item.get('valor_total', 0))
+            total_geral += valor
+            add_linha(f"{desc:<20} R$ {valor:.2f}".replace('.', ','), "esquerda", "normal", False)
+
+        add_linha("-------------------------------", "centro", "normal", False)
+        add_linha("TOTAL A PAGAR", "centro", "normal", False)
+        add_linha(f"R$ {total_geral:.2f}".replace('.', ','), "centro", "duplo", True)
+        add_linha("===============================", "centro", "normal", False)
+        add_linha("Obrigado pela preferência!", "centro", "normal", False)
+        add_linha(" ", "centro", "normal", False)
+
+        return jsonify({'status': 'success', 'recibo': recibo})
+
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
+
+
 # --- EXCLUIR VENDA ---
 @app.route('/excluir_venda', methods=['POST'])
 @login_required
@@ -7648,8 +7716,8 @@ def imprimir_cartelas_58mm_15():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": f"Data: {data_formatada}, "alinhamento": "centro", "tamanho": "largura", "negrito": false})
-        recibo["linhas"].append({"texto": f"Hora: {hora_formatada}, "alinhamento": "centro", "tamanho": "largura", "negrito": false})
+        recibo["linhas"].append({"texto": f"Data: {data_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": false})
+        recibo["linhas"].append({"texto": f"Hora: {hora_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": false})
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": f"Doa.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
@@ -7978,8 +8046,8 @@ def imprimir_cartelas_58mm_25():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": f"Data: {data_formatada}, "alinhamento": "centro", "tamanho": "largura", "negrito": false})
-        recibo["linhas"].append({"texto": f"Hora: {hora_formatada}, "alinhamento": "centro", "tamanho": "largura", "negrito": false})  
+        recibo["linhas"].append({"texto": f"Data: {data_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": false})
+        recibo["linhas"].append({"texto": f"Hora: {hora_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": false})  
         #recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "largura", "negrito": True})
         recibo["linhas"].append({"texto": f"Cli.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
