@@ -117,14 +117,14 @@
                         <input type="number" id="quantidade_kits" min="1" value="1" class="w-full p-1 border border-gray-300 rounded font-bold text-center text-xl" onkeydown="if(event.key==='Enter'){adicionarItem(); event.preventDefault();}">
                     </div>
 
-                    <button type="button" id="btn_add_carrinho" onclick="adicionarItem()" class="w-full md:w-auto bg-blue-400 hover:bg-blue-500 text-white font-black py-2 px-6 rounded shadow-md transition-colors whitespace-nowrap">
+                    <button type="button" id="btn_add_carrinho" onclick="adicionarItem()" class="w-full md:w-auto bg-green-300 hover:bg-green-400 text-gray-800 font-bold py-2 px-6 rounded shadow-md transition-colors whitespace-nowrap">
                         ➕  Adicionar ao 🛒
                     </button>
                 </div>
             </div>
 
             <div class="border-2 border-dashed border-gray-300 -mt-3 p-3 md:p-4 rounded-lg bg-white relative">
-                <h3 class="text-lg font-black text-gray-800 mb-1 -mt-3 flex justify-between items-center">
+                <h3 class="text-lg font-black text-gray-700 mb-1 -mt-3 flex justify-between items-center">
                     Resumo da Compra
                     <span id="badge_itens" class="bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded-full border border-blue-300">0 itens</span>
                 </h3>
@@ -189,13 +189,12 @@
     </div>
 
     <div id="ultimas-vendas-modal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-50">
-        <div class="bg-white rounded-xl p-4 max-w-lg w-full shadow-2xl">
+        <div class="bg-white rounded-xl p-3 md:p-4 max-w-lg w-full shadow-2xl mx-2">
             <h3 class="text-lg font-bold text-gray-800 border-b pb-2 mb-2">🕒 Suas Últimas 7 Vendas (Multi)</h3>
+            <button onclick="closeUltimasVendas()" class="w-full py-2 mb-3 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 shadow-md transition-colors">Fechar Janela</button>
             
-            <div id="lista-ultimas-vendas-multi" class="mb-4 max-h-80 overflow-y-auto">
+            <div id="lista-ultimas-vendas-multi" class="mb-2 max-h-[60vh] overflow-y-auto pr-1">
                 </div>
-            
-            <button onclick="closeUltimasVendas()" class="w-full py-3 bg-red-500 text-white rounded-lg font-bold hover:bg-red-600 shadow-md">Fechar Janela</button>
         </div>
     </div>
 
@@ -330,25 +329,27 @@
                     return;
                 }
                 
-                let html = '<div class="space-y-2">';
+                let html = '<div class="space-y-3">'; // Aumentado o espaço entre os cards
                 vendas.forEach(v => {
                     // Transforma a lista de eventos (ex: [3, 8]) em texto seguro para a função do botão
                     const eventosArrayJson = JSON.stringify(v.eventos_array);
                     
                     html += `
-                        <div class="border rounded p-2 shadow-sm bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-2 hover:bg-blue-50 transition-colors">
+                        <div class="border rounded p-3 shadow-sm bg-gray-50 flex flex-col sm:flex-row justify-between items-center gap-3 hover:bg-blue-50 transition-colors">
                             <div class="text-left w-full sm:w-auto">
                                 <p class="text-sm font-bold text-blue-800">${v.id_venda} - ${v.nome_cliente}</p>
-                                <p class="text-xs text-gray-600">Total: <strong>${v.total_kits} Kits</strong> (${v.eventos_array.length} evento(s))</p>
-                                <p class="text-sm font-black text-green-700">R$ ${parseFloat(v.valor_total).toFixed(2).replace('.', ',')}</p>
+                                <p class="text-sm text-gray-600 mt-1">Total: <strong>${v.total_kits} Kits</strong> <span class="text-xs bg-gray-200 px-1.5 py-0.5 rounded text-gray-700 font-bold ml-1">${v.eventos_array.length} evento(s)</span></p>
+                                <p class="text-sm font-black text-green-700 mt-1">R$ ${parseFloat(v.valor_total).toFixed(2).replace('.', ',')}</p>
                             </div>
                             
-                            <div class="flex gap-2 w-full sm:w-auto justify-end mt-1 sm:mt-0">
-                                <button onclick='imprimirCartelasMulti("${v.id_venda}", ${eventosArrayJson}, "${v.nome_cliente}", ${v.tipo_cartela})' class="bg-blue-600 hover:bg-blue-700 text-white py-1 px-3 text-xs shadow rounded font-bold transition" title="Reimprimir">
-                                    🖨️
+                            <div class="flex gap-2 w-full sm:w-auto justify-end mt-2 sm:mt-0">
+                                <button onclick='imprimirCartelasMulti("${v.id_venda}", ${eventosArrayJson}, "${v.nome_cliente}", ${v.tipo_cartela})' 
+                                        class="flex-1 sm:flex-none bg-blue-600 hover:bg-blue-700 text-white py-2 px-3 text-sm shadow rounded font-bold transition flex items-center justify-center gap-1" title="Reimprimir">
+                                    🖨️ Imprimir
                                 </button>
-                                <button onclick="bingoAlert('Função PDF/WhatsApp será ativada na Etapa 3!', 3000, '#3498db')" class="bg-green-600 hover:bg-green-700 text-white py-1 px-3 text-xs shadow rounded font-bold transition" title="Enviar Link">
-                                    📲
+                                <button onclick="bingoAlert('Função PDF/WhatsApp será ativada na Etapa 3!', 3000, '#3498db')" 
+                                        class="flex-1 sm:flex-none bg-emerald-600 hover:bg-emerald-700 text-white py-2 px-3 text-sm shadow rounded font-bold transition flex items-center justify-center gap-1" title="Enviar Link">
+                                    📲 Enviar
                                 </button>
                             </div>
                         </div>
@@ -774,6 +775,8 @@
 
         async function imprimirCartelasMulti(idVenda, eventosArray, nomeCliente, tipoCartela) {
             try {
+                console.log(`[MultiPrint] Iniciando impressão. Venda: ${idVenda}`);
+                
                 // 1. Busca as fatias no backend
                 const res = await fetch('/api/buscar_fatias_venda_multi', {
                     method: 'POST',
@@ -783,7 +786,7 @@
                 const dadosFatias = await res.json();
 
                 if (dadosFatias.status !== 'success') {
-                    throw new Error(dadosFatias.message);
+                    throw new Error(dadosFatias.message || "Erro na busca de eventos.");
                 }
 
                 let pacoteMestre = [];
@@ -801,35 +804,50 @@
                     const urlAbsoluta = window.location.origin + baseUrl + '?' + params.toString();
                     const resFatia = await fetch(urlAbsoluta);
                     
-                    if (!resFatia.ok) throw new Error(`Erro ao puxar cartelas do evento ${fatia.id_evento}`);
+                    if (!resFatia.ok) throw new Error(`Erro do Servidor ao puxar o evento ${fatia.id_evento}`);
                     
-                    const jsonFatia = await resFatia.json();
-
-                    // 🚀 A MÁGICA DO CLONE: Copia a estrutura exata do Python para não bugar o Android!
-                    if (jsonFatia.length > 0) {
-                        // Clona a primeira linha para herdar todos os parâmetros ocultos (tamanho, fonte, etc)
-                        let molde = JSON.parse(JSON.stringify(jsonFatia[0])); 
-                        
-                        // Cria os separadores usando o molde perfeito
-                        let sep1 = { ...molde, text: "--------------------------------", align: 1, bold: false };
-                        let titulo = { ...molde, text: ">>> " + String(fatia.descricao_evento).toUpperCase() + " <<<", align: 1, bold: true };
-                        let sep2 = { ...molde, text: "--------------------------------", align: 1, bold: false };
-                        
-                        // Adiciona o cabeçalho ao pacote
-                        pacoteMestre.push(sep1, titulo, sep2);
+                    // Tratamento seguro contra retornos HTML inesperados (ex: queda de internet)
+                    const textData = await resFatia.text();
+                    let jsonFatia;
+                    try {
+                        jsonFatia = JSON.parse(textData);
+                    } catch(e) {
+                        throw new Error(`Dados corrompidos ao receber o evento ${fatia.id_evento}`);
                     }
 
-                    // 🚀 Junta as cartelas reais do evento no pacote (sem alterar nada)
-                    pacoteMestre.push(...jsonFatia);
+                    if (Array.isArray(jsonFatia) && jsonFatia.length > 0) {
+                        // 🚀 A MÁGICA DO CLONE: Copia a estrutura exata do Python para não bugar o Android!
+                        let molde = JSON.parse(JSON.stringify(jsonFatia[0])); 
+                        let nomeEv = String(fatia.descricao_evento || `EVENTO ${fatia.id_evento}`).toUpperCase();
+                        
+                        // Cria os separadores clonando as propriedades originais
+                        pacoteMestre.push(Object.assign({}, molde, { text: "--------------------------------", align: 1, bold: false }));
+                        pacoteMestre.push(Object.assign({}, molde, { text: ">>> " + nomeEv + " <<<", align: 1, bold: true }));
+                        pacoteMestre.push(Object.assign({}, molde, { text: "--------------------------------", align: 1, bold: false }));
+                        
+                        // 🚀 O FILTRO PURIFICADOR E LAÇO SEGURO (Evita estouro de memória no JavaScript)
+                        for (let i = 0; i < jsonFatia.length; i++) {
+                            let item = jsonFatia[i];
+                            pacoteMestre.push(Object.assign({}, item, {
+                                text: String(item.text || "").replace(/[\n\r]/g, ""),
+                                align: Number(item.align || 0),
+                                bold: Boolean(item.bold)
+                            }));
+                        }
+                    }
                 }
 
-                // 3. Serializa o super-pacote perfeito e envia para o Android
+                // 3. Serializa o super-pacote limpo e envia para o Android
                 const pacoteFinalJSON = JSON.stringify(pacoteMestre);
+                console.log(`[MultiPrint] Pacote Mestre gerado com sucesso: ${pacoteMestre.length} linhas.`);
+                
                 imprimirComprovanteUniversal(pacoteFinalJSON);
                 
             } catch (error) {
-                console.error("Erro ao processar impressão da Venda Multi:", error);
+                console.error("🚨 Erro detalhado na Impressão Multi:", error);
                 bingoAlert("Falha ao montar o ticket unificado.", 3000, '#e74c3c');
+                // Alerta nativo de emergência para vermos qual foi o erro exato na tela do telemóvel
+                alert("Detalhe do Erro: " + error.message);
             }
         }
 
