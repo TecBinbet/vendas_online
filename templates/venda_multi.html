@@ -773,49 +773,7 @@
             return false; 
         }
 
-        async function imprimirCartelasMulti(idVenda, eventosArray, nomeCliente, tipoCartela) {
-            try {
-                // 1. Busca as fatias
-                const res = await fetch('/api/buscar_fatias_venda_multi', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ id_venda: idVenda, eventos: eventosArray })
-                });
-                const dadosFatias = await res.json();
-
-                if (dadosFatias.status !== 'success') throw new Error(dadosFatias.message);
-
-                let pacoteMestre = [];
-                const baseUrl = tipoCartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
-
-                // 2. Apenas junta os pacotes originais (SEM NENHUM SEPARADOR)
-                for (let fatia of dadosFatias.fatias) {
-                    const params = new URLSearchParams({
-                        numero_inicial: fatia.numero_inicial,
-                        numero_final: fatia.numero_final,
-                        id_evento: fatia.id_evento,
-                        nome_cliente: nomeCliente
-                    });
-                    
-                    const resFatia = await fetch(window.location.origin + baseUrl + '?' + params.toString());
-                    if (!resFatia.ok) throw new Error("Erro na rota do evento");
-                    
-                    const jsonFatia = await resFatia.json();
-                    
-                    // Empurra os objetos originais do Python direto pro pacote Mestre
-                    for (let i = 0; i < jsonFatia.length; i++) {
-                        pacoteMestre.push(jsonFatia[i]);
-                    }
-                }
-
-                // 3. Manda para a impressora!
-                imprimirComprovanteUniversal(JSON.stringify(pacoteMestre));
-                
-            } catch (error) {
-                console.error(error);
-                alert("Erro na Impressora: " + error.message);
-            }
-        }
+        imprimirCartelasMulti
 
         // ==========================================
         // 3. INICIALIZAÇÃO E RESTAURAÇÃO
@@ -959,7 +917,7 @@
                     
                 } else if (acao === 'imprimir') {
                     bingoAlert("Enviando lote híbrido para a impressora térmica...", 3000, '#f39c12');
-                    imprimirCartelasMulti58mm(idVenda, eventosArray, nomeCli, tipoCartela);
+                    imprimirCartelasMulti(idVenda, eventosArray, nomeCli, tipoCartela);
                 }
             }
         }
