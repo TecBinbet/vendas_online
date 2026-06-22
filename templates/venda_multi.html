@@ -775,9 +775,7 @@
 
         async function imprimirCartelasMulti(idVenda, eventosArray, nomeCliente, tipoCartela) {
             try {
-                console.log(`[MultiPrint] Iniciando impressão. Venda: ${idVenda}`);
-                
-                // 1. Busca as fatias no backend
+                // 1. Busca as fatias
                 const res = await fetch('/api/buscar_fatias_venda_multi', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -785,14 +783,12 @@
                 });
                 const dadosFatias = await res.json();
 
-                if (dadosFatias.status !== 'success') {
-                    throw new Error(dadosFatias.message || "Erro na busca de eventos.");
-                }
+                if (dadosFatias.status !== 'success') throw new Error(dadosFatias.message);
 
                 let pacoteMestre = [];
                 const baseUrl = tipoCartela === 15 ? '/imprimir_cartelas_58mm_15' : '/imprimir_cartelas_58mm_25';
 
-                // 2. Loop por cada evento
+                // 2. Apenas junta os pacotes originais (SEM NENHUM SEPARADOR)
                 for (let fatia of dadosFatias.fatias) {
                     const params = new URLSearchParams({
                         numero_inicial: fatia.numero_inicial,
@@ -801,53 +797,23 @@
                         nome_cliente: nomeCliente
                     });
                     
-                    const urlAbsoluta = window.location.origin + baseUrl + '?' + params.toString();
-                    const resFatia = await fetch(urlAbsoluta);
+                    const resFatia = await fetch(window.location.origin + baseUrl + '?' + params.toString());
+                    if (!resFatia.ok) throw new Error("Erro na rota do evento");
                     
-                    if (!resFatia.ok) throw new Error(`Erro do Servidor ao puxar o evento ${fatia.id_evento}`);
+                    const jsonFatia = await resFatia.json();
                     
-                    // Tratamento seguro contra retornos HTML inesperados (ex: queda de internet)
-                    const textData = await resFatia.text();
-                    let jsonFatia;
-                    try {
-                        jsonFatia = JSON.parse(textData);
-                    } catch(e) {
-                        throw new Error(`Dados corrompidos ao receber o evento ${fatia.id_evento}`);
-                    }
-
-                    if (Array.isArray(jsonFatia) && jsonFatia.length > 0) {
-                        // 🚀 A MÁGICA DO CLONE: Copia a estrutura exata do Python para não bugar o Android!
-                        let molde = JSON.parse(JSON.stringify(jsonFatia[0])); 
-                        let nomeEv = String(fatia.descricao_evento || `EVENTO ${fatia.id_evento}`).toUpperCase();
-                        
-                        // Cria os separadores clonando as propriedades originais
-                        pacoteMestre.push(Object.assign({}, molde, { text: "--------------------------------", align: 1, bold: false }));
-                        pacoteMestre.push(Object.assign({}, molde, { text: ">>> " + nomeEv + " <<<", align: 1, bold: true }));
-                        pacoteMestre.push(Object.assign({}, molde, { text: "--------------------------------", align: 1, bold: false }));
-                        
-                        // 🚀 O FILTRO PURIFICADOR E LAÇO SEGURO (Evita estouro de memória no JavaScript)
-                        for (let i = 0; i < jsonFatia.length; i++) {
-                            let item = jsonFatia[i];
-                            pacoteMestre.push(Object.assign({}, item, {
-                                text: String(item.text || "").replace(/[\n\r]/g, ""),
-                                align: Number(item.align || 0),
-                                bold: Boolean(item.bold)
-                            }));
-                        }
+                    // Empurra os objetos originais do Python direto pro pacote Mestre
+                    for (let i = 0; i < jsonFatia.length; i++) {
+                        pacoteMestre.push(jsonFatia[i]);
                     }
                 }
 
-                // 3. Serializa o super-pacote limpo e envia para o Android
-                const pacoteFinalJSON = JSON.stringify(pacoteMestre);
-                console.log(`[MultiPrint] Pacote Mestre gerado com sucesso: ${pacoteMestre.length} linhas.`);
-                
-                imprimirComprovanteUniversal(pacoteFinalJSON);
+                // 3. Manda para a impressora!
+                imprimirComprovanteUniversal(JSON.stringify(pacoteMestre));
                 
             } catch (error) {
-                console.error("🚨 Erro detalhado na Impressão Multi:", error);
-                bingoAlert("Falha ao montar o ticket unificado.", 3000, '#e74c3c');
-                // Alerta nativo de emergência para vermos qual foi o erro exato na tela do telemóvel
-                alert("Detalhe do Erro: " + error.message);
+                console.error(error);
+                alert("Erro na Impressora: " + error.message);
             }
         }
 
