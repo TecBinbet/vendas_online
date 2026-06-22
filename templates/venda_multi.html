@@ -53,8 +53,8 @@
 
         <div class="p-4 md:p-6">
             
-            <div class="bg-green-50 border border-green-200 p-2 rounded-lg mb-2 -mt-4 shadow-sm">
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="bg-green-50 border border-green-200 p-2 rounded-lg mb-1 -mt-3 shadow-sm">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-1">
                     <div>
                         <label for="telefone_cliente_lite" class="font-bold text-gray-700 text-sm">N° WhatsApp:</label>
                         <input type="tel" id="telefone_cliente_lite" 
@@ -93,10 +93,10 @@
                 <input type="hidden" id="colaborador_cliente_lite" value="">
             </div>
 
-            <div class="bg-gray-50 border border-gray-200 p-4 rounded-lg mb-6 shadow-sm">               
-                <div class="flex flex-col md:flex-row gap-3 items-end">
+            <div class="bg-gray-50 border border-gray-200 p-1 rounded-lg mb-4 shadow-sm">               
+                <div class="flex flex-col md:flex-row gap-1 items-end">
                     <div class="flex-grow">
-                        <label class="font-bold text-gray-700 text-sm">Selecione o Evento:</label>
+                        <label class="font-bold text-gray-700 text-sm ">Selecione o Evento:</label>
                         <select id="seletor_evento" class="w-full p-3 border border-gray-300 rounded font-bold text-gray-800 bg-white shadow-sm" onkeydown="if(event.key==='Enter'){document.getElementById('quantidade_kits').focus(); event.preventDefault();}">
                             <option value="" class="py-2 text-gray-600">-- Escolha um evento ativo --</option>
                             {% for e in eventos %}
@@ -114,14 +114,13 @@
                     
                     <div class="w-full md:w-32">
                         <label class="font-bold text-gray-700 text-sm -mt-2">Qtd. Kits:</label>
-                        <input type="number" id="quantidade_kits" min="1" value="1" class="w-full p-3 border border-gray-300 rounded font-bold text-center text-xl" onkeydown="if(event.key==='Enter'){adicionarItem(); event.preventDefault();}">
+                        <input type="number" id="quantidade_kits" min="1" value="1" class="w-full p-1 border border-gray-300 rounded font-bold text-center text-xl" onkeydown="if(event.key==='Enter'){adicionarItem(); event.preventDefault();}">
                     </div>
 
-                    <button type="button" id="btn_add_carrinho" onclick="adicionarItem()" class="w-full md:w-auto bg-blue-400 hover:bg-blue-500 text-white font-black py-2 px-6 rounded shadow-md transition-colors">
-                        ➕ Adicionar 🛒
+                    <button type="button" id="btn_add_carrinho" onclick="adicionarItem()" class="w-full md:w-auto bg-blue-400 hover:bg-blue-500 text-white font-black py-2 px-6 rounded shadow-md transition-colors whitespace-nowrap">
+                        ➕  Adicionar ao 🛒
                     </button>
                 </div>
-                <p id="aviso_trava" class="text-xs font-bold text-red-500 mt-2 hidden">⚠️ O carrinho está bloqueado para eventos de cartelas com <span id="tipo_trava"></span> dezenas.</p>
             </div>
 
             <div class="border-2 border-dashed border-gray-300 -mt-3 p-3 md:p-4 rounded-lg bg-white relative">
@@ -481,6 +480,10 @@
             localStorage.removeItem('lite_id');
             localStorage.removeItem('lite_colab');
             
+            // 🚀 NOVO: Zera o carrinho e atualiza a interface (e o botão!)
+            carrinho = [];
+            atualizarInterface();
+            
             if(telInput) telInput.focus();
         }
 
@@ -614,13 +617,16 @@
             const tbody = document.getElementById('corpo_carrinho');
             const seletor = document.getElementById('seletor_evento');
             const btnFinalizar = document.getElementById('btn_finalizar');
-            const avisoTrava = document.getElementById('aviso_trava');
+            const btnAddCarrinho = document.getElementById('btn_add_carrinho'); // 🚀 NOVO: Captura o botão
             let total = 0;
 
             if (carrinho.length === 0) {
                 tbody.innerHTML = '<tr><td colspan="5" class="p-4 text-center text-gray-400 italic font-bold">O carrinho está vazio.</td></tr>';
                 tipoCartelaTravado = null; 
-                avisoTrava.classList.add('hidden');
+                
+                // 🚀 Restaura o texto original do botão
+                btnAddCarrinho.innerText = '➕ Adicionar ao 🛒'; 
+                
                 btnFinalizar.disabled = true;
                 btnFinalizar.classList.add('opacity-50', 'cursor-not-allowed');
             } else {
@@ -641,8 +647,8 @@
                     tbody.appendChild(tr);
                 });
                 
-                avisoTrava.classList.remove('hidden');
-                document.getElementById('tipo_trava').innerText = tipoCartelaTravado;
+                // 🚀 Insere o aviso dinâmico no botão
+                btnAddCarrinho.innerText = `➕ Adicionar ao 🛒 (Cartela ${tipoCartelaTravado})`; 
                 
                 btnFinalizar.disabled = false;
                 btnFinalizar.classList.remove('opacity-50', 'cursor-not-allowed');
@@ -651,7 +657,7 @@
             document.getElementById('valor_total_carrinho').innerText = formatarMoeda(total);
             document.getElementById('badge_itens').innerText = `${carrinho.length} itens`;
 
-            // A MÁGICA DA TRAVA: Desabilita opções no dropdown que não batem com o carrinho
+            // A MÁGICA DA TRAVA NO SELETOR
             Array.from(seletor.options).forEach(opt => {
                 if (opt.value === "") return;
                 if (tipoCartelaTravado !== null && parseInt(opt.dataset.tipo) !== tipoCartelaTravado) {
@@ -659,7 +665,6 @@
                     opt.text = `🚫 BLOQUEADO - ` + opt.dataset.nome;
                 } else {
                     opt.disabled = false;
-                    // Novo formato: Nome (Valor) - Tipo
                     opt.text = `${opt.dataset.nome} (R$ ${parseFloat(opt.dataset.valor).toFixed(2).replace('.', ',')} / kit) - ${opt.dataset.tipo}`;
                 }
             });
@@ -798,31 +803,27 @@
                     
                     if (!resFatia.ok) throw new Error(`Erro ao puxar cartelas do evento ${fatia.id_evento}`);
                     
-                    let jsonFatia = await resFatia.json();
+                    const jsonFatia = await resFatia.json();
 
-                    // Cabeçalho do evento com chaves perfeitamente tipadas
-                    pacoteMestre.push({ "text": "--------------------------------", "align": 1, "bold": false });
-                    pacoteMestre.push({ "text": ">>> " + String(fatia.descricao_evento).toUpperCase() + " <<<", "align": 1, "bold": true });
-                    pacoteMestre.push({ "text": "--------------------------------", "align": 1, "bold": false });
-                    
-                    // 🚀 O FILTRO PURIFICADOR: Achata a matriz e força os tipos do Java
-                    if (Array.isArray(jsonFatia)) {
-                        for (let i = 0; i < jsonFatia.length; i++) {
-                            // Limpa quebras de linha ocultas e força os tipos primitivos
-                            let textoLimpo = String(jsonFatia[i].text || "").replace(/[\n\r]/g, "");
-                            let alinhamento = Number(jsonFatia[i].align || 0);
-                            let negrito = Boolean(jsonFatia[i].bold);
-
-                            pacoteMestre.push({
-                                "text": textoLimpo,
-                                "align": alinhamento,
-                                "bold": negrito
-                            });
-                        }
+                    // 🚀 A MÁGICA DO CLONE: Copia a estrutura exata do Python para não bugar o Android!
+                    if (jsonFatia.length > 0) {
+                        // Clona a primeira linha para herdar todos os parâmetros ocultos (tamanho, fonte, etc)
+                        let molde = JSON.parse(JSON.stringify(jsonFatia[0])); 
+                        
+                        // Cria os separadores usando o molde perfeito
+                        let sep1 = { ...molde, text: "--------------------------------", align: 1, bold: false };
+                        let titulo = { ...molde, text: ">>> " + String(fatia.descricao_evento).toUpperCase() + " <<<", align: 1, bold: true };
+                        let sep2 = { ...molde, text: "--------------------------------", align: 1, bold: false };
+                        
+                        // Adiciona o cabeçalho ao pacote
+                        pacoteMestre.push(sep1, titulo, sep2);
                     }
+
+                    // 🚀 Junta as cartelas reais do evento no pacote (sem alterar nada)
+                    pacoteMestre.push(...jsonFatia);
                 }
 
-                // 3. Serializa o pacote limpo e envia para o Android
+                // 3. Serializa o super-pacote perfeito e envia para o Android
                 const pacoteFinalJSON = JSON.stringify(pacoteMestre);
                 imprimirComprovanteUniversal(pacoteFinalJSON);
                 
