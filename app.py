@@ -7703,6 +7703,56 @@ def imprimir_cartelas_58mm_15():
         return jsonify({"erro": f"Erro interno: {e}"}), 500
 
 
+@app.route('/gerar_pdf_multi')
+def gerar_pdf_multi():
+    id_venda = request.args.get('id_venda')
+    nome_cliente = request.args.get('nome_cliente', 'Cliente')
+    
+    if not id_venda:
+        return "ID da venda não fornecido.", 400
+
+    db = get_vendas_db()
+    
+    try:
+        # 1. Busca a Venda Pai para saber quais eventos foram comprados
+        venda_pai = db.vendas_multi.find_one({"id_venda": id_venda})
+        if not venda_pai:
+            return f"Venda Múltipla {id_venda} não encontrada.", 404
+            
+        eventos_comprados = venda_pai.get('eventos_array', [])
+        
+        # 2. Varre as tabelas filhas e recolhe todas as cartelas compradas
+        fatias_para_pdf = []
+        for id_evento in eventos_comprados:
+            fatia = db[f"vendas{id_evento}"].find_one({"id_venda": id_venda})
+            if fatia:
+                fatias_para_pdf.append({
+                    "id_evento": fatia.get('id_evento'),
+                    "descricao": fatia.get('descricao_evento'),
+                    "numero_inicial": fatia.get('numero_inicial'),
+                    "numero_final": fatia.get('numero_final'),
+                    "tipo_cartela": fatia.get('tipo_cartela', 15)
+                })
+
+        # =====================================================================
+        # 3. AQUI ENTRA O MOTOR FPDF (Que vamos adaptar no próximo passo)
+        # =====================================================================
+        # pdf_bytes = gerar_fpdf_multi_eventos(fatias_para_pdf, id_venda, nome_cliente)
+        
+        # return send_file(
+        #     io.BytesIO(pdf_bytes), 
+        #     mimetype='application/pdf', 
+        #     as_attachment=False, 
+        #     download_name=f"Cartelas_{id_venda}.pdf"
+        # )
+        
+        return jsonify({"status": "Pausa Estratégica", "dados_recolhidos": fatias_para_pdf})
+
+    except Exception as e:
+        print(f"Erro ao gerar PDF Multi: {e}")
+        return f"Erro interno ao gerar o documento: {str(e)}", 500
+
+
 @app.route('/api/buscar_fatias_venda_multi', methods=['POST'])
 @login_required
 def buscar_fatias_venda_multi():
