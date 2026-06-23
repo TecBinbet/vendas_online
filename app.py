@@ -6991,7 +6991,7 @@ def imprimir_recibo_financeiro_json():
             add_linha(nome_sala, "centro", "normal", True)
             add_linha(f"> {id_venda_str} <", "centro", "normal", True)
             add_linha("-------------------------------", "centro", "normal", False)
-            add_linha(f"Doador: {nome_cliente}", "centro", "normal", True)
+            add_linha(f"Doador: {nome_cliente}", "centro", "normal", False)
             add_linha(f"Data: {data_formatada}", "centro", "normal", False)
             add_linha("-------------------------------", "centro", "normal", False)
 
@@ -7009,16 +7009,16 @@ def imprimir_recibo_financeiro_json():
                     fim = fatia.get('numero_final', 0)
                     
                     # Formato: [ID] Nome
-                    add_linha(f"[{id_ev}] {desc_evento}", "esquerda", "normal", True)
+                    add_linha(f"{desc_evento}", "centro", "normal", False)
                     # Formato: Qtd: X kit(s) | Crtls: Y a Z
                     if ini != fim:
-                        add_linha(f"Qtd: {qtd} kit(s) | Crtls: {ini} a {fim}", "esquerda", "normal", False)
+                        add_linha(f"{qtd} kit(s) | Crtls: {ini} a {fim}", "centro", "normal", True)
                     else:
-                        add_linha(f"Qtd: {qtd} kit | Crtl: {ini}", "esquerda", "normal", False)
+                        add_linha(f"{qtd} kit | Crtl: {ini}", "centro", "normal", True)
             
             # --- RODAPÉ DE TOTAIS ---
             add_linha("-------------------------------", "centro", "normal", False)
-            add_linha(f"Total de Kits: {total_kits}", "esquerda", "normal", True)
+            add_linha(f"Total de Kits: {total_kits}", "centro", "normal", True)
             add_linha("VALOR TOTAL", "centro", "normal", False)
             add_linha(f"R$ {valor_total:.2f}".replace('.', ','), "centro", "duplo", True)
 
@@ -7046,7 +7046,7 @@ def imprimir_recibo_financeiro_json():
             add_linha(nome_sala, "centro", "normal", True)
             add_linha(f"> {id_venda_str} <", "centro", "normal", True)
             add_linha("-------------------------------", "centro", "normal", False)
-            add_linha(f"Doador: {nome_cliente}", "centro", "normal", True)
+            add_linha(f"Doador: {nome_cliente}", "centro", "normal", False)
             add_linha(f"Data: {data_formatada}", "centro", "normal", False)
             add_linha("-------------------------------", "centro", "normal", False)
 
@@ -7061,11 +7061,11 @@ def imprimir_recibo_financeiro_json():
                 total_geral += valor
                 desc_evento = item.get('descricao_evento', f'Evento {id_evento_str}')
                 
-                add_linha(f"[{id_evento_str}] {desc_evento}", "esquerda", "normal", True)
+                add_linha(f"{desc_evento}", "esquerda", "normal", True)
                 if ini != fim:
-                    add_linha(f"Qtd: {qtd} kit(s) | Crtls: {ini} a {fim}", "esquerda", "normal", False)
+                    add_linha(f"{qtd} kit(s) | Crtls: {ini} a {fim}", "esquerda", "normal", False)
                 else:
-                    add_linha(f"Qtd: {qtd} kit | Crtl: {ini}", "esquerda", "normal", False)
+                    add_linha(f"{qtd} kit | Crtl: {ini}", "esquerda", "normal", False)
 
             add_linha("-------------------------------", "centro", "normal", False)
             add_linha(f"Total de Kits: {total_kits}", "esquerda", "normal", True)
@@ -7837,9 +7837,9 @@ def imprimir_cartelas_58mm_15():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": f"Doador.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})        
-        recibo["linhas"].append({"texto": f"Data:{data_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
-        recibo["linhas"].append({"texto": f"Hora:{hora_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+        recibo["linhas"].append({"texto": f"Doador.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": False})        
+        recibo["linhas"].append({"texto": data_formatada, "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+        recibo["linhas"].append({"texto": f"Hora:{hora_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": True})
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
@@ -8168,9 +8168,9 @@ def imprimir_cartelas_58mm_25():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": f"Doador: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
-        recibo["linhas"].append({"texto": f"Data:{data_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
-        recibo["linhas"].append({"texto": f"Hora:{hora_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})  
+        recibo["linhas"].append({"texto": f"Doador: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
+        recibo["linhas"].append({"texto": data_formatada, "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+        recibo["linhas"].append({"texto": f"Hora:{hora_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": True})  
         #recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "largura", "negrito": True})
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
