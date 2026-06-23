@@ -7752,10 +7752,11 @@ def imprimir_cartelas_58mm_15():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": f"Data: {data_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
-        recibo["linhas"].append({"texto": f"Hora: {hora_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+        recibo["linhas"].append({"texto": f"Doador.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})        
+        recibo["linhas"].append({"texto": f"Data:{data_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+        recibo["linhas"].append({"texto": f"Hora:{hora_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
         recibo["linhas"].append({"texto": " ", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": f"Doa.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================
@@ -8082,10 +8083,10 @@ def imprimir_cartelas_58mm_25():
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": nome_sala, "alinhamento": "centro", "tamanho": "normal", "negrito": False})
         recibo["linhas"].append({"texto": evento.get('descricao', ''), "alinhamento": "centro", "tamanho": "normal", "negrito": False})
-        recibo["linhas"].append({"texto": f"Data: {data_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
-        recibo["linhas"].append({"texto": f"Hora: {hora_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})  
+        recibo["linhas"].append({"texto": f"Doador: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
+        recibo["linhas"].append({"texto": f"Data:{data_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})
+        recibo["linhas"].append({"texto": f"Hora:{hora_formatada}", "alinhamento": "centro", "tamanho": "largura", "negrito": False})  
         #recibo["linhas"].append({"texto": data_hora_formatada, "alinhamento": "centro", "tamanho": "largura", "negrito": True})
-        recibo["linhas"].append({"texto": f"Cli.: {nome_cliente.upper()}", "alinhamento": "centro", "tamanho": "normal", "negrito": True})
         recibo["linhas"].append({"texto": "-------------------------------", "alinhamento": "centro", "tamanho": "normal", "negrito": False})
 
         # ==========================================

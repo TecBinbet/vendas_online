@@ -99,7 +99,7 @@
 <div class="relative w-full">
     <div id="btn-dropdown-evento" onclick="toggleDropdown()" 
         data-nome="" data-tipo="" data-valor="" 
-        class="w-full p-3 border border-gray-300 rounded font-bold text-gray-800 bg-white shadow-sm cursor-pointer flex justify-between items-center">
+        class="w-full p-3 border border-gray-300 rounded font-bold text-gray-500 bg-white shadow-sm cursor-pointer flex justify-between items-center">
         <span>-- Escolha um evento ativo --</span>
         <span>▼</span> 
     </div>
@@ -108,7 +108,7 @@
         {% for e in eventos %}
             <li onclick="selecionarEventoCustom('{{ e.id_evento }}', '{{ e.descricao }}', '{{ e.tipo_de_cartela | default(15) }}', '{{ e.valor_de_venda_float }}')" 
                 data-tipo="{{ e.tipo_de_cartela | default(15) }}"
-                class="px-1 py-3 text-xl  text-center border-b cursor-pointer transition-colors {{ 'bg-blue-300' if loop.index0 % 2 == 0 else 'bg-cyan-200' }} hover:bg-yellow-300 tracking-tight">
+                class="px-1 py-3 text-xl  text-center border-b cursor-pointer transition-colors {{ 'bg-yellow-300' if loop.index0 % 2 == 0 else 'bg-yellow-100' }} hover:bg-red-500 tracking-tight">
                 {{ e.descricao }} | R$ {{ "%.2f" | format(e.valor_de_venda_float) }}
             </li>
         {% endfor %}
@@ -299,6 +299,10 @@ function selecionarEventoCustom(id, nome, tipo, valor) {
     
     // Atualiza texto visual
     btn.querySelector('span').innerText = `${nome} (R$ ${parseFloat(valor).toFixed(2).replace('.', ',')} / kit)`;
+   
+    // 🚀 TROCA A COR DO BOTÃO PARA AMARELO
+    btn.classList.remove('bg-white', 'text-gray-500');
+    btn.classList.add('bg-yellow-100', 'text-gray-900');
     
     toggleDropdown();
 }
@@ -489,7 +493,12 @@ function selecionarEventoCustom(id, nome, tipo, valor) {
             document.getElementById('lista-eventos').classList.add('hidden');
     
             // 2. Reseta o texto do botão
-            document.getElementById('btn-dropdown-evento').querySelector('span').innerText = '-- Escolha um evento ativo --';
+            const btn = document.getElementById('btn-dropdown-evento');
+            if (btn) {
+                btn.querySelector('span').innerText = '-- Escolha um evento ativo --';
+                btn.classList.remove('bg-yellow-100', 'text-gray-900');
+                btn.classList.add('bg-white', 'text-gray-500');
+            }
 
             if(telInput) telInput.value = '';
             
@@ -755,7 +764,12 @@ function atualizarInterface() {
 
             // 5. Reset dos campos
             inputId.value = ""; // Limpa o input hidden
-            document.querySelector('#btn-dropdown-evento span').innerText = "-- Escolha um evento ativo --";
+            // const btn = document.getElementById('btn-dropdown-evento');
+            if (btn) {
+                btn.querySelector('span').innerText = '-- Escolha um evento ativo --';
+                btn.classList.remove('bg-yellow-100', 'text-gray-900');
+                btn.classList.add('bg-white', 'text-gray-500');
+            }
             inputQtd.value = 1;
             
             atualizarInterface();
@@ -984,23 +998,38 @@ function atualizarInterface() {
             const tipoCartela = parseInt(document.getElementById('sucesso-tipo-cart').value || 15);
 
             if (tipo === 'cupom') {
-                if (acao === 'imprimir') {
-                    const payload = {
-                        id_venda: idVenda,
-                        id_evento: eventosArray[0] // Envia o primeiro evento para achar a coleção
-                    };
-    
-                    const response = await fetch('/imprimir_recibo_financeiro_json', {
-                        method: 'POST',
-                        headers: {'Content-Type': 'application/json'},
-                        body: JSON.stringify(payload)
-                    });
-    
-                    const data = await response.json();
-                    if (data.status === 'success') {
-                        imprimirComprovanteUniversal(JSON.stringify(data.data.recibo));
-                    } else {
-                        bingoAlert("Erro ao gerar recibo: " + data.message, 3000, '#e74c3c');
+               if (acao === 'imprimir') {
+                    // 1. Ativa o spinner global
+                    const loading = document.getElementById('loading');
+                    if (loading) loading.style.display = 'flex';
+
+                    try {
+                        const payload = {
+                            id_venda: idVenda,
+                            id_evento: eventosArray[0] // Envia o primeiro evento para achar a coleção
+                        };
+        
+                        const response = await fetch('/imprimir_recibo_financeiro_json', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(payload)
+                        });
+        
+                        const data = await response.json();
+                        
+                        if (data.status === 'success') {
+                            // 🚀 AQUI ESTAVA O ERRO! Trocado data.data.recibo por data.recibo
+                            imprimirComprovanteUniversal(JSON.stringify(data.recibo));
+                            bingoAlert("🖨️ Recibo enviado para impressão!", 3000, '#27ae60');
+                        } else {
+                            bingoAlert("⚠️ Erro ao gerar recibo: " + data.message, 3000, '#e74c3c');
+                        }
+                    } catch (erro) {
+                        console.error("Falha ao imprimir cupom:", erro);
+                        bingoAlert("⚠️ Falha de comunicação com o servidor.", 4000, '#e74c3c');
+                    } finally {
+                        // 2. Garante que o spinner suma independente do resultado
+                        if (loading) loading.style.display = 'none';
                     }
                 } else if (acao === 'whatsapp') {
                     // Envia um resumo financeiro simples pelo WhatsApp
