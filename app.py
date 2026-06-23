@@ -6538,11 +6538,23 @@ def reimprimir_comprovante_txt():
                     texto_r = f"Rod. {rodada:02d}"
                     if unidade_de_venda > 1:
                         texto_r += f" (Kit {kit_atual})"
-                    
-                    detalhes_rodadas_html += f"   > {texto_r}: {ini_atual} a {fim_atual}<br>"
-                
-                if fatia.get('numero_inicial2', 0) > 0:
-                    detalhes_rodadas_html += f"   > Adicional: {fatia['numero_inicial2']} a {fatia['numero_final2']}<br>"
+
+                    # --- LÓGICA DO PERÍODO PRINCIPAL ---
+                    if fim_atual != ini_atual:
+                        detalhes_rodadas_html += f"   > {texto_r}: {ini_atual} a {fim_atual}<br>"
+                    else:
+                        detalhes_rodadas_html += f"   > {texto_r}: {ini_atual}<br>"
+        
+                    # --- LÓGICA DO ADICIONAL (SE HOUVER) ---
+                    if fatia.get('numero_inicial2', 0) > 0:
+                        ini_adic = fatia['numero_inicial2']
+                        fim_adic = fatia['numero_final2']
+            
+                        if fim_adic != ini_adic:
+                           detalhes_rodadas_html += f"   > Adicional: {ini_adic} a {fim_adic}<br>"
+                        else:
+                            detalhes_rodadas_html += f"   > Adicional: {ini_adic}<br>"
+  
 
             receipt_html = (
                 f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
@@ -6608,11 +6620,20 @@ def reimprimir_comprovante_txt():
                     
                     texto_r = f"R{rodada:02d}"
                     if unidade_de_venda > 1:
-                         texto_r += f"(K{kit_atual})"
-                    periodos_html_list.append(f"   > {texto_r}: {ini_atual} a {fim_atual}<br>")
-                
-                if venda.get('numero_inicial2', 0) > 0:
-                    periodos_html_list.append(f"    > Adic: {venda['numero_inicial2']} a {venda['numero_final2']}<br>")
+                        texto_r += f"(K{kit_atual})"
+
+                    if fim_atual != ini_atual:
+                        periodos_html_list.append(f"   > {texto_r}: {ini_atual} a {fim_atual}<br>")
+                    else:
+                        periodos_html_list.append(f"   > {texto_r}: {ini_atual}<br>")
+
+                    if venda.get('numero_inicial2', 0) > 0:
+                        ini_adic = venda['numero_inicial2']
+                        fim_adic = venda['numero_final2']
+                        if fim_adic != ini_adic:
+                            periodos_html_list.append(f"   > Adic: {ini_adic} a {fim_adic}<br>")
+                        else:
+                            periodos_html_list.append(f"   > Adic: {ini_adic}<br>")
 
             todos_periodos_html = "".join(periodos_html_list)
 
@@ -6796,10 +6817,21 @@ def reimprimir_comprovante_json():
                         texto_r += f" (Kit {kit_atual})"
                         
                     add_linha(texto_r, "centro", "normal", True)
-                    add_linha(f"{ini_atual} a {fim_atual}", "centro", "normal", False)
-                    
+                    # --- LÓGICA DO PERÍODO PRINCIPAL ---
+                    if fim_atual != ini_atual:
+                        add_linha(f"{ini_atual} a {fim_atual}", "centro", "normal", False)
+                    else:
+                        add_linha(f"{ini_atual}", "centro", "normal", False)
+        
+                    # --- LÓGICA DO ADICIONAL (SE HOUVER) ---
                     if fatia.get('numero_inicial2', 0) > 0:
-                        add_linha(f"Adicional: {fatia['numero_inicial2']} a {fatia['numero_final2']}", "centro", "normal", False)
+                        ini_adic = fatia['numero_inicial2']
+                        fim_adic = fatia['numero_final2']
+            
+                        if fim_adic != ini_adic:
+                            add_linha(f"Adicional: {ini_adic} a {fim_adic}", "centro", "normal", False)
+                        else:
+                            add_linha(f"Adicional: {ini_adic}", "centro", "normal", False)
             
             add_linha("-------------------------------", "centro", "normal", False)
             
@@ -7496,10 +7528,14 @@ def gerar_pdf_lote_hibrido():
             
         # 🚀 2. FECHADURA DE SEGURANÇA (IDOR Protection)
         # Calcula qual deveria ser o token verdadeiro para esta venda
+        token_recebido = request.args.get('token')
         token_esperado = gerar_token_venda(id_venda)
         
-        # Compara de forma segura (seguro contra ataques de timing)
-        if not token_recebido or not hmac.compare_digest(token_recebido, token_esperado):
+        # Verifica se o usuário está autenticado na sessão atual
+        esta_logado = 'user_id' in session or 'nick' in session # Ajuste 'user_id' ou 'nick' conforme a chave que você usa no login
+        
+        # Permite acesso se o usuário estiver logado NO SISTEMA, ou se o token enviado for válido
+        if not esta_logado and (not token_recebido or not hmac.compare_digest(token_recebido, token_esperado)):
             print(f"⚠️ TENTATIVA DE INVASÃO BLOQUEADA: Acesso inválido à venda {id_venda}.")
             return "Acesso Negado: O link desta cartela é inválido ou expirou.", 403
             
