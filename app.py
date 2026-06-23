@@ -3673,7 +3673,10 @@ def processar_venda_multi():
             # Monta o visual para o recibo HTML do Carrinho
             html_fatiamento_recibo += f"<div style='margin-bottom: 4px; border-bottom: 1px dotted #ccc; padding-bottom: 4px;'>"
             html_fatiamento_recibo += f"<strong>[{id_evento_int}] {evento_db.get('descricao')}</strong><br>"
-            html_fatiamento_recibo += f"<span style='font-size: 0.85rem; color: #555;'>Qtd: {quantidade_kits} kit(s) | Crtls: {numero_inicial_atual} a {numero_final_atual}</span>"
+            if numero_inicial_atual != numero_final_atual:
+                html_fatiamento_recibo += f"<span style='font-size: 0.85rem; color: #555;'>Qtd: {quantidade_kits} kit(s) | Crtls: {numero_inicial_atual} a {numero_final_atual}</span>"
+            else:
+                html_fatiamento_recibo += f"<span style='font-size: 0.85rem; color: #555;'>Qtd: {quantidade_kits} kit | Crtl: {numero_inicial_atual}</span>"
             html_fatiamento_recibo += "</div>"
 
         # Após o loop, atualiza a última compra do cliente
@@ -3741,8 +3744,8 @@ def processar_venda_multi():
             f"----------------------------<br>"
             f"Total de Kits: <strong>{total_kits_carrinho}</strong><br>"
             f"VALOR TOTAL: <span style='font-size: 1.2rem; color: #B91C1C;'>R$ {valor_total_carrinho:.2f}</span><br><br>"
-            f"CLIQUE NO <strong>LINK</strong> PARA ACESSAR<br>"
-            f"<strong> {link_final} </strong>"
+            #f"CLIQUE NO <strong>LINK</strong> PARA ACESSAR<br>"
+            #f"<strong> {link_final} </strong>"
         )
         
         session['success_message'] = success_msg 
@@ -6936,7 +6939,7 @@ def reimprimir_comprovante_json():
 @login_required
 def imprimir_recibo_financeiro_json():
     """
-    Gera o JSON para impressão do Recibo Financeiro (Resumo de Venda).
+    Gera o JSON para impressão do Recibo Financeiro, espelhando a tela de Sucesso.
     """
     db = get_vendas_db()
     if db is None:
@@ -6945,19 +6948,15 @@ def imprimir_recibo_financeiro_json():
     try:
         data = request.json
         id_venda_str = data.get('id_venda')
-        # Buscamos a venda na coleção de vendas correspondente ao evento
-        # Nota: O frontend deve enviar também o ID do evento para localizarmos a coleção
-        id_evento_str = str(data.get('id_evento'))
         
-        # Localiza a venda (pode haver várias fatias para a mesma venda)
-        nome_colecao_venda = f"vendas{id_evento_str}"
-        fatias_venda = list(db[nome_colecao_venda].find({'id_venda': id_venda_str}))
+        # 1. Busca a venda mestra na coleção de múltiplas
+        venda_master = db.vendas_multi.find_one({'id_venda': id_venda_str})
         
-        if not fatias_venda:
-            return jsonify({'status': 'error', 'message': 'Venda não encontrada.'})
-
-        venda_base = fatias_venda[0]
-        
+        # Busca o nome da sala de forma segura
+        nome_sala = "BINGO"
+        if hasattr(g, 'parametros_globais') and g.parametros_globais:
+            nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
+            
         # --- PREPARAÇÃO DO RECIBO ---
         recibo = {
             "config": { "avanco_linhas": 2, "cortar_papel": True },
@@ -6971,32 +6970,118 @@ def imprimir_recibo_financeiro_json():
                 "tamanho": tamanho, "negrito": negrito, "tipo": tipo
             })
 
-        # --- CABEÇALHO ---
-        add_linha("RECIBO FINANCEIRO", "centro", "normal", True)
-        add_linha("===============================", "centro", "normal", False)
-        add_linha(f"ID Venda: {id_venda_str}", "centro", "normal", False)
-        add_linha(f"Cliente: {venda_base.get('nome_cliente', 'N/A')}", "esquerda", "normal", True)
-        add_linha(f"Data: {venda_base.get('data_venda', 'N/A')}", "esquerda", "normal", False)
-        add_linha("-------------------------------", "centro", "normal", False)
+        # =======================================================
+        # LÓGICA PARA VENDA MÚLTIPLA
+        # =======================================================
+        if venda_master:
+            nome_cliente = venda_master.get('nome_cliente', 'N/A')
+            data_venda = venda_master.get('data_venda')
+            total_kits = venda_master.get('total_kits', 0)
+            valor_total = float(venda_master.get('valor_total', 0))
+            eventos_array = venda_master.get('eventos_array', [])
 
-        # --- ITENS DA VENDA ---
-        total_geral = 0.0
-        for item in fatias_venda:
-            desc = f"{item.get('quantidade_unidades', 0)}x Cartelas"
-            valor = safe_float(item.get('valor_total', 0))
-            total_geral += valor
-            add_linha(f"{desc:<20} R$ {valor:.2f}".replace('.', ','), "esquerda", "normal", False)
+            # Formatação segura da data
+            if isinstance(data_venda, datetime):
+                data_formatada = data_venda.strftime('%d/%m/%Y as %H:%M')
+            else:
+                data_formatada = str(data_venda)
 
-        add_linha("-------------------------------", "centro", "normal", False)
-        add_linha("TOTAL A PAGAR", "centro", "normal", False)
-        add_linha(f"R$ {total_geral:.2f}".replace('.', ','), "centro", "duplo", True)
+            # --- CABEÇALHO (Igual à tela de sucesso) ---
+            add_linha("VENDA MULTIPLA", "centro", "normal", True)
+            add_linha(nome_sala, "centro", "normal", True)
+            add_linha(f"> {id_venda_str} <", "centro", "normal", True)
+            add_linha("-------------------------------", "centro", "normal", False)
+            add_linha(f"Doador: {nome_cliente}", "centro", "normal", True)
+            add_linha(f"Data: {data_formatada}", "centro", "normal", False)
+            add_linha("-------------------------------", "centro", "normal", False)
+
+            # --- ITENS DA VENDA (Fatiamento) ---
+            # Removemos IDs duplicados caso existam na matriz, mas processamos cada evento
+            for id_ev in sorted(list(set(eventos_array))): 
+                col_name = f"vendas{id_ev}"
+                # Busca as fatias daquele evento específico
+                fatias = list(db[col_name].find({'id_venda': id_venda_str}).sort('numero_inicial', 1))
+                
+                for fatia in fatias:
+                    desc_evento = fatia.get('descricao_evento', f'Evento {id_ev}')
+                    qtd = fatia.get('quantidade_unidades', 0)
+                    ini = fatia.get('numero_inicial', 0)
+                    fim = fatia.get('numero_final', 0)
+                    
+                    # Formato: [ID] Nome
+                    add_linha(f"[{id_ev}] {desc_evento}", "esquerda", "normal", True)
+                    # Formato: Qtd: X kit(s) | Crtls: Y a Z
+                    if ini != fim:
+                        add_linha(f"Qtd: {qtd} kit(s) | Crtls: {ini} a {fim}", "esquerda", "normal", False)
+                    else:
+                        add_linha(f"Qtd: {qtd} kit | Crtl: {ini}", "esquerda", "normal", False)
+            
+            # --- RODAPÉ DE TOTAIS ---
+            add_linha("-------------------------------", "centro", "normal", False)
+            add_linha(f"Total de Kits: {total_kits}", "esquerda", "normal", True)
+            add_linha("VALOR TOTAL", "centro", "normal", False)
+            add_linha(f"R$ {valor_total:.2f}".replace('.', ','), "centro", "duplo", True)
+
+        # =======================================================
+        # FALLBACK PARA VENDA SIMPLES (Garante que a rota não quebra)
+        # =======================================================
+        else:
+            id_evento_str = str(data.get('id_evento', '0'))
+            nome_colecao_venda = f"vendas{id_evento_str}"
+            fatias_venda = list(db[nome_colecao_venda].find({'id_venda': id_venda_str}))
+            
+            if not fatias_venda:
+                return jsonify({'status': 'error', 'message': 'Venda não encontrada.'})
+
+            venda_base = fatias_venda[0]
+            nome_cliente = venda_base.get('nome_cliente', 'N/A')
+            data_venda = venda_base.get('data_venda')
+            
+            if isinstance(data_venda, datetime):
+                data_formatada = data_venda.strftime('%d/%m/%Y as %H:%M')
+            else:
+                data_formatada = str(data_venda)
+
+            add_linha("RECIBO FINANCEIRO", "centro", "normal", True)
+            add_linha(nome_sala, "centro", "normal", True)
+            add_linha(f"> {id_venda_str} <", "centro", "normal", True)
+            add_linha("-------------------------------", "centro", "normal", False)
+            add_linha(f"Doador: {nome_cliente}", "centro", "normal", True)
+            add_linha(f"Data: {data_formatada}", "centro", "normal", False)
+            add_linha("-------------------------------", "centro", "normal", False)
+
+            total_geral = 0.0
+            total_kits = 0
+            for item in fatias_venda:
+                qtd = item.get('quantidade_unidades', 0)
+                total_kits += qtd
+                ini = item.get('numero_inicial', 0)
+                fim = item.get('numero_final', 0)
+                valor = float(str(item.get('valor_total', 0)))
+                total_geral += valor
+                desc_evento = item.get('descricao_evento', f'Evento {id_evento_str}')
+                
+                add_linha(f"[{id_evento_str}] {desc_evento}", "esquerda", "normal", True)
+                if ini != fim:
+                    add_linha(f"Qtd: {qtd} kit(s) | Crtls: {ini} a {fim}", "esquerda", "normal", False)
+                else:
+                    add_linha(f"Qtd: {qtd} kit | Crtl: {ini}", "esquerda", "normal", False)
+
+            add_linha("-------------------------------", "centro", "normal", False)
+            add_linha(f"Total de Kits: {total_kits}", "esquerda", "normal", True)
+            add_linha("VALOR TOTAL", "centro", "normal", False)
+            add_linha(f"R$ {total_geral:.2f}".replace('.', ','), "centro", "duplo", True)
+
+        # --- MENSAGEM FINAL ---
         add_linha("===============================", "centro", "normal", False)
-        add_linha("Obrigado pela preferência!", "centro", "normal", False)
+        add_linha("Obrigado pela preferencia!", "centro", "normal", False)
         add_linha(" ", "centro", "normal", False)
 
         return jsonify({'status': 'success', 'recibo': recibo})
 
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'status': 'error', 'message': str(e)})
 
 
