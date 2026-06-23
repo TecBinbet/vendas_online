@@ -217,28 +217,30 @@
         // ==========================================
 
         // --- LÓGICA DO RODAPÉ (SEMAFORO) ---
-        function abrirModalRodape() {
-            const seletor = document.getElementById('seletor_evento');
-            
-            // Exige que o operador escolha o evento no dropdown para saber ONDE consultar
-            if (seletor && seletor.selectedIndex <= 0) {
-                bingoAlert("⚠️ Selecione um evento no carrinho primeiro para consultar o rodapé!", 3000, '#e67e22');
-                seletor.focus();
-                return;
-            }
+function abrirModalRodape() {
+    const idInput = document.getElementById('seletor_evento'); // Input hidden
+    const btn = document.getElementById('btn-dropdown-evento'); // Botão com dataset
+    
+    // Verifica se há um evento selecionado pelo ID no input hidden
+    if (!idInput.value || idInput.value === "") {
+        bingoAlert("⚠️ Selecione um evento no carrinho primeiro para consultar o rodapé!", 3000, '#e67e22');
+        btn.focus();
+        return;
+    }
 
-            const nomeEvento = seletor.options[seletor.selectedIndex].dataset.nome;
-            document.getElementById('lbl-evento-rodape').innerText = `Evento: ${nomeEvento}`;
+    // Lê o nome do dataset que populamos no selecionarEventoCustom
+    const nomeEvento = btn.dataset.nome;
+    document.getElementById('lbl-evento-rodape').innerText = `Evento: ${nomeEvento}`;
 
-            const modal = document.getElementById('modal-consulta-rodape');
-            modal.classList.remove('hidden');
-            modal.classList.add('flex');
-            
-            document.getElementById('input-rodape').value = '';
-            document.getElementById('resultado-rodape').classList.add('hidden');
-            
-            setTimeout(() => document.getElementById('input-rodape').focus(), 100);
-        }
+    const modal = document.getElementById('modal-consulta-rodape');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    
+    document.getElementById('input-rodape').value = '';
+    document.getElementById('resultado-rodape').classList.add('hidden');
+    
+    setTimeout(() => document.getElementById('input-rodape').focus(), 100);
+}
 
         function fecharModalRodape() {
             const modal = document.getElementById('modal-consulta-rodape');
@@ -996,7 +998,7 @@ function atualizarInterface() {
     
                     const data = await response.json();
                     if (data.status === 'success') {
-                        imprimirComprovanteUniversal(JSON.stringify(data.recibo.linhas));
+                        imprimirComprovanteUniversal(JSON.stringify(data.data.recibo));
                     } else {
                         bingoAlert("Erro ao gerar recibo: " + data.message, 3000, '#e74c3c');
                     }
