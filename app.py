@@ -6084,10 +6084,10 @@ def excluir_pagamento():
 @login_required
 def sincronizar_ganhadores():
     """
-    Lê o JSON gerado offline, cria o cabeçalho completo do evento e mescla 
-    os novos ganhadores com os já existentes, evitando duplicidade.
+    Lê o JSON gerado offline, utiliza os IDs para buscar os NICKS reais 
+    no banco de dados, e mescla os ganhadores perfeitamente formatados.
     """
-    print(">>> [SINCRONIZAR] Iniciando rota de sincronização...")
+    print(">>> [SINCRONIZAR] Iniciando rota de sincronização via IDs (Buscando Nicks)...")
     
     db = get_vendas_db()
     if db is None: 
@@ -6105,11 +6105,22 @@ def sincronizar_ganhadores():
         
     if arquivo and arquivo.filename.lower().endswith('.json'):
         try:
-            dados = json.load(arquivo)
+            raw_bytes = arquivo.read()
+            try:
+                texto_puro = raw_bytes.decode('utf-8')
+            except UnicodeDecodeError:
+                texto_puro = raw_bytes.decode('cp1252')
+            
+            import json
+            dados = json.loads(texto_puro)
+            
             novos_registros = 0
             
+            # 🚀 DICIONÁRIOS DE CACHE
+            cache_clientes = {}
+            cache_colaboradores = {}
+            
             for rodada in dados:
-                # --- ALTERADO AQUI PARA id_evento ---
                 id_evento = rodada.get('id_evento')
                 
                 try:
@@ -6121,6 +6132,7 @@ def sincronizar_ganhadores():
                 ganhadores_json = rodada.get('ganhadores', [])
                 
                 # --- CAPTURA DE METADADOS DO EVENTO ---
+                rodada_numero = int(rodada.get('rodada', 1))
                 descricao_evt = rodada.get('descricao', f"Evento {id_evento_int}")
                 data_evt = rodada.get('data_evento', "")
                 hora_inicial = rodada.get('hora_inicial', "")
@@ -6128,7 +6140,6 @@ def sincronizar_ganhadores():
                 total_bolas = rodada.get('total_de_bolas', 0)
                 status_evt = rodada.get('status', 'finalizado')
                 
-                # Converte array de bolas para a string exata que o banco espera "[64, 8...]"
                 bolas_raw = rodada.get('bolas_sorteadas', [])
                 bolas_str = str(bolas_raw) if isinstance(bolas_raw, list) else str(bolas_raw)
 
@@ -6140,50 +6151,84 @@ def sincronizar_ganhadores():
                     f"{str(g.get('cartela', ''))}-{str(g.get('descricao_premio', '')).upper()}" 
                     for g in ganhadores_existentes
                 }
-                
-                houve_alteracao_ganhador = False
 
                 for g_novo in ganhadores_json:
-                    cartela_raw = g_novo.get('cartela') or g_novo.get('cartelas') or g_novo.get('cartelas_ganhadoras') or '0'
-                    if isinstance(cartela_raw, list):
-                        num_cartela = ", ".join(str(c) for c in cartela_raw)
-                    else:
-                        num_cartela = str(cartela_raw).strip()
+                    cartela_raw = g_novo.get('cartela', '0')
+                    num_cartela = str(cartela_raw).strip()
 
-                    premio = str(g_novo.get('premio') or g_novo.get('descricao_premio') or 'Prêmio')
+                    premio = str(g_novo.get('premio', 'Prêmio'))
                     chave_verificacao = f"{num_cartela}-{premio.upper()}"
                     
                     if chave_verificacao not in chaves_existentes:
-                        print(f"      + Novo registro: Cartela {num_cartela} | Prêmio: {premio}")
                         
-                        cliente_obj = g_novo.get('cliente', {})
-                        nome_cliente = cliente_obj.get('nome', 'Desconhecido') if isinstance(cliente_obj, dict) else cliente_obj
+                        # 🚀 BUSCA INTELIGENTE DO NICK DO CLIENTE (Tratando Int32)
+                        id_cli_raw = g_novo.get('id_cliente', 0)
+                        try:
+                            id_cli_int = int(id_cli_raw)
+                        except (ValueError, TypeError):
+                            id_cli_int = 0
+
+                        if id_cli_int not in cache_clientes:
+                            if id_cli_int > 0:
+                                cli_db = db.clientes.find_one({'id_cliente': id_cli_int}) or db.clientes.find_one({'id_cliente': str(id_cli_int)})
+                                if cli_db:
+                                    # Busca prioritariamente o 'nick', se não tiver, busca o 'nome_cliente'
+                                    cache_clientes[id_cli_int] = cli_db.get('nick', cli_db.get('nome_cliente', f'Sem Nick ({id_cli_int})'))
+                                else:
+                                    cache_clientes[id_cli_int] = f'Não Encontrado ({id_cli_int})'
+                            else:
+                                cache_clientes[id_cli_int] = 'Indefinido'
+                                
+                        nick_cliente_real = cache_clientes[id_cli_int]
                         
-                        # Captura novos campos de premiação
+                        # 🚀 BUSCA INTELIGENTE DO NICK DO COLABORADOR (Tratando Int32)
+                        id_colab_raw = g_novo.get('id_colaborador', 0)
+                        try:
+                            id_colab_int = int(id_colab_raw)
+                        except (ValueError, TypeError):
+                            id_colab_int = 0
+
+                        if id_colab_int not in cache_colaboradores:
+                            if id_colab_int > 0:
+                                colab_db = db.colaboradores.find_one({'id_colaborador': id_colab_int}) or db.colaboradores.find_one({'id_colaborador': str(id_colab_int)})
+                                if colab_db:
+                                    # Busca prioritariamente o 'nick', se não tiver, busca o 'nome_colaborador'
+                                    cache_colaboradores[id_colab_int] = colab_db.get('nick', colab_db.get('nome_colaborador', f'Sem Nick ({id_colab_int})'))
+                                else:
+                                    cache_colaboradores[id_colab_int] = f'Não Encontrado ({id_colab_int})'
+                            else:
+                                cache_colaboradores[id_colab_int] = 'Indefinido'
+                                
+                        nick_colaborador_real = cache_colaboradores[id_colab_int]
+                        
+                        print(f"      + Novo registro: Cartela {num_cartela} | Nick: {nick_cliente_real}")
+                        
                         tipo_prem = g_novo.get('tipo_premiacao', 'Normal')
                         valor_total = safe_float(g_novo.get('valor_total_premio', g_novo.get('valor_rateado', 0)))
                         valor_rateio = safe_float(g_novo.get('valor_rateado', 0))
 
+                        # Monta o objeto gravando o NICK nos campos nome_cliente e nome_colaborador
                         novo_ganhador_formatado = {
                             'descricao_premio': premio,
                             'valor_total_premio': valor_total,
                             'valor_rateio': valor_rateio,
                             'tipo_premiacao': tipo_prem,
-                            'nome': nome_cliente,
+                            'nome_cliente': nick_cliente_real,
                             'cartela': num_cartela,
-                            'cliente_id': cliente_obj.get('id', '') if isinstance(cliente_obj, dict) else '',
-                            'colaborador': g_novo.get('colaborador', {})
+                            'id_cliente': id_cli_int,
+                            'id_colaborador': id_colab_int,
+                            'nome_colaborador': nick_colaborador_real
                         }
                         
                         ganhadores_existentes.append(novo_ganhador_formatado)
                         chaves_existentes.add(chave_verificacao)
                         novos_registros += 1
-                        houve_alteracao_ganhador = True
                 
-                # A gravacao acontece se houver ganhadores novos OU para atualizar os metadados da rodada
+                # Atualiza os dados da rodada
                 db.resultados.update_one(
                     {'id_evento': id_evento_int},
                     {'$set': {
+                        'rodada': rodada_numero, 
                         'descricao': descricao_evt,
                         'data_evento': data_evt,
                         'hora_inicial': hora_inicial,
@@ -6196,13 +6241,15 @@ def sincronizar_ganhadores():
                     upsert=True
                 )
                     
-            print(f">>> [SINCRONIZAR] Sucesso total! {novos_registros} novos ganhadores.")
+            print(f">>> [SINCRONIZAR] Sucesso total! {novos_registros} novos ganhadores validados pelo Banco.")
             flash(f"Sincronização concluída! {novos_registros} novos ganhadores validados e adicionados.", "success")
             
         except json.JSONDecodeError as e:
             flash("Erro: O arquivo não é um JSON válido. Verifique a formatação.", "error")
         except Exception as e:
             flash(f"Erro ao processar o arquivo: {str(e)}", "error")
+            import traceback
+            traceback.print_exc()
             
     else:
         flash("Erro: O arquivo enviado precisa ter a extensão .json", "error")
@@ -6358,7 +6405,7 @@ def consulta_resultados():
                             valor = item.get('valor_rateio') or item.get('valor') or item.get('valor_premio') or 0
                             
                             # Lista de Nomes (pode vir como 'ganhadores' ou 'nome')
-                            lista_nomes = item.get('ganhadores') or item.get('nome') or []
+                            lista_nomes = item.get('ganhadores') or item.get('nome')  or item.get('nome_cliente') or []
                             if isinstance(lista_nomes, str): 
                                 lista_nomes = [lista_nomes]
                             
@@ -6371,12 +6418,20 @@ def consulta_resultados():
                             else:
                                 cartelas_fmt = ""
 
+                            colab_raw = item.get('nome_colaborador') or item.get('colaborador')
+                            colab_fmt = ""
+                            if isinstance(colab_raw, dict):
+                                colab_fmt = colab_raw.get('nick', colab_raw.get('nome', ''))
+                            elif colab_raw:
+                                colab_fmt = str(colab_raw)
+
                             # Adiciona à lista final que vai para o HTML
                             resultados.append({
                                 'descricao_premio': descricao,
                                 'ganhadores': lista_nomes,
                                 'cartela': cartelas_fmt,
-                                'valor_premio': format_moeda(valor)
+                                'valor_premio': format_moeda(valor),
+                                'colaborador': colab_fmt
                             })
 
                         else:
@@ -6398,6 +6453,93 @@ def consulta_resultados():
                                nivel=session.get('nivel', 0),
                                error=error,
                                g=g)
+
+
+@app.route('/api/resultados_disponiveis', methods=['GET'])
+@login_required
+def api_resultados_disponiveis():
+    """Retorna os eventos que possuem resultados cadastrados para preencher o Modal."""
+    db = get_vendas_db()
+    if db is None: return jsonify({'status': 'error'})
+    
+    resultados = list(db.resultados.find({}, {'_id': 0, 'id_evento': 1, 'descricao': 1, 'rodada': 1}).sort('rodada', 1))
+    return jsonify({'status': 'success', 'eventos': resultados})
+
+@app.route('/gerar_lista_ganhadores_txt', methods=['POST'])
+@login_required
+def gerar_lista_ganhadores_txt():
+    """Gera o relatório em texto puro formatado para o WhatsApp."""
+    db = get_vendas_db()
+    if db is None: return jsonify({'status': 'error', 'message': 'DB Offline'})
+
+    try:
+        data = request.json
+        ids_eventos = [int(x) for x in data.get('ids_eventos', [])]
+        mostrar_bolas = data.get('mostrar_bolas', False)
+        
+        if not ids_eventos:
+            return jsonify({'status': 'error', 'message': 'Nenhum evento selecionado.'})
+
+        # Busca os resultados ordenados pela rodada
+        resultados = list(db.resultados.find({'id_evento': {'$in': ids_eventos}}).sort('rodada', 1))
+        
+        nome_sala = g.parametros_globais.get('nome_sala', 'BINGO') if hasattr(g, 'parametros_globais') else 'BINGO'
+        data_atual = hora_brasil().strftime('%d/%m/%Y às %H:%M')
+        
+        # --- CABEÇALHO ---
+        texto = f"           {nome_sala.upper()} \n"
+        texto += f"{data_atual}\n\n"
+        
+        for res in resultados:
+            rodada = res.get('rodada', 1)
+            id_ev = res.get('id_evento')
+            desc = res.get('descricao', '')
+            h_ini = res.get('hora_inicial', '--:--')
+            h_fim = res.get('hora_final', '--:--')
+            tot_bolas = res.get('total_de_bolas', 0)
+            
+            texto += f"   *> {rodada}ª RODADA*\n"
+            #texto += f"[{id_ev}] {desc}\n"
+            texto += f"    {h_ini} as {h_fim}\n\n"  
+            
+            ganhadores = res.get('ganhadores', [])
+            
+            # Agrupa ganhadores por tipo de prêmio
+            from collections import defaultdict
+            premios_agrupados = defaultdict(list)
+            for g_obj in ganhadores:
+                premios_agrupados[g_obj.get('descricao_premio', 'Prêmio')].append(g_obj)
+            
+            for nome_premio, lista_ganhadores in premios_agrupados.items():
+                # Formata o nome do prêmio com espaços (ex: L I N H A)
+                premio_espacado = "  ".join(list(nome_premio.upper())).replace("    ", "  ")
+                texto += f"  *{premio_espacado}*\n"
+                
+                for ganhador in lista_ganhadores:
+                    # Tenta extrair o valor (priorizando o rateio, fallback para total)
+                    valor = safe_float(ganhador.get('valor_rateio', ganhador.get('valor_total_premio', 0)))
+                    valor_fmt = f"{valor:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+                    
+                    nome_cli = ganhador.get('nome_cliente', 'N/A').upper()
+                    nome_colab = ganhador.get('nome_colaborador', 'N/A').upper()
+                    
+                    texto += f"{valor_fmt} {nome_cli} - {nome_colab}\n"
+                texto += "\n"
+            
+            texto += f"Total de bolas: {tot_bolas}\n"
+            
+            if mostrar_bolas:
+                bolas_str = res.get('bolas_sorteadas', '')
+                if bolas_str:
+                    texto += f"Bolas Sorteadas: {bolas_str}\n"
+            
+            texto += "\n"
+
+        return jsonify({'status': 'success', 'texto': texto.strip()})
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)})
 
 
 @app.route('/api/buscar_dados_venda', methods=['POST'])
@@ -7268,7 +7410,7 @@ def gerar_lista_vendas():
         file_name = f"periodo.{ordem_rodada}" if ordem_rodada else f"periodo.{id_evento_int}"
         
         io_buffer = io.StringIO()
-        header = f"{selected_event.get('unidade_de_venda', 6)}!{selected_event.get('numero_maximo', 12000)}!{selected_event.get('tipo_de_cartela', 15)}!{safe_float(selected_event.get('valor_de_venda', 0))}!{selected_event.get('id_sorteio', '0')}!{selected_event.get('descricao', 'N/A')}!{safe_float(selected_event.get('premio_quadra', 0))}!{selected_event.get('quantidade_de_linhas', 1)}!{safe_float(selected_event.get('premio_linha', 0))}!{safe_float(selected_event.get('premio_faltaum', 0))}!{safe_float(selected_event.get('premio_bingo', 0))}!{safe_float(selected_event.get('premio_segundobingo', 0))}!{safe_float(selected_event.get('premio_acumulado', 0))}!{selected_event.get('bola_tope_acumulado', 0)}!{nome_sala}\r\n"
+        header = f"{selected_event.get('unidade_de_venda', 6)}!{selected_event.get('numero_maximo', 12000)}!{selected_event.get('tipo_de_cartela', 15)}!{safe_float(selected_event.get('valor_de_venda', 0))}!{selected_event.get('id_evento', '0')}!{selected_event.get('descricao', 'N/A')}!{safe_float(selected_event.get('premio_quadra', 0))}!{selected_event.get('quantidade_de_linhas', 1)}!{safe_float(selected_event.get('premio_linha', 0))}!{safe_float(selected_event.get('premio_faltaum', 0))}!{safe_float(selected_event.get('premio_bingo', 0))}!{safe_float(selected_event.get('premio_segundobingo', 0))}!{safe_float(selected_event.get('premio_acumulado', 0))}!{selected_event.get('bola_tope_acumulado', 0)}!{nome_sala}\r\n"
         io_buffer.write(header)
 
         vendas = list(db[nome_colecao_venda].find({'id_evento': id_evento_int}).sort('numero_inicial', pymongo.ASCENDING))
