@@ -4533,6 +4533,83 @@ def excluir_cliente(id_cliente):
         return redirect(url_for('cadastro_cliente', error=f"Erro interno ao excluir cliente.", view='listar'))
 
 
+@app.route('/api/admin/extrato_cliente/<int:id_cliente>', methods=['GET'])
+@login_required
+def api_admin_extrato_cliente(id_cliente):
+    # Log de início
+    print(f">>> [DEBUG EXTRATO] Iniciando busca para Cliente ID: {id_cliente}")
+    
+    if int(session.get('nivel', 0)) < 3:
+        print(f"!!! [DEBUG EXTRATO] Acesso negado para nível {session.get('nivel')}")
+        return jsonify({'status': 'error', 'message': 'Acesso negado.'}), 403
+
+    db = get_vendas_db()
+    if db is None:
+        print("!!! [DEBUG EXTRATO] Erro: DB Offline")
+        return jsonify({'status': 'error', 'message': 'Banco offline'}), 500
+
+    try:
+        # Busca o cliente
+        cliente = db.clientes.find_one({'id_cliente': id_cliente})
+        if not cliente:
+            return jsonify({'status': 'error', 'message': 'Cliente não encontrado.'}), 404
+
+        # Identifica a coleção
+        colecao_nome = 'transacoes_clientes'
+        
+        colecao = db[colecao_nome]
+        
+        # Log da query que será executada
+        query = {'id_cliente': id_cliente}
+        
+        # 🚀 LIMITE DINÂMICO (Padrão 50, aceita até 500 para evitar travamento)
+        try:
+            limit = int(request.args.get('limit', 50))
+            limit = max(1, min(limit, 500)) 
+        except:
+            limit = 50
+ 
+        extrato_bruto = list(colecao.find({'id_cliente': id_cliente}).sort('data_hora', -1).limit(limit))
+        
+        # Se encontrou 0, loga para conferirmos se a coleção está vazia ou a query errada
+        if len(extrato_bruto) == 0:
+            print(f"!!! [DEBUG EXTRATO] Aviso: Nenhum documento encontrado para o ID {id_cliente} na coleção {colecao_nome}")
+
+        extrato_formatado = []
+        for t in extrato_bruto:
+            extrato_formatado.append({
+                'tipo': t.get('tipo', 'outros'),
+                'natureza': t.get('natureza', 'ENTRADA'),
+                'desc': t.get('descricao', t.get('desc', 'Movimentação')),
+                'data': str(t.get('data_hora', '')),
+                'valor': float(str(t.get('valor', 0))),
+                'saldo_posterior': float(str(t.get('saldo_posterior', 0)))
+            })
+              
+        # Garantia de conversão para float
+        try:
+            raw_saldo = cliente.get('saldo_atual') # or cliente.get('saldo_atual') or cliente.get('total') or 0
+            # Se raw_saldo for um Decimal128 (comum no Mongo), precisamos converter
+            if hasattr(raw_saldo, 'to_decimal'):
+                saldo_atual = float(raw_saldo.to_decimal())
+            else:
+                saldo_atual = float(str(raw_saldo))
+        except (ValueError, TypeError, AttributeError) as e:
+            print(f">>> [DEBUG EXTRATO] Erro ao converter saldo: {e}")
+            saldo_atual = 0.0
+        
+        return jsonify({
+            'status': 'success',
+            'saldo': saldo_atual,
+            'extrato': extrato_formatado
+        })
+
+    except Exception as e:
+        print(f"!!! [DEBUG EXTRATO] ERRO CRÍTICO: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
 # --- ROTAS DE GERENCIAMENTO DE BLOQUEIO (NICKS) ---
 
 @app.route('/adicionar_bloqueio', methods=['POST'])
@@ -6525,10 +6602,9 @@ def gerar_lista_ganhadores_txt():
                     
                     texto += f"{valor_fmt} {nome_cli} - {nome_colab}\n"
                 texto += "\n"
-            
-            texto += f"Total de bolas: {tot_bolas}\n"
-            
+                                 
             if mostrar_bolas:
+                texto += f"Total de bolas: {tot_bolas}\n"
                 bolas_str = res.get('bolas_sorteadas', '')
                 if bolas_str:
                     texto += f"Bolas Sorteadas: {bolas_str}\n"
@@ -9836,6 +9912,8 @@ def gravar_replicacao():
         traceback.print_exc()
         print("--------------------------\n")
         return redirect(url_for('cadastro_evento', view='alterar', id_evento=id_evento_molde, error="Falha ao replicar eventos."))
+
+
 
 
 @app.route('/parametros', methods=['GET'])

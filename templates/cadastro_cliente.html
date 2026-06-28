@@ -330,7 +330,7 @@
         </div>
 
         <div id="view-consulta" class="{% if active_view != 'consulta' %}hidden{% endif %}">
-            <h3 class="text-xl font-semibold text-accent mb-4">🔎 Localizar Cliente</h3>
+            <h3 class="text-xl font-semibold text-accent mb-2">🔎 Localizar Cliente</h3>
             
             <form method="GET" action="{{ url_for('cadastro_cliente') }}" class="mb-4 space-y-2" id="form-consulta">
                 <input type="hidden" name="view" value="consulta">
@@ -349,51 +349,52 @@
                 </div>
             </form>
             
-            <div class="space-y-3">
+            <div class="space-y-2">
                 {% if active_view == 'consulta' and query and clientes_lista|length > 0 %}
                     {% for cliente in clientes_lista %}
-                        <div class="bg-white border-2 border-gray-100 p-4 rounded-xl shadow-sm hover:border-accent transition-all">
+                        <div class="bg-white border-2 border-gray-100 p-2 rounded-xl shadow-sm hover:border-accent transition-all">
                             <div class="flex justify-between items-start">
                                 <div>
                                     <div class="flex items-center gap-2 mb-1">
                                         <span class="text-xs bg-gray-100 text-gray-500 px-2 py-0.5 rounded font-bold">CLI{{ cliente.id_cliente }}</span>
-                                        <span class="text-lg font-black text-gray-800 uppercase tracking-tight">{{ cliente.nick }}</span>
+                                        <span class="text-lg font-semibold text-gray-800 uppercase tracking-tight">{{ cliente.nick }}</span>
                                     </div>
-                                    <p class="text-xs text-gray-400 font-medium">{{ cliente.nome_cliente }} | {{ cliente.cidade | default('N/A') }}</p>
+                                    <p class="text-xs text-gray-600 font-medium">{{ cliente.nome_cliente }} | {{ cliente.cidade | default('N/A') }}</p>
                                 </div>
                                 <div class="flex items-center gap-4 text-right">
-                                    <div class="pr-4 border-r-2 border-gray-100">
+                                    <div>
                                         <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Regional</p>
                                         <span class="text-xl font-black text-gray-500">
                                             {{ cliente.get('id_regional', 1) }}
                                         </span>
                                     </div>
-                                    
-                                    {% if nivel >= 3 %}
-                                    <div>
-                                        <p class="text-[10px] font-black text-gray-400 uppercase tracking-widest">Saldo Atual</p>
-                                        <span class="text-xl font-black {{ 'text-red-600' if cliente.saldo_float < 0 else 'text-blue-600' }}">R$ {{ cliente.saldo_float | format_moeda }}</span>
-                                    </div>
-                                    {% endif %}
-                                    
                                 </div>
                             </div>
-                            <div class="mt-4 flex flex-wrap gap-2 items-center">
-                                <button type="button" 
-        onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}' {% if nivel >= 3 %}, '{{ cliente.saldo_float }}'{% endif %})" 
-        class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-bold text-sm shadow">💰 + Crédito</button>
+                            <div class="mt-4 flex flex-wrap gap-3 items-center">
                                 
-                                {% if nivel >= 3 or (cliente.get('id_colaborador') | string == id_logado | string) %}
-                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 text-sm font-semibold">✏️ Alterar</a>
+                                {% if nivel >= 3 %}
+                                <div class="flex bg-gray-100 p-1 rounded-lg border border-gray-200 shadow-sm">
+                                    <button type="button" onclick="openRecargaModal('{{ cliente.id_cliente }}', '{{ cliente.nick }}', '{{ cliente.saldo_float }}')" class="px-3 py-1.5 text-green-700 hover:bg-green-200 rounded-md font-bold text-sm transition flex items-center gap-1">
+                                        <span>💰</span> Crédito
+                                    </button>
+                                    <div class="w-px bg-gray-300 my-1 mx-1"></div>
+                                    <button type="button" onclick="abrirModalExtrato('{{ cliente.id_cliente }}', '{{ cliente.nick }}')" class="px-3 py-1.5 text-blue-700 hover:bg-blue-200 rounded-md font-bold text-sm transition flex items-center gap-1">
+                                        <span>🧾</span> Extrato
+                                    </button>
+                                </div>
+                                {% endif %}
+                                
+                                <div class="flex-grow"></div> {% if nivel >= 3 or (cliente.get('id_colaborador') | string == id_logado | string) %}
+                                <a href="{{ url_for('cadastro_cliente', view='alterar', id_cliente=cliente.id_cliente, next=next_url, id_evento=id_evento_retorno) }}" class="px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 text-sm font-semibold border border-gray-200 shadow-sm transition">✏️ Alterar</a>
                                 {% endif %}
                                 
                                 {% if nivel >= 3 %}
                                 <form method="POST" action="{{ url_for('excluir_cliente', id_cliente=cliente.id_cliente) }}" id="form-excluir-consulta-{{ cliente.id_cliente }}" class="inline-block" onsubmit="return ativarLoading(this, 'Excluindo cliente...')">
-                                    <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta", {{ cliente.saldo_float }})' class="px-4 py-2 bg-red-100 text-red-700 rounded hover:bg-red-200 text-sm font-semibold">🗑️ Excluir</button>
+                                    <button type="button" onclick='openDeleteModal("{{ cliente.id_cliente }}", {{ cliente.nick | tojson }}, "consulta", {{ cliente.saldo_float }})' class="px-4 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 text-sm font-semibold border border-red-100 shadow-sm transition">🗑️ Excluir</button>
                                 </form>
                                 {% endif %}
                             </div>
-                        </div>
+                     </div>
                     {% endfor %}
                 {% elif active_view == 'consulta' and query %}
                     <p class="text-center text-red-500 font-bold bg-red-50 p-4 rounded-xl">❌ Nenhum cliente encontrado.</p>
@@ -665,6 +666,131 @@
     </div>
 </div>
 
+    <div id="extrato-modal" class="modal-overlay" onclick="closeExtratoModal()">
+        <div class="modal-content bg-gray-900 border border-gray-700" style="max-width: 600px; padding: 1.5rem;" onclick="event.stopPropagation()">
+            
+            <div class="flex justify-between items-center mb-4 border-b border-gray-800 pb-3">
+                <h3 class="text-xl font-semibold text-white flex items-center gap-2">🧾 Extrato do Cliente</h3>
+<div class="flex items-center gap-2 mb-4 bg-gray-800 p-2 rounded-lg border border-gray-700">
+    <label class="text-[10px] text-gray-400 font-bold uppercase tracking-widest ml-2">Limitar:</label>
+    <input type="number" id="input-limite-extrato" value="50" step="10" min="10" max="500" 
+           class="bg-gray-900 border border-gray-600 rounded text-white px-2 py-1 w-20 text-sm font-bold focus:outline-none focus:border-blue-500">
+    <button onclick="recarregarExtratoComLimite()" class="text-[10px] bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded font-black transition">ATUALIZAR</button>
+</div>
+                <button onclick="closeExtratoModal()" class="text-gray-400 hover:text-white text-2xl font-bold transition">&times;</button>
+            </div>
+            
+            <div class="bg-gray-800 rounded-xl p-4 mb-4 flex justify-between items-center border border-gray-700 shadow-inner">
+                <div>
+                    <p class="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Nick / Apelido</p>
+                    <p id="modal-extrato-nick" class="text-lg font-semibold text-blue-400 uppercase">...</p>
+                </div>
+                <div class="text-right">
+                    <p class="text-[10px] text-gray-400 uppercase tracking-widest font-bold">Saldo Atual</p>
+                    <p id="modal-extrato-saldo" class="text-2xl font-semibold text-white tracking-tight">R$ 0,00</p>
+                </div>
+            </div>
+
+            <div class="bg-black/40 rounded-xl p-2 border border-gray-800 min-h-[300px] max-h-[400px] overflow-y-auto shadow-inner">
+                <ul id="lista-transacoes-admin" class="space-y-2">
+                    </ul>
+            </div>
+        </div>
+    </div>
+
+<script>
+    let currentClientId = null;
+    let currentClientNick = null;
+
+    // Função que abre o modal e inicia a carga
+    async function abrirModalExtrato(idCliente, nick) {
+        currentClientId = idCliente; 
+        currentClientNick = nick;
+        
+        document.getElementById('modal-extrato-nick').textContent = nick;
+        document.getElementById('modal-extrato-saldo').textContent = "Buscando...";
+        document.getElementById('extrato-modal').style.display = 'flex';
+        
+        // Dispara a carga inicial
+        recarregarExtratoComLimite(); 
+    }
+
+    // Função única e centralizada para buscar dados
+    async function recarregarExtratoComLimite() {
+        const listaContainer = document.getElementById('lista-transacoes-admin');
+        const inputLimite = document.getElementById('input-limite-extrato');
+        const limite = inputLimite ? inputLimite.value : 50;
+
+        listaContainer.innerHTML = '<li class="text-center text-gray-500 py-10 italic text-sm animate-pulse">🔄 Buscando movimentações...</li>';
+
+        try {
+            const response = await fetch(`/api/admin/extrato_cliente/${currentClientId}?limit=${limite}`);
+            if (!response.ok) throw new Error("Falha na requisição");
+            
+            const data = await response.json();
+
+            if (data.status === 'error') {
+                listaContainer.innerHTML = `<li class="text-center text-red-500 py-8 font-bold">${data.message}</li>`;
+                return;
+            }
+
+            // Atualiza Saldo
+            const saldoNum = parseFloat(data.saldo || 0);
+            const elSaldo = document.getElementById('modal-extrato-saldo');
+            elSaldo.textContent = `R$ ${saldoNum.toLocaleString('pt-BR', {minimumFractionDigits: 2})}`;
+            elSaldo.className = `text-2xl font-black tracking-tight ${saldoNum < 0 ? 'text-red-400' : 'text-green-400'}`;
+
+            // Atualiza o Extrato
+            if (!data.extrato || data.extrato.length === 0) {
+                listaContainer.innerHTML = `
+                    <li class="text-center text-gray-500 py-12 italic flex flex-col items-center">
+                        <span class="text-4xl mb-2 opacity-50">📭</span>
+                        <span>Nenhuma movimentação registrada.</span>
+                    </li>`;
+            } else {
+                let htmlAcumulado = '';
+                data.extrato.forEach(item => {
+                    const isSaida = ['SAIDA'].includes(item.natureza);
+                    const corValor = isSaida ? "text-red-400" : "text-green-400";
+                    const sinal = isSaida ? "- " : "+ ";
+                    
+                    let icone = '💰';
+                    if (['compra_cartela', 'compra_sorte_extra'].includes(item.tipo)) icone = '🛒';
+                    else if (['premio_bingo', 'premio_sorte_extra'].includes(item.tipo)) icone = '🏆';
+                    else if (item.tipo === 'saque_solicitado') icone = '💸';
+                    else if (item.tipo === 'compra_credito_pix') icone = '⚡';
+                    else if (item.tipo === 'estorno_saque') icone = '↩️';
+                    
+                    const valorExibicao = Math.abs(parseFloat(item.valor || 0));
+                    const saldoPosterior = parseFloat(item.saldo_posterior || 0).toLocaleString('pt-BR', {minimumFractionDigits: 2});
+
+                    htmlAcumulado += `
+                        <li class="flex justify-between items-center bg-gray-800/80 p-2 rounded-lg border border-gray-700 shadow-sm hover:bg-gray-700 transition-colors">
+                            <div class="flex items-center gap-3">
+                                <span class="text-xl bg-gray-900 p-2 rounded-lg shadow-inner border border-gray-800">${icone}</span>
+                                <div class="flex flex-col text-left">
+                                    <span class="font-bold text-gray-200 text-xs uppercase tracking-wide">${item.desc || "Movimentação"}</span>
+                                    <span class="text-[11px] text-gray-400 font-mono">${item.data || ""}</span>
+                                </div>
+                            </div>
+                            <div class="flex flex-col items-end pr-2">
+                                <span class="font-black text-[15px] ${corValor}">${sinal}R$ ${valorExibicao.toLocaleString('pt-BR', {minimumFractionDigits: 2})}</span>
+                                <span class="text-[10px] text-gray-500 font-bold tracking-widest uppercase">Saldo: R$ ${saldoPosterior}</span>
+                            </div>
+                        </li>`;
+                });
+                listaContainer.innerHTML = htmlAcumulado;
+            }
+        } catch (error) {
+            console.error("Erro:", error);
+            listaContainer.innerHTML = '<li class="text-center text-red-500 py-8 font-bold">⚠️ Falha ao buscar dados.</li>';
+        }
+    }
+
+    function closeExtratoModal() { 
+        document.getElementById('extrato-modal').style.display = 'none'; 
+    }
+</script>
 
     <script>
         /**
@@ -805,9 +931,9 @@
                         div.className = 'search-result-item p-2 border-b border-gray-100 transition';
                         
                         // 🚀 TRAVA DE ACESSO
-                        // O backend precisa retornar 'id_colaborador' no JSON
                         const donoDoCliente = String(cli.id_colaborador);
                         const podeEditar = (nivelLogado >= 3 || donoDoCliente === idLogado);
+                        
                         if (podeEditar) {
                             div.innerHTML = `
                                 <div class="flex justify-between items-center">
@@ -815,11 +941,16 @@
                                         <div class="font-bold text-blue-800">${cli.nick}</div>
                                         <div class="text-[10px] text-gray-500">${cli.nome} | ID: ${cli.id}</div>
                                     </div>
-                                    <span class="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-1 rounded">✏️ Editar</span>
+                                    <span class="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-1 rounded shadow-sm">🔎 Selecionar</span>
                                 </div>
                             `;
-                            div.onclick = () => { window.location.href = `{{ url_for('cadastro_cliente', view='alterar') }}&id_cliente=${cli.id}`; };
+                            
+                            // 🚀 CORREÇÃO: Em vez de ir para 'alterar', vai para 'consulta' filtrando por este ID exato
+                            div.onclick = () => { 
+                                window.location.href = `{{ url_for('cadastro_cliente', view='consulta') }}&search_type=id&query=${cli.id}`; 
+                            };
                             div.classList.add('cursor-pointer', 'hover:bg-blue-50');
+                            
                         } else {
                             div.innerHTML = `
                                 <div class="flex justify-between items-center opacity-70">
@@ -830,7 +961,7 @@
                                     <span class="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-1 rounded">🔒 Bloqueado</span>
                                 </div>
                             `;
-                            div.onclick = () => { alert("🔒 Acesso Negado: Você só pode alterar os clientes que você mesmo cadastrou."); };
+                            div.onclick = () => { alert("🔒 Acesso Negado: Você só pode acessar os clientes que você mesmo cadastrou."); };
                             div.classList.add('cursor-not-allowed', 'bg-gray-50');
                         }
 
