@@ -232,7 +232,7 @@
                     <div class="form-group">
                         <label for="unidade_de_venda" class="required-label">Unidade de Venda (1-6):</label>
                         <input type="number" id="unidade_de_venda" name="unidade_de_venda" required min="1" max="6" class="form-control"
-                               value="{{ evento.get('unidade_de_venda', 1) }}" oninput="calculatePremioTotal()">
+                               value="{{ evento.get('unidade_de_venda', 1) }}" oninput="calculatePremioTotal(); validarNumeroInicial()">
                     </div>
                     
                     <div class="form-group">
@@ -251,7 +251,9 @@
                             </button>
                         </div>
                         <input type="number" id="numero_inicial" name="numero_inicial" required min="1" class="form-control"
-                               value="{{ evento.get('numero_inicial', 1) }}">
+                               value="{{ evento.get('numero_inicial', 1) }}" oninput="validarNumeroInicial()">
+                        <!-- Span de feedback de erro -->
+                        <span id="numero-inicial-feedback" class="text-[11px] font-bold text-red-600 hidden mt-1 block leading-tight"></span>
                     </div>
 
                     <div class="form-group">
@@ -439,11 +441,35 @@
         </div>
 
         <div id="view-listar" class="view-content {% if active_view == 'listar' %}active-view-show{% endif %}">
-            <h3 class="text-lg font-bold mb-0 -mt-1 text-gray-700">Lista de Eventos (Ordenada por Data)</h3>
-            <p class="text-xs font-bold text-blue-600 mb-1 bg-blue-50 inline-block px-2 py-1 rounded">
-                ⚠️ Exibindo apenas os 100 eventos mais recentes para manter o sistema rápido. Use a aba "Consulta" para localizar eventos antigos.
+            <h3 class="text-lg font-bold mb-0 -mt-1 text-gray-700">Lista de Eventos</h3>
+            <p class="text-xs font-bold text-blue-600 mb-2 bg-blue-50 inline-block px-2 py-1 rounded">
+                ⚠️ Exibindo apenas os 100 eventos resultantes da busca para manter o sistema rápido.
             </p>
            
+            <!-- 🚀 NOVO: BARRA DE FILTROS E ORDENAÇÃO -->
+            <form method="GET" action="{{ url_for('cadastro_evento') }}" class="mb-3 bg-gray-50 border border-gray-200 p-3 rounded-xl flex flex-wrap items-end gap-3 shadow-sm" onsubmit="ativarSpinnerLink('Filtrando eventos...')">
+                <input type="hidden" name="view" value="listar">
+                
+                <div>
+                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Status do Evento:</label>
+                    <select name="filtro_status" class="form-control mb-0 py-1.5 border-gray-300 text-sm font-bold text-gray-700 w-48 focus:border-blue-500">
+                        <option value="ativos_paralisados" {% if request.args.get('filtro_status', 'ativos_paralisados') == 'ativos_paralisados' %}selected{% endif %}>Ativos / Paralisados</option>
+                        <option value="finalizados" {% if request.args.get('filtro_status') == 'finalizados' %}selected{% endif %}>Finalizados</option>
+                        <option value="todos" {% if request.args.get('filtro_status') == 'todos' %}selected{% endif %}>Todos os Status</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="block text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1">Ordem de Exibição:</label>
+                    <select name="ordem" class="form-control mb-0 py-1.5 border-gray-300 text-sm font-bold text-gray-700 w-48 focus:border-blue-500">
+                        <option value="desc" {% if request.args.get('ordem', 'desc') == 'desc' %}selected{% endif %}>Mais Recentes (⬇)</option>
+                        <option value="asc" {% if request.args.get('ordem') == 'asc' %}selected{% endif %}>Mais Antigos (⬆)</option>
+                    </select>
+                </div>
+
+                <button type="submit" class="bg-blue-600 hover:bg-blue-700 text-white font-bold px-4 py-1.5 rounded-lg text-sm shadow-sm transition active:scale-95">Aplicar Filtros</button>
+            </form>
+
             <div class="overflow-x-auto shadow-md rounded-lg mt-2">
                 <table class="min-w-full bg-white border border-gray-200">
                     <thead>
@@ -743,6 +769,11 @@
 
         // --- JS EXISTENTE ---
         function tratarSubmissao(form) {
+            if (!validarNumeroInicial()) {
+                alert("⚠️ Corrija o 'Número Inicial da Cartela' antes de salvar o evento.");
+                return false;
+            }
+
             const camposParaZerar = [
                 'valor_de_venda', 'premio_quadra', 'premio_linha', 
                 'premio_faltaum', 'premio_bingo', 'premio_segundobingo'
@@ -1113,6 +1144,7 @@
 
                 if (data.sucesso) {
                     inputInicial.value = data.numero;
+                    validarNumeroInicial(); 
             
                     // Pequeno alerta de sucesso não invasivo
                     if (data.evento_origem) {
@@ -1149,6 +1181,61 @@ function confirmarExpurgoPeriodo(form) {
     return false;
 }
 
+        // --- VALIDAÇÃO DO NÚMERO INICIAL ---
+        function validarNumeroInicial() {
+            const inputInicial = document.getElementById('numero_inicial');
+            const inputUnidade = document.getElementById('unidade_de_venda');
+            const feedback = document.getElementById('numero-inicial-feedback');
+            const btnSubmit = document.querySelector('.btn-save');
+
+            if (!inputInicial || !inputUnidade || !feedback) return true;
+
+            const inicial = parseInt(inputInicial.value);
+            const unidade = parseInt(inputUnidade.value) || 1;
+
+            // Se a unidade for 1 ou o campo estiver vazio, qualquer número é válido
+            if (unidade <= 1 || isNaN(inicial)) {
+                inputInicial.classList.remove('border-red-500', 'bg-red-50', 'text-red-700');
+                feedback.classList.add('hidden');
+                if(btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+                return true;
+            }
+
+            // Regra Matemática: (inicial - 1) % unidade == 0
+            if ((inicial - 1) % unidade !== 0) {
+                // Descobre sugestões válidas
+                let valAnterior = inicial;
+                while ((valAnterior - 1) % unidade !== 0 && valAnterior > 0) valAnterior--;
+                
+                let valProximo = inicial;
+                while ((valProximo - 1) % unidade !== 0) valProximo++;
+                
+                const sugestao = valAnterior > 0 ? `Tente ${valAnterior} ou ${valProximo}.` : `Tente ${valProximo}.`;
+
+                // Aplica estilos de erro e bloqueia submissão
+                inputInicial.classList.add('border-red-500', 'bg-red-50', 'text-red-700');
+                feedback.textContent = `❌ O número inicial deve ser múltiplo de ${unidade} + 1. ${sugestao}`;
+                feedback.classList.remove('hidden');
+                
+                if(btnSubmit) {
+                    btnSubmit.disabled = true;
+                    btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                return false;
+            } else {
+                // Input Válido
+                inputInicial.classList.remove('border-red-500', 'bg-red-50', 'text-red-700');
+                feedback.classList.add('hidden');
+                if(btnSubmit) {
+                    btnSubmit.disabled = false;
+                    btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+                return true;
+            }
+        }
 
     </script>
 </body>

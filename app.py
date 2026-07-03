@@ -2112,7 +2112,6 @@ def cadastro_colaborador():
         else:
              active_view = 'novo'
 
-    # CORREÇÃO DE INDENTAÇÃO AQUI: Este elif deve estar alinhado com o 'if form_data_erro:'
     elif active_view == 'alterar' and id_colaborador_edicao and db_status:
         try:
             id_colaborador_int = int(id_colaborador_edicao)
@@ -2142,7 +2141,6 @@ def cadastro_colaborador():
             regionais_lista = list(regionais_cursor)
             
             # 2. TRAVA DE VISÃO (Base Query)
-            # Define o que o usuário pode ver na listagem e na busca
             base_query = {}
             if session.get('nivel', 0) < 4:
                 # Nível < 4: Só vê a própria regional
@@ -2154,11 +2152,26 @@ def cadastro_colaborador():
                 except ValueError:
                     pass
 
-            # Conta o total respeitando a trava de visão
+            # Conta o total respeitando a trava de visão (sem os filtros de status)
             total_colaboradores = db.colaboradores.count_documents(base_query)
             
             if active_view == 'listar':
-                colaboradores_cursor = db.colaboradores.find(base_query).sort("nick", pymongo.ASCENDING)
+                # 🚀 NOVOS FILTROS: Status e Ordenação
+                filtro_status = request.args.get('filtro_status', 'ativos')
+                ordem = request.args.get('ordem', 'asc')
+
+                # Aplica o filtro de status na query
+                if filtro_status == 'ativos':
+                    base_query['status'] = {'$ne': 'Inativo'} # Assume que diferente de Inativo é Ativo
+                elif filtro_status == 'inativos':
+                    base_query['status'] = 'Inativo'
+                # Se for 'todos', não adiciona regra de status
+
+                # Define a direção da ordenação
+                direcao = pymongo.ASCENDING if ordem == 'asc' else pymongo.DESCENDING
+
+                # Executa a busca com filtros e ordem
+                colaboradores_cursor = db.colaboradores.find(base_query).sort("nick", direcao)
                 colaboradores_lista = list(colaboradores_cursor)
             
             elif active_view == 'consulta' and search_term:
@@ -2196,8 +2209,8 @@ def cadastro_colaborador():
     context = {
         'total_colaboradores': total_colaboradores,
         'colaboradores_lista': colaboradores_lista,
-        'regionais_lista': regionais_lista, # Novo: Passa regionais pro Frontend
-        'filtro_regional': filtro_regional, # Novo: Mantém estado do select
+        'regionais_lista': regionais_lista,
+        'filtro_regional': filtro_regional,
         'active_view': active_view,
         'query': search_term, 
         'colaborador_edicao': colaborador_edicao,
@@ -4940,13 +4953,29 @@ def cadastro_evento():
 
     # 4. Bloco de Listagem e Parâmetros
     param_doc_global = {}
+    filtro_status = request.args.get('filtro_status', 'ativos_paralisados')
+    ordem = request.args.get('ordem', 'desc')
+
     if db_status:
         try:
             total_eventos = db.eventos.count_documents({})
             param_doc_global = db.parametros.find_one({}) or {}
             
             if active_view in ['listar', 'exclusao_lote']:
-                eventos_lista = list(db.eventos.find({}).sort([("data_evento", -1), ("hora_evento", -1)]).limit(50))
+                # 🚀 LÓGICA DOS NOVOS FILTROS
+                query_listagem = {}
+                
+                if filtro_status == 'ativos_paralisados':
+                    query_listagem['status'] = {'$regex': '^(ativo|paralisado|paralizado)$', '$options': 'i'}
+                elif filtro_status == 'finalizados':
+                    query_listagem['status'] = {'$regex': '^finalizado$', '$options': 'i'}
+                # 'todos' não adiciona restrições
+                
+                # 🚀 LÓGICA DE ORDENAÇÃO
+                direcao = -1 if ordem == 'desc' else 1
+                
+                eventos_lista = list(db.eventos.find(query_listagem).sort([("data_evento", direcao), ("hora_evento", direcao)]).limit(100))
+                
             elif active_view == 'consulta' and search_term:
                 query_filter = {'id_evento': int(search_term)} if search_term.isdigit() else {'descricao': {'$regex': search_term, '$options': 'i'}}
                 eventos_lista = list(db.eventos.find(query_filter).sort("data_evento", -1))
@@ -5006,11 +5035,14 @@ def cadastro_evento():
         'evento_edicao': evento_edicao, 
         'error': error,
         'success': success,
-        'is_master': is_master
+        'is_master': is_master,
+        
+        # 🚀 NOVO: Passando o estado dos filtros para manter no Front-End
+        'filtro_status': filtro_status,
+        'ordem': ordem
     }
     
     return render_template('cadastro_evento.html', **context)
-
 
 @app.route('/excluir_eventos_periodo', methods=['POST'])
 @login_required
