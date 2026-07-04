@@ -13,7 +13,7 @@
             text-align: center !important;
             font-size: 1.5rem !important; /* Assume o tamanho proporcional que era do H2 */
             margin-top: 5px !important;
-            margin-bottom: 10px !important;
+            margin-bottom: 2px !important;
         }
 
         h2 {
@@ -99,11 +99,54 @@
             text-align: center;
             font-size: 0.875rem;
         }
+
+       /* ================================================================= */
+        /* 🎨 MARCA D'ÁGUA NO TOPO DO FORMULÁRIO                             */
+        /* ================================================================= */
+        .logo-marca-dagua {
+            display: block;
+            margin: 0 auto 5px auto;
+            max-width: 100px; /* Ajuste o tamanho conforme preferência */
+            opacity: 0.1;     /* 70% de transparência */
+            pointer-events: none;
+        }
+
+        /* Garante que o container tenha um fundo branco sólido */
+        .container {
+            position: relative;
+            z-index: 1;
+            background-color: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .footer-logo {
+            text-align: center;
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px dashed #D1D5DB; /* Linha sutil para separar o conteúdo */
+        }
+
+        .footer-logo img {
+            max-width: 160px; /* Largura ideal para não distorcer o formulário */
+            height: auto;
+            display: inline-block;
+            transition: opacity 0.3s;
+        }
+
+        .footer-logo img:hover {
+            opacity: 0.8; /* Dá um leve efeito ao passar o mouse */
+        }
+
     </style>
 </head>
 <body>
 
     <div class="container">
+        <img src="{{ url_for('static', filename='image/logo.png') }}" class="logo-marca-dagua" alt="Logo">
         <h1> 📊 Gestor de Vendas -  v1.4</h1>
         <h2>🔒 Login de Usuário</h2>    
         <!-- Mensagens de Erro do Flask -->
@@ -162,6 +205,14 @@
             </div>
             <input type="hidden" id="manual_id_sala" value="{{ id_sala_exibicao }}">
         {% endif %}
+
+        <!-- 👇 ADICIONE ESTE NOVO BLOCO AQUI 👇 -->
+        <div class="footer-logo">
+            <img src="{{ url_for('static', filename='image/logo.png') }}" alt="Live the Bet">
+        </div>
+        <!-- 👆 FIM DO NOVO BLOCO 👆 -->
+
+    </div> <!-- Esta é a div de fechamento do "container" -->
 
     </div>
 
