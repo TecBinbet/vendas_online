@@ -1182,51 +1182,34 @@ function confirmarExpurgoPeriodo(form) {
 }
 
         // --- VALIDAÇÃO DO NÚMERO INICIAL ---
+        // --- VALIDAÇÃO DO NÚMERO INICIAL ---
         function validarNumeroInicial() {
             const inputInicial = document.getElementById('numero_inicial');
             const inputUnidade = document.getElementById('unidade_de_venda');
+            const inputMaximo = document.getElementById('numero_maximo');
             const feedback = document.getElementById('numero-inicial-feedback');
             const btnSubmit = document.querySelector('.btn-save');
 
-            if (!inputInicial || !inputUnidade || !feedback) return true;
+            if (!inputInicial || !inputUnidade || !inputMaximo || !feedback) return true;
 
             const inicial = parseInt(inputInicial.value);
             const unidade = parseInt(inputUnidade.value) || 1;
+            const maximo = parseInt(inputMaximo.value) || 90000;
 
-            // Se a unidade for 1 ou o campo estiver vazio, qualquer número é válido
-            if (unidade <= 1 || isNaN(inicial)) {
-                inputInicial.classList.remove('border-red-500', 'bg-red-50', 'text-red-700');
-                feedback.classList.add('hidden');
-                if(btnSubmit) {
-                    btnSubmit.disabled = false;
-                    btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
-                }
-                return true;
-            }
-
-            // Regra Matemática: (inicial - 1) % unidade == 0
-            if ((inicial - 1) % unidade !== 0) {
-                // Descobre sugestões válidas
-                let valAnterior = inicial;
-                while ((valAnterior - 1) % unidade !== 0 && valAnterior > 0) valAnterior--;
-                
-                let valProximo = inicial;
-                while ((valProximo - 1) % unidade !== 0) valProximo++;
-                
-                const sugestao = valAnterior > 0 ? `Tente ${valAnterior} ou ${valProximo}.` : `Tente ${valProximo}.`;
-
-                // Aplica estilos de erro e bloqueia submissão
+            // Função auxiliar para aplicar o bloqueio visual e desativar o botão
+            const aplicarErro = (mensagem) => {
                 inputInicial.classList.add('border-red-500', 'bg-red-50', 'text-red-700');
-                feedback.textContent = `❌ O número inicial deve ser múltiplo de ${unidade} + 1. ${sugestao}`;
+                feedback.textContent = mensagem;
                 feedback.classList.remove('hidden');
-                
                 if(btnSubmit) {
                     btnSubmit.disabled = true;
                     btnSubmit.classList.add('opacity-50', 'cursor-not-allowed');
                 }
                 return false;
-            } else {
-                // Input Válido
+            };
+
+            // Função auxiliar para remover o erro e liberar o botão
+            const removerErro = () => {
                 inputInicial.classList.remove('border-red-500', 'bg-red-50', 'text-red-700');
                 feedback.classList.add('hidden');
                 if(btnSubmit) {
@@ -1234,7 +1217,44 @@ function confirmarExpurgoPeriodo(form) {
                     btnSubmit.classList.remove('opacity-50', 'cursor-not-allowed');
                 }
                 return true;
+            };
+
+            // Ignora a validação se o campo estiver vazio
+            if (isNaN(inicial)) return removerErro();
+
+            // 1ª Regra: O número não pode ser maior que o limite da cartela
+            if (inicial > maximo) {
+                return aplicarErro(`❌ O número inicial não pode ser maior que o limite da cartela (${maximo}).`);
             }
+
+            // 2ª Regra: Deve respeitar a matemática da unidade de venda (Se for > 1)
+            if (unidade > 1 && (inicial - 1) % unidade !== 0) {
+                
+                // Descobre o valor válido para trás
+                let valAnterior = inicial;
+                while ((valAnterior - 1) % unidade !== 0 && valAnterior > 0) valAnterior--;
+                
+                // Descobre o valor válido para frente
+                let valProximo = inicial;
+                while ((valProximo - 1) % unidade !== 0) valProximo++;
+                
+                // Monta a sugestão garantindo que não sugere algo acima do limite
+                let sugestao;
+                if (valAnterior > 0 && valProximo <= maximo) {
+                    sugestao = `Tente ${valAnterior} ou ${valProximo}.`;
+                } else if (valAnterior > 0) {
+                    sugestao = `Tente ${valAnterior}.`; // Não sugere o próximo porque estourou o limite
+                } else if (valProximo <= maximo) {
+                    sugestao = `Tente ${valProximo}.`;
+                } else {
+                    sugestao = `Sem sugestões válidas próximas.`;
+                }
+
+                return aplicarErro(`❌ O número inicial deve ser múltiplo de ${unidade} + 1. ${sugestao}`);
+            }
+
+            // Passou em todas as validações
+            return removerErro();
         }
 
     </script>

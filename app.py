@@ -5312,6 +5312,33 @@ def gravar_evento():
 
         bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
 
+        # =====================================================================
+        # 🚀 VALIDAÇÃO DE SEGURANÇA (BACKEND): Número Inicial vs Unidade
+        # =====================================================================
+        if numero_inicial > numero_maximo:
+            raise ValueError(f"O número inicial ({numero_inicial}) não pode ser maior que o limite da cartela ({numero_maximo}).")
+
+        if unidade_de_venda > 1 and (numero_inicial - 1) % unidade_de_venda != 0:
+            # Descobre sugestão válida para informar no erro
+            val_anterior = numero_inicial
+            while (val_anterior - 1) % unidade_de_venda != 0 and val_anterior > 0:
+                val_anterior -= 1
+                
+            val_proximo = numero_inicial
+            while (val_proximo - 1) % unidade_de_venda != 0:
+                val_proximo += 1
+                
+            sugestao = ""
+            if val_anterior > 0 and val_proximo <= numero_maximo:
+                sugestao = f"Tente {val_anterior} ou {val_proximo}."
+            elif val_anterior > 0:
+                sugestao = f"Tente {val_anterior}."
+            elif val_proximo <= numero_maximo:
+                sugestao = f"Tente {val_proximo}."
+                
+            raise ValueError(f"Falha de Validação: O número inicial deve ser múltiplo da unidade ({unidade_de_venda}) + 1. {sugestao}")
+        # =====================================================================
+
         try:
             distribuir_cortesia = int(request.form.get('distribuir_cortesia', 0))
             if distribuir_cortesia < 0: 
@@ -5405,162 +5432,8 @@ def gravar_evento():
         print(f"ERRO na gravação: {e}")
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
-        return redirect(url_for('cadastro_evento', error=f"Erro ao salvar: {e}", view=view_redirect, id_evento=id_evento_edicao))
+        return redirect(url_for('cadastro_evento', error=f"{e}", view=view_redirect, id_evento=id_evento_edicao))
 
-
-# aApagar
-@app.route('/gravar_eventoB', methods=['POST'])
-@login_required
-def gravar_eventoB():
-    db = get_vendas_db()
-    if db is None: return redirect(url_for('login'))
-
-    if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
-
-    id_evento_edicao = request.form.get('id_evento_edicao') 
-    
-    def clean_float_input(form_key, default_value='0'):
-        value_raw = request.form.get(form_key, default_value)
-        if not value_raw or value_raw.strip() == '':
-            value_raw = str(default_value)
-        return float(value_raw.replace(',', '.'))
-
-    try:
-        data_evento_str = request.form.get('data_evento')
-        hora_evento = request.form.get('hora_evento')
-        descricao = format_title_case(request.form.get('descricao'))
-        unidade_raw = request.form.get('unidade_de_venda', '1').strip()
-        unidade_de_venda = int(unidade_raw) if unidade_raw.isdigit() else 1
-        tipo_de_cartela = int(request.form.get('tipo_de_cartela', 15)) 
-        tipo_de_evento = request.form.get('tipo_de_evento', 'Normal') 
-        tipo_premiacao = request.form.get('tipo_premiacao', 'Fixa')
-        
-        # 🚀 NOVO: Captura do COMBO
-        try:
-            combo_qtde = int(request.form.get('combo_qtde', 1))
-            if combo_qtde < 1: combo_qtde = 1
-        except ValueError:
-            combo_qtde = 1
-
-        # --- LÓGICA DE CARTELA E NÚMERO MÁXIMO ---
-        if tipo_de_cartela == 25:
-            premio_faltaum = 0.0
-            premio_segundobingo = 0.0
-            quantidade_de_linhas = 1
-            param_key = 'arquivo_cartela_25'
-            default_max = 90000
-        else:
-            premio_faltaum = clean_float_input('premio_faltaum')
-            premio_segundobingo = clean_float_input('premio_segundobingo')
-            quantidade_de_linhas = int(request.form.get('quantidade_de_linhas', 1))
-            param_key = 'arquivo_cartela_15'
-            default_max = 72000
-            
-        try:
-            param_doc = db.parametros.find_one({})
-            numero_maximo = int(param_doc.get(param_key, default_max)) if param_doc else default_max
-        except:
-            numero_maximo = default_max
-        
-        # Captura financeira
-        valor_de_venda = clean_float_input('valor_de_venda')
-        premio_quadra = clean_float_input('premio_quadra')
-        premio_linha = clean_float_input('premio_linha')
-        premio_bingo = clean_float_input('premio_bingo')
-        premio_acumulado = clean_float_input('premio_acumulado')
-        minimo_de_venda = clean_float_input('minimo_de_venda') 
-        premiacao_fixa = clean_float_input('premiacao_fixa', default_value='-1.00')
-
-        numero_inicial = int(request.form.get('numero_inicial', 1))
-        minimo_terminal = int(request.form.get('minimo_terminal', 6))
-        maximo_terminal = int(request.form.get('maximo_terminal', 1200))  
-
-        bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
-
-        try:
-            distribuir_cortesia = int(request.form.get('distribuir_cortesia', 0))
-            if distribuir_cortesia < 0: 
-                distribuir_cortesia = 0
-        except ValueError:
-            distribuir_cortesia = 0
-
-        if not all([data_evento_str, hora_evento, descricao, unidade_de_venda]):
-             raise ValueError("Preencha todos os campos obrigatórios (*).")
-
-        data_obj = datetime.strptime(data_evento_str, '%Y-%m-%d')
-        data_evento_str_gravar = data_obj.strftime('%d/%m/%Y')
-        data_hora_evento_dt = datetime.strptime(f"{data_evento_str} {hora_evento}", '%Y-%m-%d %H:%M')
-        
-        premio_total = premio_quadra + (premio_linha * quantidade_de_linhas) + premio_bingo + premio_segundobingo + premio_faltaum
-        
-        dados_evento = {
-            "data_evento": data_evento_str_gravar, 
-            "hora_evento": hora_evento, 
-            "data_hora_evento": data_hora_evento_dt, 
-            "descricao": descricao,
-            "unidade_de_venda": unidade_de_venda,
-            "tipo_de_cartela": tipo_de_cartela, 
-            "tipo_de_evento": tipo_de_evento,
-            "tipo_premiacao": tipo_premiacao,
-            "valor_de_venda": Decimal128(str(valor_de_venda)),
-            "numero_inicial": numero_inicial,
-            "numero_maximo": numero_maximo,
-            "minimo_terminal": minimo_terminal,
-            "maximo_terminal": maximo_terminal,  
-            "premio_quadra": Decimal128(str(premio_quadra)),
-            "quantidade_de_linhas": quantidade_de_linhas,
-            "premio_linha": Decimal128(str(premio_linha)),
-            "premio_bingo": Decimal128(str(premio_bingo)),
-            "premio_faltaum": Decimal128(str(premio_faltaum)),
-            "premio_segundobingo": Decimal128(str(premio_segundobingo)),
-            "premiacao_fixa": Decimal128(str(premiacao_fixa)),
-            "premio_total": Decimal128(str(premio_total)), 
-            "premio_acumulado": Decimal128(str(premio_acumulado)),
-            "bola_tope_acumulado": bola_tope_acumulado,
-            "minimo_de_venda": Decimal128(str(minimo_de_venda)),
-            "id_colaborador": session.get('id_colaborador', 'N/A'),
-            "distribuir_cortesia": distribuir_cortesia,
-            "combo_qtde": combo_qtde # 🚀 NOVO
-        }
-        
-        if id_evento_edicao:
-            db.eventos.update_one({'id_evento': int(id_evento_edicao)}, {'$set': dados_evento})
-            success_msg = f"Evento ID: {id_evento_edicao} atualizado com sucesso!"
-            return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
-        else:
-            novo_id = get_next_evento_sequence()
-            dados_evento.update({
-                "id_evento": novo_id, 
-                "status": "ativo", 
-                "data_ativado": None,
-                "data_cadastro": hora_brasil()
-            })
-            db.eventos.insert_one(dados_evento)
-
-            nome_colecao_vendas = f"vendas{novo_id}"
-            try:
-                db[nome_colecao_vendas].create_index([("id_regional", 1), ("data_venda", -1)])
-                db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_vendedor", 1)])
-                db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_colaborador", 1)])
-                db[nome_colecao_vendas].create_index([("id_regional", 1), ("id_cliente", 1)])
-            except Exception as e:
-                pass
-
-            # 🚀 LÓGICA DE REDIRECIONAMENTO COMBO
-            if combo_qtde > 1:
-                replicas = combo_qtde - 1
-                success_msg = f"Evento '{dados_evento['descricao']}' gravado (ID: {novo_id}). Defina agora o intervalo para criar os próximos {replicas} eventos."
-                return redirect(url_for('cadastro_evento', view='alterar', id_evento=novo_id, auto_replicar=replicas, success=success_msg))
-            else:
-                success_msg = f"Evento '{dados_evento['descricao']}' salvo com sucesso! ID: {novo_id}."
-                return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
-
-    except Exception as e:
-        print(f"ERRO na gravação: {e}")
-        session['form_data'] = dict(request.form)
-        view_redirect = 'alterar' if id_evento_edicao else 'novo'
-        return redirect(url_for('cadastro_evento', error=f"Erro ao salvar: {e}", view=view_redirect, id_evento=id_evento_edicao))
 
 @app.route('/consulta_vendas', methods=['GET'])
 @login_required
