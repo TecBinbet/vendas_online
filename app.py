@@ -2621,10 +2621,16 @@ def nova_venda():
     
     quantidade = int(quantidade_param) if quantidade_param and str(quantidade_param).isdigit() else 0
     
-    #eventos_ativos_cursor = db.eventos.find({'status': 'ativo'}).sort('data_evento', pymongo.ASCENDING)   <<< troca aqui
+    # 1. old - Busca no banco ordenando por Data e, em seguida, por Hora (Cronológico Perfeito)   
+    #eventos_ativos_cursor = db.eventos.find({'status': 'ativo'}).sort([
+    #    ('data_evento', pymongo.ASCENDING),
+    #    ('hora_evento', pymongo.ASCENDING)
+    #])
 
     # 1. Busca no banco ordenando por Data e, em seguida, por Hora (Cronológico Perfeito)
-    eventos_ativos_cursor = db.eventos.find({'status': 'ativo'}).sort([
+    eventos_ativos_cursor = db.eventos.find({
+        'status': {'$in': ['ativo', 'paralisado', 'paralizado']} # Adicionado suporte ao status paralisado
+    }).sort([
         ('data_evento', pymongo.ASCENDING),
         ('hora_evento', pymongo.ASCENDING)
     ])
@@ -2817,9 +2823,9 @@ def nova_venda():
 @login_required
 def processar_venda():
     """
-    Processo Crítico de Venda - ATUALIZADO para arquitetura Multirregional.
-    INCLUI TRAVA DE SEGURANÇA DE STATUS DO EVENTO.
-    MOTOR ATÓMICO (Sem Locks).
+    Processo de Venda Híbrido (Clássico):
+    - Ativo: Sequencial automático.
+    - Paralisado: Manual por período com checagem de conflito.
     """
     db = get_vendas_db()
     if db is None: 
@@ -2828,8 +2834,291 @@ def processar_venda():
     id_evento_string = request.form.get('id_evento') 
     id_cliente_final_str = request.form.get('id_cliente_final') 
     quantidade_str = request.form.get('quantidade', '0')
+    
+    # Captura os campos manuais
+    kit_inicial_manual = request.form.get('numero_inicial_manual') or request.form.get('kit_inicial') or request.form.get('numero_kit_inicial')
+    kit_final_manual = request.form.get('numero_final_manual') or request.form.get('kit_final') or request.form.get('numero_kit_final')
+    is_venda_manual = bool(kit_inicial_manual and str(kit_inicial_manual).strip() != '')
    
-    log_prefix = f"[VENDA REQ_COLAB:{session.get('nick', 'N/A')}_CLI:{id_cliente_final_str}_QTD:{quantidade_str}]"
+    log_prefix = f"[VENDA {'MANUAL' if is_venda_manual else 'SEQ'}_COLAB:{session.get('nick', 'N/A')}]"
+    
+    error_redirect_kwargs = {
+        'id_evento': id_evento_string,
+        'id_cliente_busca': f"CLI{id_cliente_final_str}" if id_cliente_final_str else '',
+    }
+
+    # 1. Identificação Inicial de Evento e Cliente
+    id_evento_mongo = try_object_id(id_evento_string)
+    selected_event = db.eventos.find_one({'_id': id_evento_mongo})
+    
+    try:
+        id_cliente_final = int(id_cliente_final_str)
+        if not selected_event:
+            raise ValueError("Evento não encontrado no sistema.")
+            
+        unidade_de_venda = int(selected_event.get('unidade_de_venda', 1))
+        limite_maximo_cartelas = int(selected_event.get('numero_maximo', 72000))
+        valor_unitario = safe_float(selected_event.get('valor_de_venda', 0.00))
+        id_evento_int_para_controle = selected_event.get('id_evento')
+        nome_colecao_venda = f"vendas{str(id_evento_int_para_controle).strip()}"
+
+        # 2. VERIFICAÇÃO HÍBRIDA DE STATUS E TIPO DE VENDA
+        status_atual = selected_event.get('status', '').lower()
+        if status_atual in ['paralisado', 'paralizado']:
+            if not is_venda_manual:
+                raise ValueError("Este evento está PARALISADO. Informe o Kit Inicial e Final para o lançamento manual.")
+        elif status_atual == 'ativo':
+            if is_venda_manual:
+                raise ValueError("Eventos ATIVOS utilizam apenas vendas sequenciais automáticas.")
+        else:
+            raise ValueError(f"VENDA CANCELADA! O evento não está Ativo nem Paralisado (Status: {status_atual.upper()}).")
+
+        # 3. Tratamento de Quantidades e Período
+        if is_venda_manual:
+            num_ini_manual = int(str(kit_inicial_manual).strip())
+            num_fim_manual = int(str(kit_final_manual).strip()) if kit_final_manual and str(kit_final_manual).strip() != '' else num_ini_manual
+            
+            if num_fim_manual < num_ini_manual:
+                raise ValueError("O valor do campo final deve ser maior ou igual ao campo inicial.")
+                
+            if num_fim_manual > limite_maximo_cartelas or num_ini_manual > limite_maximo_cartelas:
+                raise ValueError(f"O valor dos campos inicial e final deve ser menor ou igual ao máximo de cartelas ({limite_maximo_cartelas}).")
+
+            total_cartelas_solicitadas = (num_fim_manual - num_ini_manual) + 1
+            
+            if total_cartelas_solicitadas % unidade_de_venda != 0:
+                raise ValueError(f"O intervalo de cartelas ({total_cartelas_solicitadas}) deve ser múltiplo da unidade de venda ({unidade_de_venda}).")
+                
+            quantidade = total_cartelas_solicitadas // unidade_de_venda
+            quantidade_cartelas_atual = total_cartelas_solicitadas
+            valor_total_atual = valor_unitario * quantidade
+            
+            numero_inicial_atual = num_ini_manual
+            numero_final_atual = num_fim_manual
+            numero_inicial2_atual = 0
+            numero_final2_atual = 0
+            
+            # Trava de Conflito de Período
+            conflito = db[nome_colecao_venda].find_one({
+                '$or': [
+                    {'numero_inicial': {'$lte': numero_final_atual}, 'numero_final': {'$gte': numero_inicial_atual}},
+                    {'numero_inicial2': {'$lte': numero_final_atual}, 'numero_final2': {'$gte': numero_inicial_atual}}
+                ]
+            })
+            if conflito:
+                raise ValueError(f"Conflito de Venda: O período de cartelas {numero_inicial_atual} a {numero_final_atual} já foi vendido (Venda ID: {conflito.get('id_venda')}).")
+        else:
+            quantidade = int(quantidade_str)
+            if quantidade <= 0: raise ValueError("Quantidade deve ser positiva")
+            
+            quantidade_cartelas_atual = quantidade * unidade_de_venda
+            valor_total_atual = valor_unitario * quantidade
+            
+            numero_inicial_atual = get_next_bilhete_sequence(
+                db, id_evento_int_para_controle, 'inicial_proxima_venda', 
+                quantidade_cartelas_atual, limite_maximo_cartelas
+            )
+            if numero_inicial_atual is None:
+                raise Exception("Falha ao obter o número inicial do bilhete/cartela.")
+
+            if numero_inicial_atual == 1: 
+                numero_inicial_atual = int(selected_event.get('numero_inicial', 1))
+                db.controle_venda.update_one(
+                    {'id_evento': id_evento_int_para_controle},
+                    {'$set': {'inicial_proxima_venda': numero_inicial_atual + quantidade_cartelas_atual}}
+                )
+
+            numero_final_atual = numero_inicial_atual + quantidade_cartelas_atual - 1
+            numero_inicial2_atual = 0
+            numero_final2_atual = 0
+            
+            if numero_final_atual > limite_maximo_cartelas:
+                numero_inicial2_atual = 1
+                numero_final2_atual = numero_final_atual - limite_maximo_cartelas
+                numero_final_atual = limite_maximo_cartelas
+
+    except (TypeError, ValueError, Exception) as e:
+        error_redirect_kwargs['error'] = f"{e}"
+        return redirect(url_for('nova_venda', **error_redirect_kwargs))
+
+    # Identificação de Cliente, Comissão e Regional
+    cliente_doc = db.clientes.find_one({"id_cliente": id_cliente_final})
+    if cliente_doc and cliente_doc.get('id_colaborador'):
+        id_colab_comissao = int(cliente_doc.get('id_colaborador', 0))
+    else:
+        id_colab_comissao = int(session.get('id_colaborador', 0))
+
+    colaborador_id = session.get('id_colaborador', 'N/A')
+    nick_colaborador = session.get('nick', 'Colaborador') 
+    regional_operador = session.get('id_regional', 1)
+    
+    chave_pix_colaborador = "Consulte o Colaborador"
+    try:
+        if colaborador_id != 'N/A':
+            colab_doc = db.colaboradores.find_one({'id_colaborador': int(colaborador_id)})
+            if colab_doc:
+                chave_pix_colaborador = colab_doc.get('chave_pix', chave_pix_colaborador)
+                if not regional_operador:
+                    regional_operador = colab_doc.get('id_regional', 1)
+    except Exception as e:
+        print(f"Erro ao buscar PIX/Regional do colaborador: {e}")
+
+    try:
+        novo_id_venda_int = get_next_global_sequence(db, 'id_vendas_global')
+        if novo_id_venda_int is None:
+            raise Exception("Falha ao gerar o ID sequencial da venda.")
+        id_venda_formatado = f"V{novo_id_venda_int:05d}" 
+
+        registro_venda = {
+            "id_venda": id_venda_formatado,
+            "id_evento_ObjectId": id_evento_mongo, 
+            "id_evento": id_evento_int_para_controle, 
+            "descricao_evento": selected_event.get('descricao'),
+            "id_regional": regional_operador,
+            "id_cliente": id_cliente_final, 
+            "nome_cliente": cliente_doc.get('nick'),
+            "telefone_cliente": cliente_doc.get('telefone',''),
+            "id_colaborador": id_colab_comissao,
+            "nick_colaborador": nick_colaborador,
+            "id_vendedor": colaborador_id,
+            "data_venda": hora_brasil(),
+            "tipo_cartela": int(selected_event.get('tipo_de_cartela', 15)),  
+            "quantidade_unidades": quantidade,
+            "quantidade_cartelas": quantidade_cartelas_atual,
+            "numero_inicial": numero_inicial_atual,
+            "numero_final": numero_final_atual,
+            "numero_inicial2": numero_inicial2_atual,
+            "numero_final2": numero_final2_atual,
+            "valor_unitario": Decimal128(str(valor_unitario)), 
+            "valor_total": Decimal128(str(valor_total_atual)),
+            "origem": "terminal_manual" if is_venda_manual else "terminal_colaborador"
+        }
+        
+        db.clientes.update_one(
+            {"id_cliente": id_cliente_final}, 
+            {"$set": {"data_ultimo_compra": hora_brasil()}}
+        )
+
+        db[nome_colecao_venda].insert_one(registro_venda)
+
+        db.eventos.update_one(
+            {"id_evento": id_evento_int_para_controle},
+            {"$inc": {"valor_pendente_telemovel": float(valor_total_atual)}}
+        )
+
+        # Registro de Comissões
+        taxa_operador = g.parametros_globais.get('perc_venda_direta', 15.0) 
+        registrar_comissao_vendedor(
+            db=db, id_colaborador=colaborador_id, 
+            valor=valor_total_atual * (taxa_operador / 100),
+            tipo='vd', id_evento=id_evento_int_para_controle,
+            id_venda=id_venda_formatado, taxa_aplicada=taxa_operador,
+            descricao=f"Comissão Direta Venda {id_venda_formatado}"
+        )
+
+        id_indicador = cliente_doc.get('id_colaborador')
+        if id_indicador and int(id_indicador) != int(colaborador_id):
+            taxa_indicador = g.parametros_globais.get('perc_venda_indireta_b', 10.0) 
+            registrar_comissao_vendedor(
+                db=db, id_colaborador=id_indicador,
+                valor=valor_total_atual * (taxa_indicador / 100),
+                tipo='ind_b', id_evento=id_evento_int_para_controle,
+                id_venda=id_venda_formatado, taxa_aplicada=taxa_indicador,
+                descricao=f"Comissão Indireta (Cliente Indicado) Venda {id_venda_formatado}"
+            )
+     
+    except Exception as e:
+        print(f"{log_prefix} LOG 5 (ERRO INTERNO): Erro crítico durante a transação: {e}")
+        traceback.print_exc()
+        error_redirect_kwargs['error'] = f"Erro interno no DB: {e}"
+        return redirect(url_for('nova_venda', **error_redirect_kwargs))
+
+    try:
+        tipo_de_cartela = int(selected_event.get('tipo_de_cartela', 15))
+        nome_sala = g.parametros_globais.get('nome_sala', '')
+        data_evento_str = selected_event.get('data_evento', 'N/A')
+        hora_evento_str = selected_event.get('hora_evento', 'N/A')
+        data_evento_formatada = data_evento_str.replace('/', '-') if data_evento_str else 'N/A'
+
+        http_apk = g.parametros_globais.get('http_apk', '')
+        link_final_limpo = f"{http_apk}?idcliente={id_cliente_final}"
+        
+        periodo_atual_html = (
+            f"<strong> > PERÍODO ADQUIRIDO < </strong><br>"
+            f"<span style='font-size: 1.4rem; color: #0047AB;'><strong> > {numero_inicial_atual} a {numero_final_atual}</strong></span><br>"
+        )
+
+        success_msg = (
+            f"<strong>✅COMPROVANTE DE COMPRA</strong><br>"
+            f"  <span style='font-size: 1.2rem; color: #B91C1C;'>{nome_sala}</span><br>"
+            f"</strong>     >  {id_venda_formatado}  < </strong><br>"
+            f"----------------------------<br>"
+            f"Cliente: <strong>{cliente_doc.get('nick')}</strong><br>"
+            f"Evento: {selected_event.get('descricao')}<br>"
+            f"<strong>Data: {data_evento_formatada} às {hora_evento_str}</strong><br>"
+            f"Colaborador:{colaborador_id}-{nick_colaborador}<br>"
+            f"----------------------------<br>"
+            f"{periodo_atual_html}"
+            f"----------------------------<br>"
+            f"Total Unidades: <strong>{quantidade}</strong><br>"
+            f"Total Cartelas: <strong>{quantidade_cartelas_atual}</strong><br>"
+            f"  VALOR TOTAL: <span style='font-size: 1.2rem; color: #B91C1C;'>R$ {valor_total_atual:.2f}</span><br>"
+            f"<br>"
+            f"   🔑   CHAVE PIX   💸<br>"
+            f"   <strong>{chave_pix_colaborador}</strong><br>"
+            f"<br>"
+            f"CLIQUE NO <strong>LINK</strong> ABAIXO PARA<br>"
+            f"    ACESSAR SUAS CARTELAS 📱<br>"
+            f"<br>"
+            f"<strong> {link_final_limpo} </strong>"
+        )
+        
+        session['success_message'] = success_msg 
+        
+        token_seguranca = gerar_token_venda(id_venda_formatado)
+        
+        session['print_data'] = { 
+            'id_venda_recente': id_venda_formatado,
+            'id_cliente_recente': id_cliente_final,
+            'telefone_cliente': cliente_doc.get('telefone', ''),
+            'id_evento': id_evento_int_para_controle,
+            'nome_cliente': cliente_doc.get('nick'),
+            'numero_inicial': numero_inicial_atual,
+            'numero_final': numero_final_atual,
+            'tipo_cartela': tipo_de_cartela,
+            'token': token_seguranca 
+        }
+        
+        return redirect(url_for('nova_venda', id_evento=id_evento_string))
+
+    except Exception as e:
+        print(f"{log_prefix} LOG 7 (ERRO PÓS-VENDA): Erro ao montar comprovante: {e}")
+        session['success_message'] = f"<strong>VENDA {id_venda_formatado} GRAVADA!</strong>"
+        return redirect(url_for('nova_venda', id_evento=id_evento_string))
+
+@app.route('/processar_venda_old', methods=['POST'])
+@login_required
+def processar_venda_old():
+    """
+    Processo Crítico de Venda - ATUALIZADO para arquitetura Multirregional.
+    INCLUI TRAVA DE SEGURANÇA DE STATUS DO EVENTO.
+    MOTOR ATÓMICO (Sem Locks).
+    """
+    db = get_vendas_db()
+    if db is None: 
+        return redirect(url_for('nova_venda', error="DB Offline. Transação Crítica Falhou."))
+
+    # Captura dos parâmetros do formulário
+    id_evento_string = request.form.get('id_evento') 
+    id_cliente_final_str = request.form.get('id_cliente_final') 
+    quantidade_str = request.form.get('quantidade', '0')
+    
+    # Captura os campos manuais
+    kit_inicial_manual = request.form.get('numero_inicial_manual')
+    kit_final_manual = request.form.get('numero_final_manual')
+    is_venda_manual = bool(kit_inicial_manual and str(kit_inicial_manual).strip() != '')
+   
+    log_prefix = f"[VENDA {'MANUAL' if is_venda_manual else 'SEQ'}_COLAB:{session.get('nick', 'N/A')}]"
     
     error_redirect_kwargs = {
         'id_evento': id_evento_string,
@@ -2838,8 +3127,14 @@ def processar_venda():
 
     try:
         id_cliente_final = int(id_cliente_final_str)
-        quantidade = int(quantidade_str)
-        if quantidade <= 0: raise ValueError("Quantidade deve ser positiva")
+        
+        # 🚀 CORREÇÃO AQUI: Se for venda manual, não exigimos a quantidade clássica > 0 neste momento
+        if not is_venda_manual:
+            quantidade = int(quantidade_str)
+            if quantidade <= 0: raise ValueError("Quantidade deve ser positiva b")
+        else:
+            quantidade = 0 # Será calculada logo abaixo através do intervalo de cartelas
+            
     except (TypeError, ValueError) as e:
         error_redirect_kwargs['error'] = f"Dados inválidos: {e}"
         return redirect(url_for('nova_venda', **error_redirect_kwargs))
