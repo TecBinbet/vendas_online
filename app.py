@@ -3934,7 +3934,6 @@ def processar_venda_multi():
                 )
 
             numero_final_atual = numero_inicial_atual + quantidade_cartelas - 1
-            
             # Lida com a virada de lote (Se o número final passar do máximo)
             numero_inicial2_atual = 0
             numero_final2_atual = 0
@@ -3967,17 +3966,14 @@ def processar_venda_multi():
                 "valor_unitario": Decimal128(str(item['valor_unitario'])), 
                 "valor_total": Decimal128(str(subtotal)),
                 "origem": "terminal_multi"
-            }
-            
+            }            
             # Grava a fatia na coleção específica do evento
             db[f"vendas{id_evento_int}"].insert_one(registro_venda)
-            
             # Atualiza o saldo pendente do evento
             db.eventos.update_one(
                 {"id_evento": id_evento_int},
                 {"$inc": {"valor_pendente_telemovel": subtotal}}
             )
-
             # Monta o visual para o recibo HTML do Carrinho
             html_fatiamento_recibo += f"<div style='margin-bottom: 4px; border-bottom: 1px dotted #ccc; padding-bottom: 4px;'>"
             html_fatiamento_recibo += f"<strong>[{id_evento_int}] {evento_db.get('descricao')}</strong><br>"
@@ -3993,7 +3989,6 @@ def processar_venda_multi():
                 {"id_cliente": id_cliente_final}, 
                 {"$set": {"data_ultimo_compra": hora_brasil()}}
             )
-
         # ==========================================================
         # 🚀 NOVO: GRAVAÇÃO DO CABEÇALHO DA VENDA MULTI (Pai)
         # ==========================================================
@@ -4080,13 +4075,11 @@ def processar_venda_multi():
         session['success_message'] = f"<strong>VENDA {id_venda_formatado} GRAVADA!</strong> (Erro no recibo visual)."
         return redirect(url_for('venda_multi'))
 
-
 @app.route('/api/ultimas_vendas_multi')
 @login_required
 def ultimas_vendas_multi():
     db = get_vendas_db()
     colab_id = session.get('id_colaborador')
-    
     try:
         # Busca as últimas 7 vendas multi feitas por quem está logado no caixa
         vendas = list(db.vendas_multi.find({"id_colaborador": colab_id}).sort([("_id", -1)]).limit(7))       
@@ -4098,7 +4091,6 @@ def ultimas_vendas_multi():
     except Exception as e:
         return jsonify([]) # Retorna vazio em caso de erro para não quebrar a tela
 
-
 # --- ROTAS DE CADASTRO DE CLIENTE ---
 @app.route('/buscar_clientes_json', methods=['GET'])
 @login_required
@@ -4108,7 +4100,6 @@ def buscar_clientes_json():
     
     termo = request.args.get('termo', '').strip()
     tipo = request.args.get('tipo', 'nick')
-    
     if not termo or len(termo) < 2:
         return jsonify([])
 
@@ -4142,14 +4133,12 @@ def aplicar_cortesia_evento(id_evento):
     """
     from bson import Decimal128 
     import pymongo # Necessário para a ordenação descendente
-
     if session.get('nivel', 0) < 3:
         return jsonify({'status': 'error', 'message': '⛔ Acesso Negado.'}), 403
 
     db = get_vendas_db()
     if db is None:
         return jsonify({'status': 'error', 'message': 'Banco de Dados Offline.'}), 500
-
     try:
         qtd_cortesia = int(request.form.get('qtd_cortesia', 0))
         if qtd_cortesia <= 0:
@@ -4308,7 +4297,6 @@ def listar_cortesias_pendentes(id_evento):
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
-
 @app.route('/api/marcar_envio_cortesia', methods=['POST'])
 @login_required
 def marcar_envio_cortesia():
@@ -4331,7 +4319,6 @@ def marcar_envio_cortesia():
         return jsonify({'status': 'success'})
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
-
 
 # Consulta de Cliente
 # No seu arquivo app.py
@@ -4400,7 +4387,6 @@ def buscar_clientes():
     except Exception as e:
         print(f"❌ Erro na busca dinâmica: {e}") # LOG
         return jsonify({'clientes': [], 'error': str(e)})
-
 
 @app.route('/cadastro_cliente', methods=['GET'])
 @login_required
@@ -4614,7 +4600,6 @@ def resetar_senha_cliente(id_cliente):
     except Exception as e:
         print(f"Erro ao resetar senha do cliente {id_cliente}: {e}")
         return redirect(url_for('cadastro_cliente', view='alterar', id_cliente=id_cliente, error="Erro interno ao resetar senha."))
-
 
 @app.route('/gravar_cliente', methods=['POST'])
 @login_required
