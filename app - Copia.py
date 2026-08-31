@@ -1120,41 +1120,6 @@ def format_title_case(s):
     if not s: return ""
     return s.strip().title()
 
-def formatar_telefone_padrao(db, telefone_raw):
-    """
-    Formata o telefone para o padrão: (11) 66889-9885.
-    Se o DDD estiver ausente (8 ou 9 dígitos), busca o 'dd_local' nos parâmetros 
-    (ou assume '11' por padrão).
-    """
-    digitos = clean_numeric_string(telefone_raw)
-    
-    if not digitos:
-        return ""
-
-    # Se veio sem DDD (apenas o número local com 8 ou 9 dígitos)
-    if len(digitos) in [8, 9]:
-        # Busca o DDD local configurado nos parâmetros, padrão '11'
-        try:
-            parametros = db.parametros.find_one({}) or {}
-            dd_padrao = str(parametros.get('dd_local', '11')).strip()
-            if not dd_padrao:
-                dd_padrao = '11'
-        except Exception:
-            dd_padrao = '11'
-            
-        digitos = dd_padrao + digitos
-
-    # Formatação padrão para 11 dígitos (Com 9º dígito: (XX) XXXXX-XXXX)
-    if len(digitos) == 11:
-        return f"({digitos[0:2]}) {digitos[2:7]}-{digitos[7:11]}"
-    
-    # Formatação padrão para 10 dígitos (Fixo ou celular antigo: (XX) XXXX-XXXX)
-    elif len(digitos) == 10:
-        return f"({digitos[0:2]}) {digitos[2:6]}-{digitos[6:10]}"
-    
-    # Retorna o original limpo caso venha com tamanho atípico
-    return telefone_raw
-
 def clean_numeric_string(s):
     """Remove caracteres não-numéricos de uma string (para CPF/Telefone)."""
     if not s: return ""
@@ -2275,7 +2240,7 @@ def salvar_auto_cadastro_colaborador():
         # 1. Higienização idêntica à rota de referência
         nome_colaborador = formatar_nome_proprio(request.form.get('nome_completo'))
         nick = formatar_nome_proprio(request.form.get('nick'))
-        telefone = formatar_telefone_padrao(db, request.form.get('telefone'))
+        telefone = clean_numeric_string(request.form.get('telefone'))
         cpf_raw = request.form.get('cpf')
         cpf = clean_numeric_string(cpf_raw) if cpf_raw else ''
         cidade = format_title_case(request.form.get('cidade'))
@@ -2395,7 +2360,7 @@ def gravar_colaborador():
         # Captura dos campos
         nome_colaborador = formatar_nome_proprio(request.form.get('nome_colaborador'))
         nick = formatar_nome_proprio(request.form.get('nick'))
-        telefone = formatar_telefone_padrao(db, request.form.get('telefone'))
+        telefone = clean_numeric_string(request.form.get('telefone'))
         cpf_raw = request.form.get('cpf')
         cidade = format_title_case(request.form.get('cidade'))
         chave_pix = request.form.get('chave_pix', '').strip().lower()
@@ -4361,12 +4326,19 @@ def marcar_envio_cortesia():
 @app.route('/buscar_clientes', methods=['GET'])
 @login_required
 def buscar_clientes():
+    """
+    Rota API para busca dinâmica de clientes.
+    AJUSTADA PARA BUSCAR APENAS O INÍCIO DA PALAVRA (STARTSWITH)
+    INCLUI 'id_colaborador' PARA TRAVA DE SEGURANÇA.
+    """
     db = get_vendas_db()
     if db is None: 
         return jsonify({'clientes': [], 'error': 'DB Offline'})
 
     termo = request.args.get('termo', '').strip()
-    tipo_busca = request.args.get('tipo', 'nick') # nick, nome, id, telefone
+    tipo_busca = request.args.get('tipo', 'nick') # nick, nome, id
+    
+    #print(f"🔍 DEBUG BUSCA - Termo: '{termo}', Tipo: '{tipo_busca}'") # LOG
     
     if not termo or len(termo) < 2: 
          return jsonify({'clientes': []})
@@ -4385,44 +4357,26 @@ def buscar_clientes():
             regex_term = re.compile(f"^{re.escape(termo)}", re.IGNORECASE)
             query_filter = {'nome_cliente': {'$regex': regex_term}}
             
-        elif tipo_busca == 'telefone':
-            # 1. Limpa o termo digitado, mantendo apenas os números
-            termo_limpo = re.sub(r'\D', '', termo)
-            
-            # Se o operador digitou apenas o número local (sem DDD), podemos opcionalmente 
-            # injetar o dd_local padrão para facilitar a busca exata
-            if len(termo_limpo) in [8, 9]:
-                try:
-                    parametros = db.parametros.find_one({}) or {}
-                    dd_padrao = str(parametros.get('dd_local', '11')).strip()
-                    termo_limpo_com_dd = dd_padrao + termo_limpo
-                except Exception:
-                    termo_limpo_com_dd = termo_limpo
-            else:
-                termo_limpo_com_dd = termo_limpo
-
-            # 2. Como o banco agora guarda formatado ex: "(11) 66889-9885", 
-            # criamos uma regex flexível que ignora espaços, parênteses e traços entre os dígitos.
-            # Ex: se termo_limpo_com_dd for "11668899885", a regex aceita símbolos no meio.
-            regex_pattern = ".*".join(list(termo_limpo_com_dd))
-            query_filter = {'telefone': {'$regex': regex_pattern, '$options': 'i'}}
-            
         else: # Padrão: 'nick'
             regex_term = re.compile(f"^{re.escape(termo)}", re.IGNORECASE)
             query_filter = {'nick': {'$regex': regex_term}}
             
         clientes_cursor = db.clientes.find(
             query_filter, 
+            # 🚀 CORREÇÃO 1: Faltava o 'telefone': 1 aqui! E adicionei 'nome_colaborador'.
             {'id_cliente': 1, 'nome_cliente': 1, 'nick': 1, 'cidade': 1, 'id_colaborador': 1, 'telefone': 1, 'nome_colaborador': 1}
         ).limit(10)
         
         resultados = []
         for cli in clientes_cursor:
+            telefone_bd = cli.get('telefone', '')
+            #print(f"✅ DEBUG DB - Achou: {cli.get('nick')} | Tel: {telefone_bd}") # LOG
+            
             resultados.append({
                 'id': cli.get('id_cliente'),
                 'nome': cli.get('nome_cliente'),
                 'nick': cli.get('nick'),
-                'telefone': cli.get('telefone', ''),  
+                'telefone': telefone_bd,  
                 'id_colaborador': cli.get('id_colaborador', 0),
                 'nome_colaborador': cli.get('nome_colaborador', 'S/C'),
                 'cidade': cli.get('cidade', 'N/A')
@@ -4431,7 +4385,7 @@ def buscar_clientes():
         return jsonify({'clientes': resultados})
 
     except Exception as e:
-        print(f"Erro na busca dinâmica de clientes por telefone: {e}")
+        print(f"❌ Erro na busca dinâmica: {e}") # LOG
         return jsonify({'clientes': [], 'error': str(e)})
 
 @app.route('/cadastro_cliente', methods=['GET'])
@@ -4672,7 +4626,7 @@ def gravar_cliente():
 
         nome_cliente = formatar_nome_proprio(request.form.get('nome_cliente'))
         nick = formatar_nome_proprio(request.form.get('nick'))
-        telefone = formatar_telefone_padrao(db, request.form.get('telefone'))
+        telefone = clean_numeric_string(request.form.get('telefone'))
         cpf_raw = request.form.get('cpf')
         cidade = format_title_case(request.form.get('cidade'))
         chave_pix = request.form.get('chave_pix', '').strip().lower()
@@ -5063,7 +5017,7 @@ def salvar_auto_cadastro():
         # 2. Coleta de Dados (com tratamento seguro para None)
         nome_cliente = format_title_case(request.form.get('nome_cliente'))
         nick = format_title_case(request.form.get('nick'))
-        telefone = formatar_telefone_padrao(db, request.form.get('telefone'))
+        telefone = clean_numeric_string(request.form.get('telefone'))
         cpf_raw = request.form.get('cpf')
         cidade = format_title_case(request.form.get('cidade'))
         chave_pix = request.form.get('chave_pix', '').strip()
@@ -5561,76 +5515,6 @@ def excluir_evento(id_evento):
         traceback.print_exc()
         return redirect(url_for('cadastro_evento', error=f"Erro interno ao excluir evento: {e}", view='listar'))
 
-def gerenciar_limite_eventos_db(db):
-    """
-    Controla o limite de eventos gravados com base nos parâmetros:
-    - qtdeLimiteEventos: Teto máximo de eventos permitidos na base.
-    - qtdeEventosEliminar: Quantidade de eventos mais antigos a serem expurgados quando o teto for atingido.
-    """
-    try:
-        # 1. Busca os parâmetros globais do sistema
-        parametros = db.parametros.find_one({}) or {}
-        
-        # Pega os valores configurados ou assume padrões seguros (ex: limite de 2000, elimina 200)
-        qtde_limite = int(parametros.get('qtdeLimiteEventos', 2000))
-        qtde_eliminar = int(parametros.get('qtdeEventosEliminar', 200))
-        
-        # 2. Conta o total de eventos atuais na base de dados
-        total_eventos = db.eventos.count_documents({})
-        
-        # 3. Se ultrapassou o limite configurado, aciona a limpeza automática
-        if total_eventos >= qtde_limite:
-            print(f"[ALERTA DB] Total de eventos ({total_eventos}) atingiu ou ultrapassou o limite de {qtde_limite}. Iniciando expurgo FIFO...")
-            
-            # 4. Seleciona os eventos mais antigos que já estão com status 'finalizado'
-            candidatos = db.eventos.find(
-                {'status': 'finalizado'},
-                {'id_evento': 1}
-            ).sort('data_hora_evento', ASCENDING).limit(qtde_eliminar)
-            
-            ids_para_excluir = [ev['id_evento'] for ev in candidatos]
-            
-            if ids_para_excluir:
-                print(f"[LIMPEZA DB] Removendo lote de {len(ids_para_excluir)} eventos finalizados mais antigos.")
-                
-                for id_alvo in ids_para_excluir:
-                    # Remove o documento do evento
-                    db.eventos.delete_one({'id_evento': id_alvo})
-                    
-                    # Remove todas as coleções e tabelas de apoio vinculadas a este evento
-                    for col_dinamica in [
-                        f"vendas{id_alvo}", 
-                        f"vendas_sorte_extra{id_alvo}", 
-                        f"pagamentos{id_alvo}", 
-                        f"snapshot_vendas_{id_alvo}"
-                    ]:
-                        if col_dinamica in db.list_collection_names():
-                            db[col_dinamica].drop()
-                            
-                    db.resultados.delete_many({'id_evento': id_alvo})
-                    db.controle_venda.delete_many({'id_evento': id_alvo})
-                
-                # 5. Atualiza a matriz de controle 'PeriodoEventosAtivos' nos parâmetros
-                periodo_ativos = parametros.get('PeriodoEventosAtivos', [])
-                if periodo_ativos:
-                    novo_periodo = [i for i in periodo_ativos if i not in ids_para_excluir]
-                    novo_id_inicial = novo_periodo[0] if novo_periodo else 1
-                    novo_id_final = novo_periodo[-1] if novo_periodo else 1
-                    
-                    db.parametros.update_one(
-                        {},
-                        {'$set': {
-                            'PeriodoEventosAtivos': novo_periodo,
-                            'id_inicial_ativo': novo_id_inicial,
-                            'id_final_ativo': novo_id_final
-                        }}
-                    )
-                print("[LIMPEZA DB] Processo de expurgo concluído com sucesso.")
-                
-    except Exception as e:
-        print(f"[ERRO LIMPEZA DB] Falha ao gerenciar o limite de eventos: {e}")
-
-
 @app.route('/gravar_evento', methods=['POST'])
 @login_required
 def gravar_evento():
@@ -5641,6 +5525,9 @@ def gravar_evento():
         return redirect(url_for('menu_operacoes', error="Acesso Negado."))
 
     id_evento_edicao = request.form.get('id_evento_edicao') 
+    
+    # 🚨 DEDO-DURO: Monitore seu terminal para ver o valor exato vindo do HTML
+    #print("🛑 LOG 1 - DADOS RECEBIDOS DO HTML:", dict(request.form))
     
     def clean_float_input(form_key, default_value='0'):
         value_raw = request.form.get(form_key, default_value)
@@ -5653,19 +5540,24 @@ def gravar_evento():
         hora_evento = request.form.get('hora_evento')
         descricao = format_title_case(request.form.get('descricao'))
         
+        # 🚀 PROCESSAMENTO BLINDADO: Captura e garante o tipo inteiro purificado
         unidade_raw = str(request.form.get('unidade_de_venda', '1')).strip()
         unidade_de_venda = int(unidade_raw) if unidade_raw.isdigit() else 1
+        
+        #print(f"🛑 LOG 2 - VARIÁVEL PYTHON: unidade_de_venda={unidade_de_venda} | Tipo: {type(unidade_de_venda)}")
 
         tipo_de_cartela = int(request.form.get('tipo_de_cartela', 15)) 
         tipo_de_evento = request.form.get('tipo_de_evento', 'Normal') 
         tipo_premiacao = request.form.get('tipo_premiacao', 'Fixa')
         
+        # 🚀 Captura do COMBO
         try:
             combo_qtde = int(request.form.get('combo_qtde', 1))
             if combo_qtde < 1: combo_qtde = 1
         except ValueError:
             combo_qtde = 1
 
+        # --- LÓGICA DE CARTELA E NÚMERO MÁXIMO ---
         if tipo_de_cartela == 25:
             premio_faltaum = 0.0
             premio_segundobingo = 0.0
@@ -5685,6 +5577,7 @@ def gravar_evento():
         except:
             numero_maximo = default_max
         
+        # Captura financeira
         valor_de_venda = clean_float_input('valor_de_venda')
         premio_quadra = clean_float_input('premio_quadra')
         premio_linha = clean_float_input('premio_linha')
@@ -5697,14 +5590,16 @@ def gravar_evento():
         minimo_terminal = int(request.form.get('minimo_terminal', 6))
         maximo_terminal = int(request.form.get('maximo_terminal', 1200))  
 
-        tipo_transmissao = request.form.get('tipo_transmissao', 'Digital')
-    
         bola_tope_acumulado = int(request.form.get('bola_tope_acumulado', 0)) 
 
+        # =====================================================================
+        # 🚀 VALIDAÇÃO DE SEGURANÇA (BACKEND): Número Inicial vs Unidade
+        # =====================================================================
         if numero_inicial > numero_maximo:
             raise ValueError(f"O número inicial ({numero_inicial}) não pode ser maior que o limite da cartela ({numero_maximo}).")
 
         if unidade_de_venda > 1 and (numero_inicial - 1) % unidade_de_venda != 0:
+            # Descobre sugestão válida para informar no erro
             val_anterior = numero_inicial
             while (val_anterior - 1) % unidade_de_venda != 0 and val_anterior > 0:
                 val_anterior -= 1
@@ -5722,6 +5617,7 @@ def gravar_evento():
                 sugestao = f"Tente {val_proximo}."
                 
             raise ValueError(f"Falha de Validação: O número inicial deve ser múltiplo da unidade ({unidade_de_venda}) + 1. {sugestao}")
+        # =====================================================================
 
         try:
             distribuir_cortesia = int(request.form.get('distribuir_cortesia', 0))
@@ -5730,6 +5626,7 @@ def gravar_evento():
         except ValueError:
             distribuir_cortesia = 0
 
+        # Verificação explícita sem usar all() para evitar falsos-negativos com o número zero
         if not data_evento_str or not hora_evento or not descricao:
              raise ValueError("Preencha todos os campos obrigatórios (*).")
 
@@ -5744,10 +5641,9 @@ def gravar_evento():
             "hora_evento": hora_evento, 
             "data_hora_evento": data_hora_evento_dt, 
             "descricao": descricao,
-            "unidade_de_venda": int(unidade_de_venda),
+            "unidade_de_venda": int(unidade_de_venda), # Força a tipagem estrita aqui
             "tipo_de_cartela": tipo_de_cartela, 
             "tipo_de_evento": tipo_de_evento,
-            "tipo_transmissao": tipo_transmissao,
             "tipo_premiacao": tipo_premiacao,
             "valor_de_venda": Decimal128(str(valor_de_venda)),
             "numero_inicial": numero_inicial,
@@ -5770,8 +5666,15 @@ def gravar_evento():
             "combo_qtde": combo_qtde 
         }
         
+        #print(f"🛑 LOG 3 - DICIONÁRIO PRONTO PARA GRAVAR: unidade_de_venda={dados_evento.get('unidade_de_venda')}")
+
         if id_evento_edicao:
             db.eventos.update_one({'id_evento': int(id_evento_edicao)}, {'$set': dados_evento})
+            
+            # Leitura imediata de auditoria
+            evento_audit = db.eventos.find_one({'id_evento': int(id_evento_edicao)})
+            #print(f"🛑 LOG 4 (UPDATE) - LEITURA DIRETA NO MONGODB APÓS SALVAR: unidade={evento_audit.get('unidade_de_venda')}")
+            
             success_msg = f"Evento ID: {id_evento_edicao} atualizado com sucesso!"
             return redirect(url_for('cadastro_evento', success=success_msg, view='listar'))
         else:
@@ -5784,22 +5687,9 @@ def gravar_evento():
             })
             db.eventos.insert_one(dados_evento)
 
-            # 🚀 ATUALIZAÇÃO DA MATRIZ DE CONTROLE NOS PARÂMETROS E LIMPEZA AUTOMÁTICA
-            db.parametros.update_one(
-                {},
-                {
-                    '$push': {'PeriodoEventosAtivos': novo_id},
-                    '$set': {'id_final_ativo': novo_id}
-                },
-                upsert=True
-            )
-            db.parametros.update_one(
-                {'id_inicial_ativo': {'$exists': False}},
-                {'$set': {'id_inicial_ativo': novo_id}}
-            )
-            
-            # Aciona a verificação/limpeza baseada em qtdeLimiteEventos e qtdeEventosEliminar
-            gerenciar_limite_eventos_db(db)
+            # Leitura imediata de auditoria
+            evento_audit = db.eventos.find_one({'id_evento': novo_id})
+            #print(f"🛑 LOG 4 (INSERT) - LEITURA DIRETA NO MONGODB APÓS SALVAR: unidade={evento_audit.get('unidade_de_venda')}")
 
             nome_colecao_vendas = f"vendas{novo_id}"
             try:
@@ -5823,6 +5713,7 @@ def gravar_evento():
         session['form_data'] = dict(request.form)
         view_redirect = 'alterar' if id_evento_edicao else 'novo'
         return redirect(url_for('cadastro_evento', error=f"{e}", view=view_redirect, id_evento=id_evento_edicao))
+
 
 @app.route('/consulta_vendas', methods=['GET'])
 @login_required
@@ -10864,42 +10755,6 @@ def registrar_log(acao, categoria, detalhes, alvo_id=None):
         except Exception as e:
             print(f"Erro ao gravar log: {e}")
 
-@app.route('/api/cartelas_compradas_cliente', methods=['GET'])
-@login_required
-def api_cartelas_compradas_cliente():
-    db = get_vendas_db()
-    if db is None:
-        return jsonify({'total_cartelas': 0})
-    
-    id_cliente = request.args.get('id_cliente')
-    id_evento_mongo = request.args.get('id_evento')
-    
-    if not id_cliente or not id_evento_mongo:
-        return jsonify({'total_cartelas': 0})
-        
-    try:
-        evento = db.eventos.find_one({'_id': try_object_id(id_evento_mongo)})
-        if not evento:
-            return jsonify({'total_cartelas': 0})
-            
-        id_evento_int = evento.get('id_evento')
-        nome_colecao_venda = f"vendas{id_evento_int}"
-        
-        # Agrega e soma todas as cartelas compradas por este cliente neste evento
-        pipeline = [
-            {'$match': {'id_cliente': int(id_cliente)}},
-            {'$group': {'_id': None, 'total': {'$sum': '$quantidade_cartelas'}}}
-        ]
-        
-        resultado = list(db[nome_colecao_venda].aggregate(pipeline))
-        total_comprado = resultado[0]['total'] if resultado else 0
-        
-        return jsonify({'total_cartelas': int(total_comprado)})
-        
-    except Exception as e:
-        print(f"Erro ao buscar histórico do cliente: {e}")
-        return jsonify({'total_cartelas': 0, 'error': str(e)})
-
 # --- ROTA DE VISUALIZAÇÃO ---
 @app.route('/admin/auditoria')
 @login_required
@@ -11571,89 +11426,6 @@ def manutencao_clientes_regional():
         return f"<h1>Erro Fatal:</h1><p>{str(e)}</p>"
 
 
-# >>>  http://localhost:5001/migrar_telefones_padrao
-@app.route('/migrar_telefones_padrao')
-@login_required
-def migrar_telefones_padrao():
-    """
-    Rota de manutenção provisória:
-    Padroniza todos os telefones de 'clientes' e 'colaboradores' para: (XX) XXXXX-XXXX
-    Preenche campos vazios/ausentes com: (11) 22222-3333
-    """
-    if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
-
-    db = get_vendas_db()
-    if db is None:
-        return "Erro: DB Offline."
-
-    # Busca o DDD padrão configurado nos parâmetros
-    parametros = db.parametros.find_one({}) or {}
-    dd_padrao = str(parametros.get('dd_local', '11')).strip() or '11'
-    
-    telefone_fallback = "(11) 22222-3333"
-
-    def formatar_ou_fallback(tel_raw):
-        if not tel_raw:
-            return telefone_fallback
-            
-        digitos = re.sub(r'\D', '', str(tel_raw))
-        if not digitos:
-            return telefone_fallback
-
-        # Se veio sem DDD (8 ou 9 dígitos), anexa o DDD padrão
-        if len(digitos) in [8, 9]:
-            digitos = dd_padrao + digitos
-
-        # Formatação
-        if len(digitos) == 11:
-            return f"({digitos[0:2]}) {digitos[2:7]}-{digitos[7:11]}"
-        elif len(digitos) == 10:
-            return f"({digitos[0:2]}) {digitos[2:6]}-{digitos[6:10]}"
-        
-        # Se os dígitos forem inválidos/incompletos
-        return telefone_fallback
-
-    total_clientes_atualizados = 0
-    total_colaboradores_atualizados = 0
-
-    try:
-        # 1. Ajuste em Clientes
-        clientes = db.clientes.find({})
-        for cli in clientes:
-            tel_atual = cli.get('telefone', '')
-            tel_formatado = formatar_ou_fallback(tel_atual)
-            
-            if tel_atual != tel_formatado:
-                db.clientes.update_one(
-                    {'_id': cli['_id']},
-                    {'$set': {'telefone': tel_formatado}}
-                )
-                total_clientes_atualizados += 1
-
-        # 2. Ajuste em Colaboradores
-        colaboradores = db.colaboradores.find({})
-        for colab in colaboradores:
-            tel_atual = colab.get('telefone', '')
-            tel_formatado = formatar_ou_fallback(tel_atual)
-            
-            if tel_atual != tel_formatado:
-                db.colaboradores.update_one(
-                    {'_id': colab['_id']},
-                    {'$set': {'telefone': tel_formatado}}
-                )
-                total_colaboradores_atualizados += 1
-
-        msg = (
-            f"✅ <b>Migração concluída com sucesso!</b><br><br>"
-            f"• <b>Clientes atualizados:</b> {total_clientes_atualizados}<br>"
-            f"• <b>Colaboradores atualizados:</b> {total_colaboradores_atualizados}<br>"
-            f"• <b>Telefone padrão para vazios:</b> {telefone_fallback}"
-        )
-        return msg
-
-    except Exception as e:
-        return f"❌ Erro durante a migração: {e}"
 
 #########################################################
 if __name__ == '__main__':

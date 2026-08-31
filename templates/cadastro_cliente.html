@@ -338,6 +338,7 @@
                 
                 <div class="search-type-selector">
                     <label><input type="radio" name="search_type" value="nick" checked onchange="clearSearch()"> Nick</label>
+                    <label><input type="radio" name="search_type" value="telefone" onchange="clearSearch()"> Telefone</label>
                     <label><input type="radio" name="search_type" value="nome" onchange="clearSearch()"> Nome</label>
                     <label><input type="radio" name="search_type" value="id" onchange="clearSearch()"> ID</label>
                 </div>
@@ -838,7 +839,7 @@
             try {
                 const idEdicao = document.querySelector('input[name="id_cliente"]')?.value || '';
                 // Usamos a rota de busca existente passando o tipo telefone
-                const response = await fetch(`/buscar_clientes?termo=${tel}&tipo=tel`);
+                const response = await fetch(`/buscar_clientes?termo=${tel}&tipo=telefone`);
                 const data = await response.json();
                 
                 if (data.clientes && data.clientes.length > 0) {
@@ -917,7 +918,6 @@
             resultsDiv.style.display = 'block';
             resultsDiv.innerHTML = '<div class="p-2 text-gray-500 text-center text-xs">Buscando...</div>';
 
-            // 🚀 Captura os dados de segurança do operador logado xxx
             const nivelLogado = parseInt('{{ nivel | default(1) }}', 10);
             const idLogado = '{{ id_logado | string }}';
             try {
@@ -930,22 +930,23 @@
                         const div = document.createElement('div');
                         div.className = 'search-result-item p-2 border-b border-gray-100 transition';
                         
-                        // 🚀 TRAVA DE ACESSO
                         const donoDoCliente = String(cli.id_colaborador);
                         const podeEditar = (nivelLogado >= 3 || donoDoCliente === idLogado);
+                        
+                        // Exibe o telefone do cliente caso exista
+                        const telFormatado = cli.telefone ? ` | Tel: ${cli.telefone}` : '';
                         
                         if (podeEditar) {
                             div.innerHTML = `
                                 <div class="flex justify-between items-center">
                                     <div>
                                         <div class="font-bold text-blue-800">${cli.nick}</div>
-                                        <div class="text-[10px] text-gray-500">${cli.nome} | ID: ${cli.id}</div>
+                                        <div class="text-[10px] text-gray-500">${cli.nome} | ID: ${cli.id}${telFormatado}</div>
                                     </div>
                                     <span class="text-[10px] text-blue-500 font-bold bg-blue-50 px-2 py-1 rounded shadow-sm">🔎 Selecionar</span>
                                 </div>
                             `;
                             
-                            // 🚀 CORREÇÃO: Em vez de ir para 'alterar', vai para 'consulta' filtrando por este ID exato
                             div.onclick = () => { 
                                 window.location.href = `{{ url_for('cadastro_cliente', view='consulta') }}&search_type=id&query=${cli.id}`; 
                             };
@@ -956,7 +957,7 @@
                                 <div class="flex justify-between items-center opacity-70">
                                     <div>
                                         <div class="font-bold text-gray-800">${cli.nick}</div>
-                                        <div class="text-[10px] text-gray-500">${cli.nome} | ID: ${cli.id}</div>
+                                        <div class="text-[10px] text-gray-500">${cli.nome} | ID: ${cli.id}${telFormatado}</div>
                                     </div>
                                     <span class="text-[10px] text-red-500 font-bold bg-red-50 px-2 py-1 rounded">🔒 Bloqueado</span>
                                 </div>

@@ -173,13 +173,20 @@
                     </h4>
                     <p>Data: <strong>{{ selected_event.data_evento }}</strong> - | - Hora: <strong>{{ selected_event.hora_evento }}</strong></p>
                     <p>Valor Kit: <strong>R$ {{ "%.2f" | format(selected_event.valor_de_venda_float) }}</strong> X Crtlas p/ kit: <strong>{{ selected_event.unidade_de_venda }}</strong></p>
-                    <p class="text-lg text-red-600 -mt-1.5 -mb-2.5 ">  Numeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
+                    
+                    <!-- 🚀 NOVO: EXIBIÇÃO DOS LIMITES DO TERMINAL -->
+                    <div class="-mt-1 -mb-1 bg-white/60 border border-blue-200 rounded p-1 text-xs font-bold text-blue-900 uppercase tracking-widest inline-block mx-auto px-4">
+                        Mín <strong>{{ selected_event.minimo_terminal | default(6) }}</strong> | Máx <strong>{{ selected_event.maximo_terminal | default(1200) }}</strong> de cartelas
+                    </div>
+
+                    <p class="text-lg text-red-600 -mb-2.5 ">  Numeração Atual:  <strong>{{ selected_event.numeracao_atual_display }}</strong></p>
                 </div>
 
                 <div class="form-group relative">
                     <label for="id_cliente_busca">2. Cliente ( Buscar ):</label>
                     <div class="search-type-selector">
                         <label><input type="radio" name="search_type" value="nick" checked onchange="clearSearch()"> Nick (Apelido)</label>
+                        <label><input type="radio" name="search_type" value="telefone" onchange="clearSearch()"> Telefone</label>  
                         <label><input type="radio" name="search_type" value="nome" onchange="clearSearch()"> Nome</label>
                         <label><input type="radio" name="search_type" value="id" onchange="clearSearch()"> ID</label>
                     </div>
@@ -198,6 +205,16 @@
                         <strong>{{ cliente_encontrado.nick }}</strong> - ID: <strong>{{ id_cliente_final }}</strong>
                         <input type="hidden" name="id_cliente_final" id="id_cliente_final_hidden" value="{{ id_cliente_final }}">
                     </div>
+                    <!-- 🚀 NOVO: PAINEL DE CONTROLE E HISTÓRICO DO CLIENTE -->
+<div id="painel-limites-cliente" class="mt-2 bg-blue-50 border border-blue-200 rounded-lg py-1 px-2 shadow-sm hidden">
+    <div class="flex justify-between items-center text-xs font-bold text-blue-900 px-1">
+        <span>Cartelas adquiridas (Evento atual): <span id="qtd-ja-comprada" class="text-base text-blue-700">⏳</span></span>
+        <span>Restantes: <span id="qtd-disponivel" class="text-base text-green-600">...</span></span>
+    </div>
+</div>
+                    <div id="alerta-limite-terminal" class="hidden mt-2 p-3 bg-red-100 border border-red-300 text-red-800 text-sm font-normal rounded shadow-sm text-center">
+                        <!-- Alerta injetado dinamicamente -->
+                    </div>
                 {% endif %}
         </form>
 
@@ -205,13 +222,11 @@
             <div id="confirm-sales-container" style="display: block;">
                 <hr class="my-4 border-gray-300">
                 
-                <!-- 🚀 FORMULÁRIO DE GRAVAÇÃO (INCLUINDO TODOS OS INPUTS) -->
                 <form method="POST" action="{{ url_for('processar_venda') }}" id="confirm-form" class="flex flex-col items-center">
                     <input type="hidden" name="id_cliente_final" value="{{ id_cliente_final }}">
                     <input type="hidden" name="id_evento" value="{{ selected_event._id }}">
 
                     {% if selected_event.status in ['paralisado', 'paralizado'] %}
-                        <!-- 🚦 CAMPOS MANUAIS (EVENTO PARALISADO) -->
                         <div class="bg-yellow-50 border border-yellow-300 p-3 rounded-lg mb-3 shadow-sm w-full">
                             <span class="text-xs font-bold text-yellow-800 uppercase block mb-2 text-center">⚠️ Lançamento Manual por Período</span>
                             <div class="grid grid-cols-2 gap-2">
@@ -239,7 +254,6 @@
                         <input type="hidden" id="quantidade" name="quantidade" value="0">
                         <input type="hidden" id="post_quantidade" value="0">
                     {% else %}
-                        <!-- 🟢 CAMPO SEQUENCIAL (EVENTO ATIVO) -->
                         <div class="form-group mt-1 w-full">
                             <label for="quantidade">3. Quantidade de Unidades:</label>
                             <input type="number" id="quantidade" name="quantidade" 
@@ -375,6 +389,11 @@
         window.Venda_ValorUnitario = parseFloat(rawValor) || 0; 
         window.Venda_UnidadeCartelas = parseInt("{{ selected_event.unidade_de_venda | default(0) }}") || 0;
 
+        // 🚀 VARIÁVEIS GLOBAIS DE LIMITE DE COMPRA
+        window.MaximoTerminal = parseInt("{{ selected_event.maximo_terminal | default(1200) }}") || 1200;
+        window.CartelasJaCompradas = 0;
+        window.LimiteVerificado = false;
+
         const dadosImpressaoStr = '{{ print_data | tojson | safe if print_data else "null" }}';
         const dadosImpressao = dadosImpressaoStr !== "null" ? JSON.parse(dadosImpressaoStr) : null;
 
@@ -413,7 +432,15 @@
                     data.clientes.forEach(cli => {
                         const div = document.createElement('div');
                         div.className = 'search-result-item';
-                        div.innerHTML = `<div class="font-bold text-gray-800">${cli.nick || cli.nome}</div><div class="text-sm text-gray-600">ID: ${cli.id} | ${cli.cidade}</div>`;
+                        
+                        let telFormatado = cli.telefone || '';
+                        
+                        div.innerHTML = `
+                            <div class="font-bold text-gray-800">
+                                  ${cli.nick || cli.nome} <span class="text-xs font-normal text-gray-500">(${telFormatado || 'Sem tel'})</span>
+                            </div>
+                            <div class="text-sm text-gray-600">ID: ${cli.id} | ${cli.cidade}</div>
+                        `;
                         div.onclick = () => selecionarCliente(cli);
                         resultsDiv.appendChild(div);
                     });
@@ -429,6 +456,39 @@
             document.getElementById('main-form').submit();
         }
 
+        // 🚀 FUNÇÃO PARA BUSCAR O HISTÓRICO DE COMPRAS DO CLIENTE
+        async function buscarCartelasCompradas() {
+            const idCliente = document.getElementById('id_cliente_final_hidden').value;
+            const idEvento = document.getElementById('input_id_evento').value;
+            const painelLimites = document.getElementById('painel-limites-cliente');
+            
+            painelLimites.classList.remove('hidden');
+            
+            try {
+                const response = await fetch(`/api/cartelas_compradas_cliente?id_cliente=${idCliente}&id_evento=${idEvento}`);
+                const data = await response.json();
+                
+                window.CartelasJaCompradas = parseInt(data.total_cartelas) || 0;
+                window.LimiteVerificado = true;
+                
+                document.getElementById('qtd-ja-comprada').textContent = window.CartelasJaCompradas;
+                
+                const disponiveis = window.MaximoTerminal - window.CartelasJaCompradas;
+                document.getElementById('qtd-disponivel').textContent = disponiveis > 0 ? disponiveis : 0;
+                
+                // Força a revalidação imediata do limite se o usuário já tiver dados no campo
+                if (document.getElementById('numero_inicial_manual')) {
+                    updateTotalCostManual();
+                } else {
+                    updateTotalCost();
+                }
+                
+            } catch (err) {
+                console.error("Erro ao buscar histórico:", err);
+                document.getElementById('qtd-ja-comprada').textContent = 'Erro';
+            }
+        }
+
         // --- CÁLCULO MODO MANUAL (EVENTO PARALISADO) ---
         function updateTotalCostManual() {
             const inputInicial = document.getElementById('numero_inicial_manual');
@@ -436,6 +496,7 @@
             const divTotalCusto = document.getElementById('total-custo');
             const spanBotaoCusto = document.getElementById('btn-custo-text');
             const btnConfirmar = document.getElementById('btn-confirmar-venda');
+            const alertaLimite = document.getElementById('alerta-limite-terminal');
 
             if (!inputInicial || !inputFinal) return;
 
@@ -444,13 +505,34 @@
 
             let total = 0;
             let qtdKits = 0;
+            let novasCartelas = 0;
 
             if (ini > 0 && fim >= ini) {
-                const totalCartelas = (fim - ini) + 1;
+                novasCartelas = (fim - ini) + 1;
                 const unidadeVenda = window.Venda_UnidadeCartelas || 1;
                 
-                qtdKits = totalCartelas / unidadeVenda;
+                qtdKits = novasCartelas / unidadeVenda;
                 total = qtdKits * window.Venda_ValorUnitario;
+            }
+
+            // 🚀 TRAVA MATEMÁTICA DO LIMITE MÁXIMO
+            if (window.LimiteVerificado && novasCartelas > 0 && (window.CartelasJaCompradas + novasCartelas > window.MaximoTerminal)) {
+                if (alertaLimite) {
+                    alertaLimite.innerHTML = `⛔ <strong>Venda Recusada: Limite Excedido!</strong><br>O máximo permitido para este evento é de <strong>${window.MaximoTerminal}</strong> cartelas por cliente.<br>Este cliente já possui <strong>${window.CartelasJaCompradas}</strong>. Esta tentativa (+${novasCartelas}) excede o teto em <strong>${(window.CartelasJaCompradas + novasCartelas) - window.MaximoTerminal}</strong> cartelas.`;
+                    alertaLimite.classList.remove('hidden');
+                }
+                if (btnConfirmar) {
+                    btnConfirmar.disabled = true;
+                    btnConfirmar.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                if (divTotalCusto) divTotalCusto.style.display = 'none';
+                return; // Impede que o botão fique visível
+            } else {
+                if (alertaLimite) alertaLimite.classList.add('hidden');
+                if (btnConfirmar) {
+                    btnConfirmar.disabled = false;
+                    btnConfirmar.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
             }
 
             const formatado = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -470,11 +552,34 @@
             const divTotalCusto = document.getElementById('total-custo');
             const spanBotaoCusto = document.getElementById('btn-custo-text');
             const btnConfirmar = document.getElementById('btn-confirmar-venda');
+            const alertaLimite = document.getElementById('alerta-limite-terminal');
 
             if (!campoQuantidade) return;
 
             const qtd = parseFloat(campoQuantidade.value) || 0;
             const total = qtd * window.Venda_ValorUnitario;
+            const novasCartelas = qtd * window.Venda_UnidadeCartelas;
+
+            // 🚀 TRAVA MATEMÁTICA DO LIMITE MÁXIMO
+            if (window.LimiteVerificado && novasCartelas > 0 && (window.CartelasJaCompradas + novasCartelas > window.MaximoTerminal)) {
+                if (alertaLimite) {
+                    alertaLimite.innerHTML = `⛔ <strong>Venda Recusada: Limite Excedido!</strong><br>O máximo permitido para este evento é de <strong>${window.MaximoTerminal}</strong> cartelas por cliente.<br>Este cliente já possui <strong>${window.CartelasJaCompradas}</strong>. Esta tentativa (+${novasCartelas}) excede o teto em <strong>${(window.CartelasJaCompradas + novasCartelas) - window.MaximoTerminal}</strong> cartelas.`;
+                    alertaLimite.classList.remove('hidden');
+                }
+                if (btnConfirmar) {
+                    btnConfirmar.disabled = true;
+                    btnConfirmar.classList.add('opacity-50', 'cursor-not-allowed');
+                }
+                if (divTotalCusto) divTotalCusto.style.display = 'none';
+                updateCartelasDisplay();
+                return; // Impede que o botão fique visível
+            } else {
+                if (alertaLimite) alertaLimite.classList.add('hidden');
+                if (btnConfirmar) {
+                    btnConfirmar.disabled = false;
+                    btnConfirmar.classList.remove('opacity-50', 'cursor-not-allowed');
+                }
+            }
 
             if (divTotalCusto) {
                 const formatado = total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -574,6 +679,12 @@
             const inputId = document.getElementById('input_id_evento');
             if (!inputId || !inputId.value) openEventSelector();
             
+            // 🚀 DISPARA A BUSCA DO HISTÓRICO ASSIM QUE A TELA CARREGAR COM O CLIENTE
+            const hiddenIdCli = document.getElementById('id_cliente_final_hidden');
+            if (hiddenIdCli && hiddenIdCli.value && inputId && inputId.value) {
+                buscarCartelasCompradas();
+            }
+
             if (document.getElementById('numero_inicial_manual')) {
                 updateTotalCostManual();
             } else {

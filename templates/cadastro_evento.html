@@ -365,6 +365,16 @@
                     {% endif %} 
 
                     <div class="form-group">
+                        <label for="tipo_transmissao" class="required-label">Tipo de Transmissão:</label>
+                        <select id="tipo_transmissao" name="tipo_transmissao" class="form-control" required>
+                            <option value="Digital" {% if active_view == 'alterar' and evento.get('tipo_transmissao') == 'Digital' %}selected{% endif %}>Digital</option>
+                            <option value="ao Vivo" {% if (active_view == 'alterar' and evento.get('tipo_transmissao') == 'ao Vivo') or active_view != 'alterar' %}selected{% endif %}>ao Vivo</option>
+
+                        </select>
+                        <p class="text-[10px] text-blue-600 font-bold italic -mt-2">Define o formato de transmissão do evento</p>
+                    </div>
+
+                    <div class="form-group">
                         <label for="distribuir_cortesia">Cortesias (Qtd. por Cliente):</label>
                         <input type="number" id="distribuir_cortesia" name="distribuir_cortesia" min="0" step="1" class="form-control"
                                value="{{ evento.get('distribuir_cortesia', 0) }}">
