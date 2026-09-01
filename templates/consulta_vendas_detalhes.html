@@ -530,36 +530,41 @@
             const numeroBuscado = isBuscaNumerica ? parseInt(termo, 10) : null;
 
             linhas.forEach(linha => {
-                // A coluna 0 é a dos Números e a coluna 4 é a do Cliente
+                // Junta todo o texto visível da linha em uma única string em minúsculas
+                const textoLinha = linha.innerText.toLowerCase();
+                
+                // A coluna 0 sempre será a de "Números" na nossa estrutura
                 const textoNumeros = linha.cells[0].innerText.toLowerCase();
-                const textoCliente = linha.cells[4].innerText.toLowerCase();
 
                 let mostrar = false;
 
-                // 1. Busca Padrão de Texto (Nome do cliente ou texto exato)
-                if (textoNumeros.includes(termo) || textoCliente.includes(termo)) {
+                // 1. Busca Padrão de Texto (Nome do cliente, Nick, ID da venda, etc.)
+                if (!isBuscaNumerica && textoLinha.includes(termo)) {
                     mostrar = true;
                 } 
                 // 2. 🚀 A MÁGICA: Busca por Intervalo Numérico
                 else if (isBuscaNumerica) {
-                    // Puxa todos os números que estão escritos na célula 0 (ex: "310 a 312" vira um array [310, 312])
-                    const numerosNaCelula = textoNumeros.match(/\d+/g);
-                    
-                    if (numerosNaCelula && numerosNaCelula.length >= 2) {
-                        const numInicial = parseInt(numerosNaCelula[0], 10);
-                        const numFinal = parseInt(numerosNaCelula[1], 10);
+                    // Primeiro, se o número procurado bater exatamente com algo na linha (ID da venda, etc), mostra.
+                    if (textoLinha.includes(termo)) {
+                        mostrar = true;
+                    } else {
+                        // Se não, faz a busca complexa por intervalo de cartelas
+                        const numerosNaCelula = textoNumeros.match(/\d+/g);
                         
-                        // Verifica se o número buscado está no meio do intervalo (ex: 311 >= 310 E 311 <= 312)
-                        if (numeroBuscado >= numInicial && numeroBuscado <= numFinal) {
-                            mostrar = true;
-                        }
-                        
-                        // BÔNUS: Se a sua cartela tiver numeração dupla ativa, ele verifica o segundo intervalo também
-                        if (numerosNaCelula.length >= 4) {
-                            const numInicial2 = parseInt(numerosNaCelula[2], 10);
-                            const numFinal2 = parseInt(numerosNaCelula[3], 10);
-                            if (numeroBuscado >= numInicial2 && numeroBuscado <= numFinal2) {
+                        if (numerosNaCelula && numerosNaCelula.length >= 2) {
+                            const numInicial = parseInt(numerosNaCelula[0], 10);
+                            const numFinal = parseInt(numerosNaCelula[1], 10);
+                            
+                            if (numeroBuscado >= numInicial && numeroBuscado <= numFinal) {
                                 mostrar = true;
+                            }
+                            
+                            if (numerosNaCelula.length >= 4) {
+                                const numInicial2 = parseInt(numerosNaCelula[2], 10);
+                                const numFinal2 = parseInt(numerosNaCelula[3], 10);
+                                if (numeroBuscado >= numInicial2 && numeroBuscado <= numFinal2) {
+                                    mostrar = true;
+                                }
                             }
                         }
                     }
