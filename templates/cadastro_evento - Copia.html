@@ -317,44 +317,16 @@
                                {% if (active_view == 'alterar' and evento.get('premio_acumulado', 0) <= 0) or (active_view != 'alterar' and default_acumulado <= 0) %}disabled{% endif %}>
                     </div>
 
-                    <div class="form-group border border-gray-200 p-2 rounded-lg bg-gray-50 shadow-sm">
-                        <label class="required-label text-[11px] uppercase tracking-widest text-gray-500 mb-1">Mínimo p/ Cliente</label>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label for="minimo_terminal" class="text-xs font-bold text-gray-600 mb-1 block">Cartelas</label>
-                                <input type="number" id="minimo_terminal" name="minimo_terminal" required min="6" max="600" class="form-control mb-0 font-bold"
-                                       value="{% if active_view == 'alterar' %}{{ evento.get('minimo_terminal', '') }}{% else %}{{ default_minimo }}{% endif %}"
-                                       oninput="sincronizarTerminal('minimo', 'cartela')">
-                            </div>
-                            <div>
-                                <label for="minimo_terminal_monetario" class="text-xs font-bold text-gray-600 mb-1 block">Valor (R$)</label>
-                                <div class="relative">
-                                    <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-blue-500 font-bold">R$</span>
-                                    <input type="number" id="minimo_terminal_monetario" step="0.01" class="form-control mb-0 pl-8 text-blue-700 font-bold bg-white"
-                                           oninput="sincronizarTerminal('minimo', 'dinheiro')">
-                                </div>
-                            </div>
-                        </div>
+                    <div class="form-group">
+                        <label for="minimo_terminal" class="required-label">Qtde. Mínima p/ Terminal Cliente (cartelas):</label>
+                        <input type="number" id="minimo_terminal" name="minimo_terminal" required min="6" max="600" class="form-control"
+                               value="{% if active_view == 'alterar' %}{{ evento.get('minimo_terminal', '') }}{% else %}{{ default_minimo }}{% endif %}">
                     </div>
 
-                    <div class="form-group border border-gray-200 p-2 rounded-lg bg-gray-50 shadow-sm">
-                        <label class="required-label text-[11px] uppercase tracking-widest text-gray-500 mb-1">Máximo p/ Cliente</label>
-                        <div class="grid grid-cols-2 gap-2">
-                            <div>
-                                <label for="maximo_terminal" class="text-xs font-bold text-gray-600 mb-1 block">Cartelas</label>
-                                <input type="number" id="maximo_terminal" name="maximo_terminal" required min="30" max="3000" class="form-control mb-0 font-bold"
-                                       value="{% if active_view == 'alterar' %}{{ evento.get('maximo_terminal', '') }}{% else %}{{ default_maximo }}{% endif %}"
-                                       oninput="sincronizarTerminal('maximo', 'cartela')">
-                            </div>
-                            <div>
-                                <label for="maximo_terminal_monetario" class="text-xs font-bold text-gray-600 mb-1 block">Valor (R$)</label>
-                                <div class="relative">
-                                    <span class="absolute inset-y-0 left-0 flex items-center pl-2 text-blue-500 font-bold">R$</span>
-                                    <input type="number" id="maximo_terminal_monetario" step="0.01" class="form-control mb-0 pl-8 text-blue-700 font-bold bg-white"
-                                           oninput="sincronizarTerminal('maximo', 'dinheiro')">
-                                </div>
-                            </div>
-                        </div>
+                    <div class="form-group">
+                        <label for="maximo_terminal" class="required-label">Qtde. Máxima p/ Terminal Cliente (cartelas):</label>
+                        <input type="number" id="maximo_terminal" name="minimo_terminal" required min="30" max="3000" class="form-control"
+                               value="{% if active_view == 'alterar' %}{{ evento.get('maximo_terminal', '') }}{% else %}{{ default_maximo }}{% endif %}">
                     </div>
 
                     <div class="form-group">
@@ -1293,62 +1265,6 @@ function confirmarExpurgoPeriodo(form) {
             // Passou em todas as validações
             return removerErro();
         }
-
-        // =======================================================
-        // 🚀 SINCRONIZAÇÃO DE TERMINAIS (CARTELA <-> DINHEIRO)
-        // =======================================================
-
-        function obterPrecoPorCartela() {
-            const valorKit = parseFloat(document.getElementById('valor_de_venda')?.value) || 0;
-            const cartelasPorKit = parseInt(document.getElementById('unidade_de_venda')?.value) || 1;
-            if (cartelasPorKit === 0) return 0;
-            return valorKit / cartelasPorKit; // Ex: R$ 10.00 / 5 cartelas = R$ 2.00 cada
-        }
-
-        function sincronizarTerminal(tipo, origem) {
-            const inputCartela = document.getElementById(`${tipo}_terminal`);
-            const inputDinheiro = document.getElementById(`${tipo}_terminal_monetario`);
-            
-            if (!inputCartela || !inputDinheiro) return;
-
-            const precoPorCartela = obterPrecoPorCartela();
-            
-            if (precoPorCartela <= 0) {
-                inputDinheiro.value = '';
-                return;
-            }
-
-            if (origem === 'cartela') {
-                const cartelas = parseInt(inputCartela.value) || 0;
-                const valorCalculado = cartelas * precoPorCartela;
-                inputDinheiro.value = valorCalculado > 0 ? valorCalculado.toFixed(2) : '';
-            } 
-            else if (origem === 'dinheiro') {
-                const dinheiro = parseFloat(inputDinheiro.value) || 0;
-                // Usamos Math.round para evitar números quebrados de cartelas (ex: 7.5 cartelas)
-                const cartelasCalculadas = Math.round(dinheiro / precoPorCartela);
-                inputCartela.value = cartelasCalculadas > 0 ? cartelasCalculadas : '';
-            }
-        }
-
-        function atualizarTodosMonetarios() {
-            sincronizarTerminal('minimo', 'cartela');
-            sincronizarTerminal('maximo', 'cartela');
-        }
-
-        // Se o operador mudar o valor da venda ou a unidade de venda, 
-        // os campos de R$ do terminal devem se autoajustar.
-        document.addEventListener('DOMContentLoaded', () => {
-            const inputValor = document.getElementById('valor_de_venda');
-            const inputUnidade = document.getElementById('unidade_de_venda');
-            
-            if (inputValor) inputValor.addEventListener('input', atualizarTodosMonetarios);
-            if (inputUnidade) inputUnidade.addEventListener('input', atualizarTodosMonetarios);
-            
-            // Força o cálculo inicial ao abrir a tela (útil na edição)
-            setTimeout(atualizarTodosMonetarios, 300);
-        });
-
 
     </script>
 </body>
