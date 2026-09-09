@@ -81,10 +81,10 @@
                 <p class="font-semibold text-lg text-green-900 -mt-1">
                      Premiação: R$ {{ selected_event.premio_total | format_moeda }}
                 </p>
-                <a href="{{ url_for('consulta_vendas') }}" class="text-fm font-bold text-blue-600 hover:underline mt-2 inline-block">← Trocar Evento</a>
+                <a href="{{ url_for('consulta_vendas') }}" class="text-xl font-bold text-blue-600 hover:underline -mt-1 inline-block">← Trocar Evento</a>
             </div>
 
-            {% if nivel >= 3 %}
+            
                 <div class="card">
                     <h3 class="text-xl font-semibold mb-0 text-gray-700">2. Filtrar por Colaborador</h3>
                     <form method="GET" action="{{ url_for('consulta_vendas') }}">
@@ -103,13 +103,12 @@
                         </div>
                     </form>
                 </div>
-
-            {% endif %}
+            
 
             <div class="mt-2">
 
             {% if resumo_geral %}
-                    <div class="card bg-green-100 border border-blue-200 mb-2">
+                    <div class="card bg-white border border-blue-600 mb-2">
                         <h4 class="text-xl font-bold text-blue-800 mb-0">
                             {{ resumo_geral.nick_colaborador }}
                         </h4>
@@ -157,14 +156,15 @@
                             </div>
                         </div>
                         
+                        {% if nivel >= 3 %} 
                         <hr class="my-1">
-                        
                         <a href="{{ url_for('consulta_vendas_detalhes', id_evento=selected_event._id, id_colaborador='ALL') }}" 
                            class="btn btn-secondary w-full text-center bg-blue-700 hover:bg-blue-800 mb-2">
                            Ver Detalhes (TODAS AS {{ resumo_geral.total_vendas }} Vendas)
                         </a>
+                        {% endif %}  
 
-
+                {% if nivel >= 3 %}
                 {% if not selected_event.get('id_evento_principal_combo') %}
                     <div class="flex gap-2 mb-2">
                         <button type="button" onclick="dispararCortesiaEmMassa('{{ selected_event.id_evento }}', '{{ selected_event.descricao_evento | default(selected_event.descricao) }}')" 
@@ -182,7 +182,7 @@
                         ⚠️ <b>Evento Secundário (COMBO):</b> Para gerir cortesias, acesse o <b>Evento Principal</b>.
                     </div>
                 {% endif %}
-
+                {% endif %}
 
                         <a href="{{ url_for('gerar_lista_vendas', id_evento=selected_event._id) }}" 
                                class="btn btn-primary w-full text-center"
@@ -195,8 +195,8 @@
 
 
                 {% for cartao in resultados_agregados %}
-                    <div class="card bg-yellow-150">
-                        <h4 class="text-xl font-bold text-red-800 mb-0 -mt-2">
+                    <div class="card bg-yeelow-300 border border-yellow-400 mb-2">
+                        <h4 class="text-xl font-bold text-red-800 -mb-2 -mt-2">
                             Resumo de: {{ cartao.nick_colaborador }} (ID: {{ cartao._id }})
                         </h4>
                         
@@ -246,11 +246,13 @@
                             </div>
                         </div>
                         
-                        <hr class="my-1">
+                         {% if nivel >= 3 or cartao._id|string == id_logado|string %}  
+                         <hr class="my-1">
                          <a href="{{ url_for('consulta_vendas_detalhes', id_evento=selected_event._id, id_colaborador=cartao._id) }}" 
                            class="btn btn-secondary w-full text-center bg-yellow-500 hover:bg-yellow-600 mb-2">
                            Ver Detalhes ({{ cartao.total_vendas }} Vendas)
                         </a>
+                        {% endif %}  
                     </div>
                 {% else %}
                     {% if selected_colab_id %} <div class="alert-info">Nenhuma venda encontrada para o filtro selecionado.</div>

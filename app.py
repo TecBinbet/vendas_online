@@ -5898,12 +5898,12 @@ def consulta_vendas():
             if not is_master and id_regional_sessao:
                 colabs_query['id_regional'] = int(id_regional_sessao) # Só vê colegas da mesma regional
 
-            if nivel_usuario >= 3:
-                colaboradores_lista.append({'nick': 'TODOS', 'id_colaborador': 'ALL'})
-                colabs_cursor = db.colaboradores.find(colabs_query, {'nick': 1, 'id_colaborador': 1, 'comissao': 1}).sort('nick', pymongo.ASCENDING)
-                for colab in colabs_cursor:
-                    colaboradores_lista.append(colab)
-                    comissao_map[colab['id_colaborador']] = colab.get('comissao', default_comissao)
+            # 🚀 LIBERADO PARA TODOS OS NÍVEIS
+            colaboradores_lista.append({'nick': 'TODOS', 'id_colaborador': 'ALL'})
+            colabs_cursor = db.colaboradores.find(colabs_query, {'nick': 1, 'id_colaborador': 1, 'comissao': 1}).sort('nick', pymongo.ASCENDING)
+            for colab in colabs_cursor:
+                colaboradores_lista.append(colab)
+                comissao_map[colab['id_colaborador']] = colab.get('comissao', default_comissao)
             
             # --- 2. MONTAGEM DO MATCH PARA AGREGATION ---
             id_evento_int = selected_event.get('id_evento')
@@ -5915,18 +5915,14 @@ def consulta_vendas():
             if not is_master and id_regional_sessao:
                 match_stage['id_regional'] = int(id_regional_sessao)
 
-            # Filtro por Colaborador Específico
-            if nivel_usuario < 3:
-                match_stage['id_colaborador'] = id_colaborador_logado
-                selected_colab_id_str = str(id_colaborador_logado)
-            elif nivel_usuario >= 3:
-                if id_colaborador_param and id_colaborador_param != 'ALL':
-                    try: val_id = int(id_colaborador_param)
-                    except: val_id = id_colaborador_param
-                    match_stage['id_colaborador'] = val_id
-                    selected_colab_id_str = str(id_colaborador_param)
-                else:
-                    selected_colab_id_str = 'ALL'
+            # 🚀 Filtro por Colaborador Específico (Liberado para todos)
+            if id_colaborador_param and id_colaborador_param != 'ALL':
+                try: val_id = int(id_colaborador_param)
+                except: val_id = id_colaborador_param
+                match_stage['id_colaborador'] = val_id
+                selected_colab_id_str = str(id_colaborador_param)
+            else:
+                selected_colab_id_str = 'ALL'
 
             # --- PIPELINE DE AGREGAÇÃO ---
             pipeline = [
@@ -5963,7 +5959,7 @@ def consulta_vendas():
                     res['valor_comissao_float'] = ((venda_via_colab * taxa) / 100.0) + ((venda_via_auto * comissao_autoatendimento) / 100.0)
                     res['total_valor_float'] = safe_float(res['total_valor'])
                     resultados_agregados.append(res)
-	
+    
             # --- RESUMO GERAL ---
             if selected_colab_id_str == 'ALL' and resultados_agregados:
                 resumo_geral = {
@@ -5983,6 +5979,7 @@ def consulta_vendas():
         traceback.print_exc()
 
     return render_template('consulta_vendas.html', g=g, error=error, success=success, nivel=nivel_usuario, eventos=eventos_ativos, selected_event=selected_event, colaboradores=colaboradores_lista, selected_colab_id=selected_colab_id_str, resumo_geral=resumo_geral, resultados_agregados=resultados_agregados)
+
 
 @app.route('/consulta_vendas/detalhes', methods=['GET'])
 @login_required
