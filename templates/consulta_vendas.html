@@ -246,7 +246,7 @@
                             </div>
                         </div>
                         
-                         {% if nivel >= 3 or cartao._id|string == id_logado|string %}  
+                         {% if nivel >= 3 or cartao._id|string == session.get('id_colaborador')|string %}  
                          <hr class="my-1">
                          <a href="{{ url_for('consulta_vendas_detalhes', id_evento=selected_event._id, id_colaborador=cartao._id) }}" 
                            class="btn btn-secondary w-full text-center bg-yellow-500 hover:bg-yellow-600 mb-2">
