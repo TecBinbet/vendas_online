@@ -185,9 +185,9 @@
                 {% endif %}
 
                         <a href="{{ url_for('gerar_lista_vendas', id_evento=selected_event._id) }}" 
-                               class="btn btn-primary w-full text-center"
-                               onclick="return confirm('Tem certeza que deseja gerar o arquivo de lista? Isso pode demorar alguns segundos.')">
-                               🖨️ Gerar Arquivo (período.xxx)
+                           class="btn btn-primary w-full text-center"
+                           onclick="event.preventDefault(); const url = this.href; bingoConfirm('Tem certeza que deseja gerar o arquivo de lista? Isso pode demorar alguns segundos.', () => { window.location.href = url; });">
+                           🖨️ Gerar Arquivo (período.xxx)
                         </a>
 
                     </div>
@@ -320,11 +320,13 @@ function dispararCortesiaEmMassa(idEvento, descricaoEvento) {
     
     const qtdInt = parseInt(qtd);
     if (isNaN(qtdInt) || qtdInt <= 0) {
-        alert("❌ Quantidade inválida! Digite um número maior que 0.");
+        bingoAlert("❌ Quantidade inválida!<br>Digite um número maior que 0.", 4000, '#e74c3c');
         return;
     }
 
-    if (confirm(`⚠️ CONFIRMAÇÃO FINAL\n\nTem certeza que deseja dar ${qtdInt} kit(s) cortesia para TODOS os clientes compradores deste evento?\nEsta operação não pode ser desfeita.`)) {
+    const msg = `⚠️ CONFIRMAÇÃO FINAL<br><br>Tem certeza que deseja dar <b>${qtdInt} kit(s)</b> cortesia para TODOS os clientes compradores deste evento?<br>Esta operação não pode ser desfeita.`;
+
+    bingoConfirm(msg, () => {
         
         // Ativa o spinner se você tiver a função global no sistema
         if (typeof ativarSpinner === 'function') {
@@ -342,16 +344,17 @@ function dispararCortesiaEmMassa(idEvento, descricaoEvento) {
         .then(res => res.json())
         .then(data => {
             if (data.status === 'success') {
-                alert(`✅ ${data.message}`);
+                bingoAlert(`✅ Sucesso: ${data.message}`, 3000, '#27ae60');
                 window.location.reload(); // Recarrega para exibir as novas cortesias na lista
             } else {
-                alert(`❌ Erro: ${data.message}`);
+                bingoAlert(`❌ Erro: ${data.message}`, 4000, '#e74c3c');
                 if (typeof window.onpageshow === 'function') window.onpageshow(); // Desativa spinner
             }
         })
         .catch(err => {
             console.error(err);
-            alert("❌ Falha de comunicação com o servidor.");
+            bingoAlert("❌ Falha de comunicação com o servidor.", 4000, '#e74c3c');
+            if (typeof window.onpageshow === 'function') window.onpageshow();
         });
     }
 }
@@ -507,7 +510,7 @@ async function processarEnvioCortesia(stringIdsVendas, idEvento, nomeCli, tipoCa
     if (typeof enviarPdfViaWhatsApp === 'function') {
         enviarPdfViaWhatsApp(arrIds[0], idEvento, nomeCli, tipoCart, telCli);
     } else {
-        alert("Função de envio padrão não encontrada na tela.");
+        bingoAlert("⚠️ Função de envio padrão não encontrada na tela.", 4000, '#f39c12');
         return;
     }
 

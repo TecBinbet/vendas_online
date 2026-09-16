@@ -7681,8 +7681,8 @@ def gerar_lista_vendas():
         session['error_message'] = "Erro de conexão com o BD de Vendas."
         return redirect(url_for('consulta_vendas'))
 
-    if session.get('nivel', 0) < 3:
-        return redirect(url_for('menu_operacoes', error="Acesso Negado."))
+    #if session.get('nivel', 0) < 3:
+        #return redirect(url_for('menu_operacoes', error="Acesso Negado."))
 
     nome_sala = g.parametros_globais.get('nome_sala', 'BINGO')
 

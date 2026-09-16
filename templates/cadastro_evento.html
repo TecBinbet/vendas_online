@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Cadastro de Eventos</title>
     <script src="https://cdn.tailwindcss.com"></script>
+    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -779,7 +780,7 @@
         function confirmBatchDelete(form) {
             const selecionados = document.querySelectorAll('.evento-checkbox:checked');
             if(selecionados.length === 0) {
-                alert("Por favor, selecione pelo menos um evento para excluir.");
+                bingoAlert("⚠️ Por favor, selecione pelo menos um evento para excluir.", 4000, '#f39c12');
                 return false;
             }
             
@@ -807,7 +808,7 @@
         // --- JS EXISTENTE ---
         function tratarSubmissao(form) {
             if (!validarNumeroInicial()) {
-                alert("⚠️ Corrija o 'Número Inicial da Cartela' antes de salvar o evento.");
+                bingoAlert("⚠️ Corrija o 'Número Inicial da Cartela' antes de salvar o evento.", 4000, '#f39c12');
                 return false;
             }
 
@@ -1079,7 +1080,7 @@
             const formGravar = document.getElementById('form-confirmar-replicacao');
 
             if (!qtd || qtd < 1 || !intervalo || intervalo < 1) {
-                alert("Forneça valores válidos para Quantidade e Intervalo.");
+                bingoAlert("❌ Forneça valores válidos para Quantidade e Intervalo.", 4000, '#e74c3c');
                 return;
             }
 
@@ -1188,37 +1189,47 @@
                         console.log("Número baseado no evento: " + data.evento_origem);
                     }
                 } else {
-                    alert("Não foi possível localizar o último número. Definido como 1.");
+                    bingoAlert("⚠️ Não foi possível localizar o último número.<br>Definido como 1.", 4500, '#f39c12');
                     inputInicial.value = 1;
                 }
             } catch (error) {
                 console.error("Erro na requisição:", error);
-                alert("Erro técnico ao buscar dados. Verifique o console.");
+                bingoAlert("❌ Erro técnico ao buscar dados.<br>Verifique o console.", 4000, '#e74c3c');
             } finally {
                 btn.innerHTML = textoOriginal;
                 btn.disabled = false;
             }
         }
 
-function confirmarExpurgoPeriodo(form) {
+function confirmarExpurgoPeriodo(form, event) {
+    // Se o evento foi passado na chamada, previne o comportamento padrão
+    if (event) event.preventDefault();
+
     const inicio = form.querySelector('[name="inicio"]').value.replace('T', ' ');
     const fim = form.querySelector('[name="fim"]').value.replace('T', ' ');
 
-    const confirmacao1 = confirm(`🚨 ATENÇÃO OPERADOR!\n\nVocê solicitou a exclusão de TODOS os eventos entre:\n👉 ${inicio}\n👉 ${fim}\n\nIsso apagará as tabelas de vendas e pagamentos de cada um deles.\n\nDESEJA CONTINUAR?`);
+    const msg1 = `🚨 ATENÇÃO OPERADOR!<br><br>Você solicitou a exclusão de TODOS os eventos entre:<br>👉 <b>${inicio}</b><br>👉 <b>${fim}</b><br><br>Isso apagará as tabelas de vendas e pagamentos de cada um deles.<br><br>DESEJA CONTINUAR?`;
     
-    if (confirmacao1) {
-        const confirmacao2 = confirm(`🛑 ÚLTIMO AVISO!\n\nEsta operação NÃO PODE SER DESFEITA.\nO servidor ficará ocupado por alguns segundos durante a limpeza.\n\nConfirmar DESTRUIÇÃO de dados no período?`);
+    // Primeira Confirmação
+    bingoConfirm(msg1, () => {
         
-        if (confirmacao2) {
-            // Se você tiver um spinner global, pode ativar aqui
-            if (typeof ativarSpinnerLink === 'function') ativarSpinnerLink('Limpando banco de dados...');
-            return true;
-        }
-    }
+        const msg2 = `🛑 ÚLTIMO AVISO!<br><br>Esta operação NÃO PODE SER DESFEITA.<br>O servidor ficará ocupado por alguns segundos durante a limpeza.<br><br>Confirmar DESTRUIÇÃO de dados no período?`;
+        
+        // Segunda Confirmação (Aninhada)
+        bingoConfirm(msg2, () => {
+            if (typeof ativarSpinnerLink === 'function') {
+                ativarSpinnerLink('Limpando banco de dados...');
+            }
+            
+            // Força o envio do formulário após passar pelas duas validações
+            form.submit();
+        });
+    });
+
+    // Retorna false para bloquear o submit imediato do formulário HTML
     return false;
 }
 
-        // --- VALIDAÇÃO DO NÚMERO INICIAL ---
         // --- VALIDAÇÃO DO NÚMERO INICIAL ---
         function validarNumeroInicial() {
             const inputInicial = document.getElementById('numero_inicial');

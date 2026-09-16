@@ -329,7 +329,7 @@
         // Função atualizada para tentar COMPARTILHAR o arquivo em vez de apenas baixar
         async function handleGerarPdf(numInicial, numFinal) {
             if (!numInicial || !numFinal || !tempIdEvento) {
-                alert("Erro: Dados incompletos para gerar PDF.");
+                bingoAlert("❌ Erro: Dados incompletos para gerar PDF.", 4000, '#e74c3c');
                 return;
             }
             
@@ -440,46 +440,48 @@
             abrirWhatsAppComPDF(linkCompletoPDF, telefoneCliente);
         }
 
-        // --- FUNÇÃO DE EXCLUSÃO (SEGURA) ---
-        async function handleExcluirVenda() {
+        // --- FUNÇÃO DE EXCLUSÃO ---
+        function handleExcluirVenda() {
             if (!btnExcluir) return; // Segurança extra
 
-            const confirmacao = confirm(`ATENÇÃO CRÍTICA!\n\nVocê está prestes a excluir a venda ID: ${tempIdVenda} do cliente ${tempNomeCliente}.\n\nSe esta venda for um COMBO, todas as rodadas filhas também serão apagadas simultaneamente.\n\nEssa ação NÃO pode ser desfeita.\nDeseja realmente continuar?`);
-            
-            if (!confirmacao) return;
+            const msg = `⚠️ ATENÇÃO CRÍTICA!<br><br>Você está prestes a excluir a venda ID: <b>${tempIdVenda}</b> do cliente <b>${tempNomeCliente}</b>.<br><br>Se esta venda for um COMBO, todas as rodadas filhas também serão apagadas simultaneamente.<br><br>Essa ação NÃO pode ser desfeita.<br>Deseja realmente continuar?`;
 
-            const data = {
-                id_venda: tempIdVenda,
-                id_evento: tempIdEvento
-            };
+            bingoConfirm(msg, async () => {
+                // Tudo o que está aqui dentro só executa se o operador clicar em "SIM"
+                
+                const data = {
+                    id_venda: tempIdVenda,
+                    id_evento: tempIdEvento
+                };
 
-            const textoOriginal = btnExcluir.textContent;
-            btnExcluir.textContent = "Excluindo...";
-            btnExcluir.disabled = true;
+                const textoOriginal = btnExcluir.textContent;
+                btnExcluir.textContent = "Excluindo...";
+                btnExcluir.disabled = true;
 
-            try {
-                const response = await fetch("{{ url_for('excluir_venda') }}", {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(data)
-                });
+                try {
+                    const response = await fetch("{{ url_for('excluir_venda') }}", {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(data)
+                    });
 
-                const result = await response.json();
+                    const result = await response.json();
 
-                if (result.status === 'success') {
-                    alert("Sucesso: " + result.message);
-                    location.reload(); 
-                } else {
-                    alert("Erro: " + result.message);
+                    if (result.status === 'success') {
+                        bingoAlert("Sucesso: " + result.message, 3000, '#27ae60');
+                        location.reload(); 
+                    } else {
+                        bingoAlert("❌ Erro: " + result.message, 4000, '#e74c3c');
+                        btnExcluir.textContent = textoOriginal;
+                        btnExcluir.disabled = false;
+                    }
+                } catch (err) {
+                    bingoAlert("❌ Erro de conexão ao tentar excluir a venda.", 4000, '#e74c3c');
+                    console.error(err);
                     btnExcluir.textContent = textoOriginal;
                     btnExcluir.disabled = false;
                 }
-            } catch (err) {
-                alert('Erro de conexão ao tentar excluir a venda.');
-                console.error(err);
-                btnExcluir.textContent = textoOriginal;
-                btnExcluir.disabled = false;
-            }
+            });
         }
 
         async function handleReprint(tipo) {
@@ -505,11 +507,11 @@
                 if (result.status === 'success') {
                     copyTextToClipboard(result.receipt_text);
                 } else {
-                    alert(`Erro: ${result.message}`);
+                    bingoAlert(`❌ Erro: ${result.message}`, 4000, '#e74c3c');
                 }
             } catch (err) {
                 console.error(err);
-                alert('Erro de conexão ou processamento.');
+                bingoAlert("❌ Erro de conexão ou processamento.", 4000, '#e74c3c');
             } finally {
                 btnVendaUnica.textContent = `Reimprimir Venda Única (ID: ${tempIdVenda})`;
                 btnVendasCliente.textContent = 'Reimprimir TODAS as Vendas do Cliente';
