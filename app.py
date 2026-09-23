@@ -6830,7 +6830,7 @@ def api_resultados_disponiveis():
     db = get_vendas_db()
     if db is None: return jsonify({'status': 'error'})
     
-    resultados = list(db.resultados.find({}, {'_id': 0, 'id_evento': 1, 'descricao': 1, 'rodada': 1}).sort('rodada', 1))
+    resultados = list(db.resultados.find({}, {'_id': 0, 'id_evento': 1, 'descricao': 1, 'rodada': 1, 'data_evento': 1, 'hora_evento': 1}).sort([('data_evento', -1), ('hora_evento', -1)]))
     return jsonify({'status': 'success', 'eventos': resultados})
 
 @app.route('/gerar_lista_ganhadores_txt', methods=['POST'])
