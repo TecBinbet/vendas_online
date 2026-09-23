@@ -84,7 +84,6 @@
                     📋 Lista dos Ganhadores
                 </button>
 
-                {% if nivel >= 3 %}
                 <div class="hidden md:block">
                     <form action="{{ url_for('sincronizar_ganhadores') }}" method="POST" enctype="multipart/form-data" id="formSincronizar" class="m-0">
                         
@@ -97,7 +96,6 @@
                         
                     </form>
                 </div>
-                {% endif %}
 
                 <a href="{{ url_for('menu_operacoes') }}" class="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition shadow-sm border border-gray-300 whitespace-nowrap">
                     ← Voltar ao Menu
@@ -274,7 +272,7 @@
         <div class="p-2 overflow-y-auto flex-grow flex flex-col gap-2">
             <div>
                 <p class="text-gray-300 font-semibold mb-2">Selecione as rodadas (eventos):</p>
-                <div id="containerCheckboxesEventos" class="bg-gray-800 p-2 rounded-lg border border-gray-700 max-h-120 overflow-y-auto flex flex-col gap-2">
+                <div id="containerCheckboxesEventos" class="bg-gray-800 p-2 rounded-lg border border-gray-700 max-h-100 overflow-y-auto flex flex-col gap-2">
                     </div>
             </div>
 
@@ -285,7 +283,7 @@
 
             <div class="flex-grow flex flex-col hidden" id="areaResultadoLista">
                 <p class="text-green-400 font-bold mb-1">Pré-visualização (Pronto para copiar):</p>
-                <textarea id="textoListaGerada" readonly class="w-full h-48 bg-black/50 border border-gray-700 rounded p-3 text-sm text-gray-200 font-mono resize-none focus:outline-none"></textarea>
+                <textarea id="textoListaGerada" readonly class="w-full h-35 bg-black/50 border border-gray-700 rounded p-3 text-sm text-gray-200 font-mono resize-none focus:outline-none"></textarea>
             </div>
         </div>
 
@@ -305,6 +303,11 @@ async function abrirModalListaGanhadores() {
     const modal = document.getElementById('modalListaGanhadores');
     const container = document.getElementById('containerCheckboxesEventos');
     
+    // --- AJUSTE VISUAL: Altura fixa e barra de rolagem ---
+    container.style.maxHeight = "420px"; // Defina o tamanho ideal aqui
+    container.style.overflowY = "auto";  // Ativa a rolagem vertical
+    container.style.paddingRight = "8px"; // Evita que a barra sobreponha o texto
+    
     // Reset visual
     document.getElementById('areaResultadoLista').classList.add('hidden');
     document.getElementById('textoListaGerada').value = "";
@@ -323,7 +326,7 @@ async function abrirModalListaGanhadores() {
             data.eventos.forEach(evt => {
                 const rodada = evt.rodada ? `${evt.rodada}ª Rod. - ` : '';
                 const html = `
-                    <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 p-2 rounded transition">
+                    <label class="flex items-center gap-3 cursor-pointer hover:bg-gray-700/50 p-1 rounded transition">
                         <input type="checkbox" value="${evt.id_evento}" class="chk-evento-lista w-5 h-5 rounded border-gray-600 bg-gray-900 text-blue-500 focus:ring-blue-500 checked:bg-blue-500">
                         <span class="text-gray-200 font-medium">[${evt.id_evento}] ${rodada}${evt.descricao}</span>
                     </label>
